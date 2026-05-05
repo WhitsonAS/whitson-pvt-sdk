@@ -1,6 +1,15 @@
 import warnings
 
 from .http import HTTPTransport
+from .v1.resources import (
+    BlackOilTables,
+    FluidModels,
+    Projects,
+    Regions,
+    Reports,
+    Samples,
+    Wells,
+)
 
 __version__ = "0.1.0"
 
@@ -18,7 +27,7 @@ class WhitsonPVTClient:
     Usage::
 
         from pvt_sdk import WhitsonPVTClient
-        from pvt_sdk._models import ClientCredentials
+        from pvt_sdk.models import ClientCredentials
 
         client = WhitsonPVTClient(
             credentials=ClientCredentials(client_id="...", client_secret="..."),
@@ -28,6 +37,14 @@ class WhitsonPVTClient:
         regions = client.regions.list()
         well = client.wells.get(well_id=123)
     """
+
+    regions: Regions
+    wells: Wells
+    samples: Samples
+    projects: Projects
+    fluid_models: FluidModels
+    black_oil_tables: BlackOilTables
+    reports: Reports
 
     def __init__(
         self,
@@ -53,29 +70,13 @@ class WhitsonPVTClient:
                 stacklevel=2,
             )
 
-        match version:
-            case "v1":
-                from .v1.factory import (
-                    black_oil_tables,
-                    fluid_models,
-                    projects,
-                    regions,
-                    reports,
-                    samples,
-                    wells,
-                )
-            case _:
-                raise ValueError(
-                    f"Unknown version: {version!r}. Supported versions: {sorted(_SUPPORTED)}"
-                )
-
-        self.regions = regions(transport)
-        self.wells = wells(transport)
-        self.samples = samples(transport)
-        self.projects = projects(transport)
-        self.fluid_models = fluid_models(transport)
-        self.black_oil_tables = black_oil_tables(transport)
-        self.reports = reports(transport)
+        self.regions = Regions(transport)
+        self.wells = Wells(transport)
+        self.samples = Samples(transport)
+        self.projects = Projects(transport)
+        self.fluid_models = FluidModels(transport)
+        self.black_oil_tables = BlackOilTables(transport)
+        self.reports = Reports(transport)
 
 
 __all__ = ["WhitsonPVTClient"]

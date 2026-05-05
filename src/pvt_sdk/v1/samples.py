@@ -1,4 +1,4 @@
-from .._models import (
+from ..models import (
     ExternalCreateSampleListModel,
     ExternalCreateSampleModel,
     ExternalGetSampleListModel,

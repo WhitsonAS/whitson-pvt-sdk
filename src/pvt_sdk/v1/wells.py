@@ -1,4 +1,4 @@
-from .._models import (
+from ..models import (
     ExternalCreateWellModel,
     ExternalGetWellModel,
     ExternalUpdateWellModel,

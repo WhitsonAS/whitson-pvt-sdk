@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from .._models import (
+from ..models import (
     ExternalImportArchiveOptions,
     ExternalImportCommitResultModel,
     ExternalImportPreflightResultModel,

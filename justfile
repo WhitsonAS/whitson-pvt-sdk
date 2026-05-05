@@ -7,7 +7,7 @@ install-tools:
 
 # ── code generation ───────────────────────────────────────────────
 OPENAPI_URL := "https://internal.pvt.whitson.com/external/v1/docs/openapi.json"
-OUTPUT := "src/pvt_sdk/_models/_generated.py"
+OUTPUT := "src/pvt_sdk/models/_generated.py"
 
 generate-models:
     curl -s {{OPENAPI_URL}} | \
