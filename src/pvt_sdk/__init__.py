@@ -1,5 +1,3 @@
-"""whitson PVT SDK — HTTP client for the whitson PVT external API."""
-
 import warnings
 
 from .http import HTTPTransport
