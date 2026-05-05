@@ -11,7 +11,7 @@ Example: _DEPRECATED = {"v1": "v2"} — v1 still works but warns.
 """
 _DEPRECATED: dict[str, str] = {}
 
-_SUPPORTED = frozenset({"v1", "v2"})
+_SUPPORTED = frozenset({"v1"})
 
 
 class WhitsonPVTClient:
@@ -58,16 +58,6 @@ class WhitsonPVTClient:
         match version:
             case "v1":
                 from .v1.factory import (
-                    black_oil_tables,
-                    fluid_models,
-                    projects,
-                    regions,
-                    reports,
-                    samples,
-                    wells,
-                )
-            case "v2":
-                from .v2.factory import (
                     black_oil_tables,
                     fluid_models,
                     projects,
