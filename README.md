@@ -33,6 +33,7 @@ sample = client.samples.get(sample_id=456)
 ### Prerequisites
 
 - **[uv](https://docs.astral.sh/uv/)** — Python package & project manager
+
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
@@ -40,7 +41,7 @@ sample = client.samples.get(sample_id=456)
 ### Setup
 
 ```bash
-uv sync                          # installs Python deps + dev tools
+uv sync                           # installs Python deps + dev tools
 uv tool install rust-just         # installs just (command runner) globally
 ```
 
@@ -52,10 +53,9 @@ just format                      # ruff format
 just build                       # uv build
 just generate-models             # fetch OpenAPI spec + regenerate models/_generated.py
 just all                         # generate-models + lint/format + build
+just build                       # uv build
+just all                         # sync + generate + lint/format + build
 ```
-
-just build # uv build
-just all # sync + generate + lint/format + build
 
 ````
 

@@ -1,9 +1,3 @@
-"""Manually maintained models not captured by OpenAPI generation.
-
-These are typically multipart/form-data request schemas that
-datamodel-codegen cannot infer from the OpenAPI spec.
-"""
-
 from pydantic import BaseModel, Field
 
 
