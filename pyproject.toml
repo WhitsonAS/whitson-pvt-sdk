@@ -1,5 +1,5 @@
 [project]
-name = "pvt-sdk"
+name = "whitson-pvt-sdk"
 version = "0.1.0"
 description = "whitson PVT SDK — HTTP client for the whitson PVT external API"
 readme = "README.md"
@@ -21,7 +21,7 @@ target-version = "py310"
 select = ["E", "F", "I", "UP", "W"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["pvt_sdk"]
+known-first-party = ["whitson_pvt_sdk"]
 
 [dependency-groups]
-dev = ["ruff>=0.15.12"]
+dev = ["ruff>=0.15.12", "datamodel-code-generator>=0.28", "rust-just>=1.50"]

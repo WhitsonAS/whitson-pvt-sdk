@@ -1,3 +1,4 @@
+from ..http import HTTPTransport
 from ..models import (
     ExternalCreateSampleListModel,
     ExternalCreateSampleModel,
@@ -6,7 +7,6 @@ from ..models import (
     ExternalUpdateSampleListModel,
     ExternalUpdateSampleModel,
 )
-from ..http import HTTPTransport
 
 
 def list_samples(transport: HTTPTransport, well_id: int) -> ExternalGetSampleListModel:

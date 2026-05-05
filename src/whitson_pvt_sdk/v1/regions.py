@@ -1,10 +1,10 @@
+from ..http import HTTPTransport
 from ..models import (
     ExternalCreateRegionModel,
     ExternalGetRegionModel,
     ExternalRegionsListModel,
     ExternalUpdateRegionModel,
 )
-from ..http import HTTPTransport
 
 
 def list_regions(transport: HTTPTransport) -> ExternalRegionsListModel:

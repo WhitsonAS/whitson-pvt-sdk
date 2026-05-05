@@ -1,10 +1,11 @@
 from io import BytesIO
 
-from ..models import (
+from whitson_pvt_sdk.models import (
     ExternalImportArchiveOptions,
     ExternalImportCommitResultModel,
     ExternalImportPreflightResultModel,
 )
+
 from ..http import HTTPTransport
 
 

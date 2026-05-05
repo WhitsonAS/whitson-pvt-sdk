@@ -26,8 +26,8 @@ class WhitsonPVTClient:
 
     Usage::
 
-        from pvt_sdk import WhitsonPVTClient
-        from pvt_sdk.models import ClientCredentials
+        from whitson_pvt_sdk import WhitsonPVTClient
+        from whitson_pvt_sdk.models import ClientCredentials
 
         client = WhitsonPVTClient(
             credentials=ClientCredentials(client_id="...", client_secret="..."),

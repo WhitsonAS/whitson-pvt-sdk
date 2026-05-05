@@ -1,8 +1,8 @@
+from ..http import HTTPTransport
 from ..models import (
     ExternalFluidModelsListModel,
     ExternalGetFluidModelModel,
 )
-from ..http import HTTPTransport
 
 
 def list_fluid_models(transport: HTTPTransport, project_id: int) -> ExternalFluidModelsListModel:

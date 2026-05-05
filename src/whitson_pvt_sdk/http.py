@@ -6,9 +6,9 @@ from typing import Any
 
 import httpx
 
-from pvt_sdk.models._generated import ClientCredentials
-from pvt_sdk.auth import TokenManager
-from pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
+from whitson_pvt_sdk.auth import TokenManager
+from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
+from whitson_pvt_sdk.models._generated import ClientCredentials
 
 logger = logging.getLogger(__name__)
 

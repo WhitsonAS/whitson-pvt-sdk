@@ -1,3 +1,4 @@
+from ..http import HTTPTransport
 from ..models import (
     ExternalCreateWellModel,
     ExternalGetWellModel,
@@ -5,7 +6,6 @@ from ..models import (
     ExternalUpdateWellsListModel,
     ExternalWellsListModel,
 )
-from ..http import HTTPTransport
 
 
 def list_wells(transport: HTTPTransport, region_id: int) -> ExternalWellsListModel:

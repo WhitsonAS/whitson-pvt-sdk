@@ -1,8 +1,8 @@
+from ..http import HTTPTransport
 from ..models import (
     ExternalBlackOilTablesListModel,
     ExternalGetBlackOilTableModel,
 )
-from ..http import HTTPTransport
 
 
 def list_black_oil_tables(

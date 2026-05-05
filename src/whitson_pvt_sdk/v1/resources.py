@@ -1,10 +1,18 @@
 from typing import TYPE_CHECKING
 
-from pvt_sdk.v1 import black_oil_tables, fluid_models, projects, regions, reports, samples, wells
+from whitson_pvt_sdk.v1 import (
+    black_oil_tables,
+    fluid_models,
+    projects,
+    regions,
+    reports,
+    samples,
+    wells,
+)
 
 if TYPE_CHECKING:
-    from pvt_sdk.http import HTTPTransport
-    from pvt_sdk.models import (
+    from whitson_pvt_sdk.http import HTTPTransport
+    from whitson_pvt_sdk.models import (
         ExternalBlackOilTablesListModel,
         ExternalCreateRegionModel,
         ExternalCreateSampleListModel,
