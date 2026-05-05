@@ -24,4 +24,4 @@ select = ["E", "F", "I", "UP", "W"]
 known-first-party = ["whitson_pvt_sdk"]
 
 [dependency-groups]
-dev = ["ruff>=0.15.12", "datamodel-code-generator>=0.28", "rust-just>=1.50"]
+dev = ["ruff>=0.15.12", "datamodel-code-generator>=0.28"]

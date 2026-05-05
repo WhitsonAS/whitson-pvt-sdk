@@ -1,13 +1,6 @@
-# ── setup ─────────────────────────────────────────────────────────
-sync:
-    uv sync
-
-install-tools:
-    uv tool install datamodel-code-generator
-
 # ── code generation ───────────────────────────────────────────────
 OPENAPI_URL := "https://internal.pvt.whitson.com/external/v1/docs/openapi.json"
-OUTPUT := "src/pvt_sdk/models/_generated.py"
+OUTPUT := "src/whitson_pvt_sdk/models/_generated.py"
 
 generate-models:
     curl -s {{OPENAPI_URL}} | \
@@ -23,13 +16,13 @@ generate-models:
 
 # ── lint ──────────────────────────────────────────────────────────
 lint:
-    uv run ruff check src/
+    uv run ruff check src/whitson_pvt_sdk/
 
 lint-fix:
-    uv run ruff check src/ --fix
+    uv run ruff check src/whitson_pvt_sdk/ --fix
 
 format:
-    uv run ruff format src/
+    uv run ruff format src/whitson_pvt_sdk/
 
 fmt format:
 
@@ -41,4 +34,4 @@ build:
     uv build
 
 # ── run all ───────────────────────────────────────────────────────
-all: sync generate-models lint-fix format build
+all: generate-models lint-fix format build
