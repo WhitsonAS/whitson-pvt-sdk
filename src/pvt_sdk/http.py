@@ -59,8 +59,6 @@ class HTTPTransport:
     def close(self) -> None:
         self._http.close()
 
-    # -- helpers -----------------------------------------------------------
-
     @staticmethod
     def _error_message(response: httpx.Response) -> str:
         try:
@@ -89,8 +87,6 @@ class HTTPTransport:
     def _bytes(self, response: httpx.Response) -> bytes:
         self._raise_for_status(response)
         return response.content
-
-    # -- verbs -------------------------------------------------------------
 
     def get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._json(self._http.get(path, params=params))
