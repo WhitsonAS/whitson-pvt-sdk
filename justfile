@@ -1,6 +1,6 @@
 # ── code generation ───────────────────────────────────────────────
 OPENAPI_URL := "https://internal.pvt.whitson.com/external/v1/docs/openapi.json"
-OUTPUT := "src/whitson_pvt_sdk/models/_generated.py"
+OUTPUT := "whitson_pvt_sdk/models/_generated.py"
 
 generate-models:
     curl -s {{OPENAPI_URL}} | \
@@ -16,13 +16,13 @@ generate-models:
 
 # ── lint ──────────────────────────────────────────────────────────
 lint:
-    uv run ruff check src/whitson_pvt_sdk/
+    uv run ruff check whitson_pvt_sdk/
 
 lint-fix:
-    uv run ruff check src/whitson_pvt_sdk/ --fix
+    uv run ruff check whitson_pvt_sdk/ --fix
 
 format:
-    uv run ruff format src/whitson_pvt_sdk/
+    uv run ruff format whitson_pvt_sdk/
 
 fmt format:
 
