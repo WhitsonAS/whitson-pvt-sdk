@@ -1,0 +1,27 @@
+[project]
+name = "pvt-sdk"
+version = "0.1.0"
+description = "whitson PVT SDK — HTTP client for the whitson PVT external API"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.28.0", "pydantic>=2.12.0"]
+
+[build-system]
+requires = ["uv_build>=0.11.9,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pvt_sdk"]
+
+[dependency-groups]
+dev = ["ruff>=0.15.12"]

@@ -1,0 +1,44 @@
+# ── setup ─────────────────────────────────────────────────────────
+sync:
+    uv sync
+
+install-tools:
+    uv tool install datamodel-code-generator
+
+# ── code generation ───────────────────────────────────────────────
+OPENAPI_URL := "https://internal.pvt.whitson.com/external/v1/docs/openapi.json"
+OUTPUT := "src/pvt_sdk/_models/_generated.py"
+
+generate-models:
+    curl -s {{OPENAPI_URL}} | \
+        datamodel-codegen \
+            --input-file-type openapi \
+            --target-python-version 3.10 \
+            --snake-case-field \
+            --use-field-description \
+            --use-standard-collections \
+            --output {{OUTPUT}} \
+            --base-class pydantic.BaseModel
+    @echo "Models regenerated → {{OUTPUT}}"
+
+# ── lint ──────────────────────────────────────────────────────────
+lint:
+    uv run ruff check src/
+
+lint-fix:
+    uv run ruff check src/ --fix
+
+format:
+    uv run ruff format src/
+
+fmt format:
+
+check: lint format
+    @echo "All checks passed"
+
+# ── build ─────────────────────────────────────────────────────────
+build:
+    uv build
+
+# ── run all ───────────────────────────────────────────────────────
+all: sync generate-models lint-fix format build
