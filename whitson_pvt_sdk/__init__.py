@@ -31,7 +31,7 @@ class WhitsonPVTClient:
 
         client = WhitsonPVTClient(
             credentials=ClientCredentials(client_id="...", client_secret="..."),
-            base_url="https://api.whitson.com",
+            base_url="https://internal.pvt.whitson.com",
             version="v1",
         )
         regions = client.regions.list()
