@@ -2,16 +2,19 @@
 OPENAPI_URL := "https://internal.pvt.whitson.com/external/v1/docs/openapi.json"
 OUTPUT := "whitson_pvt_sdk/models/_generated.py"
 
-generate-models:
+generate:
     curl -s {{OPENAPI_URL}} | \
-        datamodel-codegen \
+        uv run datamodel-codegen \
             --input-file-type openapi \
             --target-python-version 3.10 \
             --snake-case-field \
             --use-field-description \
             --use-standard-collections \
             --output {{OUTPUT}} \
-            --base-class pydantic.BaseModel
+            --base-class pydantic.BaseModel \
+            --enum-field-as-literal all \
+            --field-constraints \
+            --formatters ruff-check ruff-format
     @echo "Models regenerated → {{OUTPUT}}"
 
 # ── lint ──────────────────────────────────────────────────────────
@@ -34,4 +37,4 @@ build:
     uv build
 
 # ── run all ───────────────────────────────────────────────────────
-all: generate-models lint-fix format build
+all: generate lint-fix format build
