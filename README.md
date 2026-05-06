@@ -57,15 +57,13 @@ just build                       # uv build
 just all                         # sync + generate + lint/format + build
 ```
 
-````
-
 ### Model generation
 
 Models in `whitson_pvt_sdk/models/_generated.py` are generated from the live API's OpenAPI spec:
 
 ```bash
 just generate
-````
+```
 
 This fetches `/external/v1/docs/openapi.json` from the configured `OPENAPI_URL` and runs `datamodel-code-generator`.
 
