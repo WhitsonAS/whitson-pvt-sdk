@@ -1,0 +1,18 @@
+default_language_version.python = "3.14"
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "ruff"
+name = "ruff"
+language = "system"
+entry = "uv run ruff check"
+files = "\\.py$"
+
+[[repos.hooks]]
+id = "ty"
+name = "ty"
+language = "system"
+entry = "uv run ty check"
+files = "\\.py$"
