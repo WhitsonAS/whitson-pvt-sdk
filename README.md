@@ -20,7 +20,7 @@ from whitson_pvt_sdk.models import ClientCredentials
 
 client = WhitsonPVTClient(
     credentials=ClientCredentials(client_id="...", client_secret="..."),
-    base_url="https://api.whitson.com",
+    base_url="https://internal.pvt.whitson.com",
 )
 
 regions = client.regions.list()
@@ -64,7 +64,7 @@ just all                         # sync + generate + lint/format + build
 Models in `whitson_pvt_sdk/models/_generated.py` are generated from the live API's OpenAPI spec:
 
 ```bash
-just generate-models
+just generate
 ````
 
 This fetches `/external/v1/docs/openapi.json` from the configured `OPENAPI_URL` and runs `datamodel-code-generator`.

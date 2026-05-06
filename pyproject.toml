@@ -26,6 +26,18 @@ select = ["E", "F", "I", "UP", "W"]
 [tool.ruff.lint.isort]
 known-first-party = ["whitson_pvt_sdk"]
 
+[tool.datamodel-codegen]
+target-python-version = "3.10"
+input-file-type = "openapi"
+use-union-operator = true
+use-standard-collections = true
+use-standard-primitive-types = true
+use-annotated = true
+field-constraints = true
+enum-field-as-literal = "all"
+base-class = "pydantic.BaseModel"
+formatters = ["ruff-check", "ruff-format"]
+
 [dependency-groups]
 dev = [
   "ruff>=0.15.12",
