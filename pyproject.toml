@@ -29,13 +29,16 @@ known-first-party = ["whitson_pvt_sdk"]
 [tool.datamodel-codegen]
 target-python-version = "3.10"
 input-file-type = "openapi"
+base-class = "pydantic.BaseModel"
+collapse-root-models = true
+snake-case-field = true
+use-field-description = true
 use-union-operator = true
 use-standard-collections = true
 use-standard-primitive-types = true
 use-annotated = true
 field-constraints = true
 enum-field-as-literal = "all"
-base-class = "pydantic.BaseModel"
 formatters = ["ruff-check", "ruff-format"]
 
 [dependency-groups]
