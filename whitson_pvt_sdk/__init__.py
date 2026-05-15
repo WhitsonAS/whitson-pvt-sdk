@@ -1,15 +1,6 @@
 import warnings
 
 from .http import HTTPTransport
-from .v1.resources import (
-    BlackOilTables,
-    FluidModels,
-    Projects,
-    Regions,
-    Reports,
-    Samples,
-    Wells,
-)
 
 __version__ = "0.1.0"
 
@@ -18,7 +9,7 @@ _DEPRECATED: dict[str, str] = {}
 Example: _DEPRECATED = {"v1": "v2"} — v1 still works but warns.
 """
 
-_SUPPORTED = frozenset({"v1"})
+_SUPPORTED = frozenset({"v1", "v2"})
 
 
 class WhitsonPVTClient:
@@ -27,7 +18,7 @@ class WhitsonPVTClient:
     Usage::
 
         from whitson_pvt_sdk import WhitsonPVTClient
-        from whitson_pvt_sdk.models import ClientCredentials
+        from whitson_pvt_sdk.models.manual import ClientCredentials
 
         client = WhitsonPVTClient(
             credentials=ClientCredentials(client_id="...", client_secret="..."),
@@ -37,14 +28,6 @@ class WhitsonPVTClient:
         regions = client.regions.list()
         well = client.wells.get(well_id=123)
     """
-
-    regions: Regions
-    wells: Wells
-    samples: Samples
-    projects: Projects
-    fluid_models: FluidModels
-    black_oil_tables: BlackOilTables
-    reports: Reports
 
     def __init__(
         self,
@@ -69,6 +52,37 @@ class WhitsonPVTClient:
                 DeprecationWarning,
                 stacklevel=2,
             )
+
+        match version:
+            case "v1":
+                from .v1.resources import (
+                    BlackOilTables,
+                    FluidModels,
+                    Projects,
+                    Regions,
+                    Reports,
+                    Samples,
+                    Wells,
+                )
+            case "v2":
+                from .v2.resources import (
+                    BlackOilTables,
+                    FluidModels,
+                    Projects,
+                    Regions,
+                    Reports,
+                    Samples,
+                    Wells,
+                )
+            case _:
+                if version in _SUPPORTED:
+                    raise RuntimeError(
+                        f"Version {version} is supported but not yet wired. "
+                        "This is a bug — please report it."
+                    )
+                raise ValueError(
+                    f"Unknown version: {version!r}. Supported versions: {sorted(_SUPPORTED)}"
+                )
 
         self.regions = Regions(transport)
         self.wells = Wells(transport)
