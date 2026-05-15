@@ -4,7 +4,7 @@ from .http import HTTPTransport
 
 __version__ = "0.1.0"
 
-_DEPRECATED: dict[str, str] = {}
+_DEPRECATED: dict[str, str] = {"v1": "v2"}
 """Map of deprecated versions to their replacements.
 Example: _DEPRECATED = {"v1": "v2"} — v1 still works but warns.
 """
@@ -34,7 +34,7 @@ class WhitsonPVTClient:
         *,
         credentials,
         base_url: str,
-        version: str = "v1",
+        version: str = "v2",
         auth0_domain: str | None = None,
         audience: str | None = None,
     ) -> None:
