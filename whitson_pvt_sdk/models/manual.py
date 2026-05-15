@@ -1,6 +1,11 @@
 from pydantic import BaseModel, Field
 
 
+class ClientCredentials(BaseModel):
+    client_id: str
+    client_secret: str
+
+
 class ExternalImportResolutionModel(BaseModel):
     entity: str
     natural_key_id: str | None = None
