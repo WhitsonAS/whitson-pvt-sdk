@@ -2,11 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    pass
-
-import builtins
-
 from whitson_pvt_sdk.v1 import (
     black_oil_tables,
     fluid_models,
@@ -108,7 +103,7 @@ class Samples:
     def update_bulk(self, data: UpdateSampleListModel) -> GetSampleListModel:
         return samples.update_samples_bulk(self._transport, data)
 
-    def experiment_types(self, sample_id: int) -> builtins.list[str]:
+    def experiment_types(self, sample_id: int) -> list[str]:  # ty: ignore[invalid-type-form]
         return samples.get_sample_experiment_types(self._transport, sample_id)
 
 
