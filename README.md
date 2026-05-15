@@ -51,33 +51,30 @@ uv tool install rust-just         # installs just (command runner) globally
 just lint                        # ruff check
 just format                      # ruff format
 just build                       # uv build
-just generate-models             # fetch OpenAPI spec + regenerate models/_generated.py
-just all                         # generate-models + lint/format + build
-just build                       # uv build
-just all                         # sync + generate + lint/format + build
+just generate v1                 # regenerate v1 models from OpenAPI
+just generate v2                 # regenerate v2 models from OpenAPI
+just generate-all                # regenerate both v1 and v2
+just all                         # generate-all + lint/format + build
 ```
 
 ### Model generation
 
-Models in `whitson_pvt_sdk/models/_generated.py` are generated from the live API's OpenAPI spec:
+Models in `models/v1/_generated.py` and `models/v2/_generated.py` are generated from the live API's OpenAPI spec:
 
-```bash
-just generate
-```
-
-This fetches `/external/v1/docs/openapi.json` from the configured `OPENAPI_URL` and runs `datamodel-code-generator`.
+This fetches `/external/{version}/docs/openapi.json` from the configured `BASE_URL` and runs `datamodel-code-generator`.
 
 ### Package structure
 
 ```
 whitson_pvt_sdk/
-├── __init__.py         # WhitsonPVTClient
-├── http.py             # HTTPTransport (httpx)
-├── auth.py             # TokenManager (token exchange + cache)
-├── errors.py           # SDKError, NotFoundError, AuthError, etc.
+├── __init__.py              # WhitsonPVTClient
+├── http.py                  # HTTPTransport (httpx)
+├── auth.py                  # TokenManager
+├── errors.py                # SDKError, NotFoundError, ...
 ├── models/
-│   ├── _generated.py   # auto-generated from OpenAPI
-│   ├── _manual.py       # hand-maintained multipart models
-│   └── __init__.py
-└── v1/                 # resource modules (regions, wells, samples, ...)
+│   ├── v1/_generated.py      # auto-generated from /external/v1/docs/openapi.json
+│   ├── v2/_generated.py      # auto-generated from /external/v2/docs/openapi.json
+│   └── manual.py             # hand-maintained models (ClientCredentials, multipart)
+├── v1/                      # v1 resources (typed classes + plain HTTP functions)
+└── v2/                      # v2 resources (paginated models where diverged)
 ```
