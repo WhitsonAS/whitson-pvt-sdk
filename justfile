@@ -1,10 +1,14 @@
 # ── code generation ───────────────────────────────────────────────
-OPENAPI_URL := "https://internal.pvt.whitson.com/external/v1/docs/openapi.json"
-OUTPUT := "whitson_pvt_sdk/models/_generated.py"
+BASE_URL := "http://localhost:4000/external"
+OUTPUT_DIR := "whitson_pvt_sdk/models"
 
-generate:
-    uv run datamodel-codegen --url {{OPENAPI_URL}} --output {{OUTPUT}}
-    @echo "Models regenerated → {{OUTPUT}}"
+generate version:
+    uv run datamodel-codegen --url {{BASE_URL}}/{{version}}/docs/openapi.json --output {{OUTPUT_DIR}}/{{version}}/_generated.py
+    @echo "{{version}} models → {{OUTPUT_DIR}}/{{version}}/_generated.py"
+
+generate-all:
+    just generate v1
+    just generate v2
 
 # ── lint & typecheck ──────────────────────────────────────────────
 lint:
@@ -30,4 +34,4 @@ build:
     uv build
 
 # ── run all ───────────────────────────────────────────────────────
-all: generate lint-fix format ty build
+all: generate-all lint-fix format ty build
