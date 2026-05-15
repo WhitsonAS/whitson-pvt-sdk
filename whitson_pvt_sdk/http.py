@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from types import TracebackType
-from typing import Any
+from typing import Any, TypeAlias
 
 import httpx
 
@@ -11,6 +11,10 @@ from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, Validatio
 from whitson_pvt_sdk.models.manual import ClientCredentials
 
 logger = logging.getLogger(__name__)
+
+JSONBody: TypeAlias = dict[str, Any] | list[dict[str, Any]] | None
+
+Params: TypeAlias = dict[str, str | int] | None
 
 
 class _BearerAuth(httpx.Auth):
@@ -88,16 +92,16 @@ class HTTPTransport:
         self._raise_for_status(response)
         return response.content
 
-    def get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def get(self, path: str, *, params: Params = None) -> dict[str, Any]:
         return self._json(self._http.get(path, params=params))
 
-    def post(self, path: str, *, body: Any = None) -> dict[str, Any]:
+    def post(self, path: str, *, body: JSONBody = None) -> dict[str, Any]:
         return self._json(self._http.post(path, json=body))
 
-    def put(self, path: str, *, body: Any = None) -> dict[str, Any]:
+    def put(self, path: str, *, body: JSONBody = None) -> dict[str, Any]:
         return self._json(self._http.put(path, json=body))
 
-    def get_bytes(self, path: str, *, params: dict[str, Any] | None = None) -> bytes:
+    def get_bytes(self, path: str, *, params: Params = None) -> bytes:
         return self._bytes(self._http.get(path, params=params, timeout=60.0))
 
     def post_multipart(
