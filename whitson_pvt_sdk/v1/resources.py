@@ -152,7 +152,7 @@ class Reports:
     ) -> ImportPreflightResultModel:
         return reports.preflight_import(self._transport, archive_data, options)
 
-    def import_(
+    def import_archive(
         self, archive_data: bytes, options: ExternalImportArchiveOptions | None = None
     ) -> ImportCommitResultModel:
         return reports.import_report(self._transport, archive_data, options)
