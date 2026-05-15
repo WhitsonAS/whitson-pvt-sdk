@@ -1,31 +1,31 @@
 from ..http import HTTPTransport
-from ..models import (
-    ExternalCreateRegionModel,
-    ExternalGetRegionModel,
-    ExternalRegionsListModel,
-    ExternalUpdateRegionModel,
+from ..models.v1._generated import (
+    CreateRegionModel,
+    GetRegionModel,
+    RegionsListModel,
+    UpdateRegionModel,
 )
 
 
-def list_regions(transport: HTTPTransport) -> ExternalRegionsListModel:
+def list_regions(transport: HTTPTransport) -> RegionsListModel:
     body = transport.get("/regions")
-    return ExternalRegionsListModel.model_validate(body)
+    return RegionsListModel.model_validate(body)
 
 
-def get_region(transport: HTTPTransport, region_id: int) -> ExternalGetRegionModel:
+def get_region(transport: HTTPTransport, region_id: int) -> GetRegionModel:
     body = transport.get(f"/regions/{region_id}")
-    return ExternalGetRegionModel.model_validate(body)
+    return GetRegionModel.model_validate(body)
 
 
 def create_region(
-    transport: HTTPTransport, data: ExternalCreateRegionModel
-) -> ExternalGetRegionModel:
+    transport: HTTPTransport, data: CreateRegionModel
+) -> GetRegionModel:
     body = transport.post("/regions", body=data.model_dump(exclude_unset=True))
-    return ExternalGetRegionModel.model_validate(body)
+    return GetRegionModel.model_validate(body)
 
 
 def update_region(
-    transport: HTTPTransport, region_id: int, data: ExternalUpdateRegionModel
-) -> ExternalGetRegionModel:
+    transport: HTTPTransport, region_id: int, data: UpdateRegionModel
+) -> GetRegionModel:
     body = transport.put(f"/regions/{region_id}", body=data.model_dump(exclude_unset=True))
-    return ExternalGetRegionModel.model_validate(body)
+    return GetRegionModel.model_validate(body)

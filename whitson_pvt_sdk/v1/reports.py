@@ -1,9 +1,9 @@
 from io import BytesIO
 
-from whitson_pvt_sdk.models import (
-    ExternalImportArchiveOptions,
-    ExternalImportCommitResultModel,
-    ExternalImportPreflightResultModel,
+from whitson_pvt_sdk.models.manual import ExternalImportArchiveOptions
+from whitson_pvt_sdk.models.v1._generated import (
+    ImportCommitResultModel,
+    ImportPreflightResultModel,
 )
 
 from ..http import HTTPTransport
@@ -19,7 +19,7 @@ def preflight_import(
     transport: HTTPTransport,
     archive_data: bytes,
     options: ExternalImportArchiveOptions | None = None,
-) -> ExternalImportPreflightResultModel:
+) -> ImportPreflightResultModel:
     if options is None:
         options = ExternalImportArchiveOptions()
 
@@ -28,14 +28,14 @@ def preflight_import(
         files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
         data=_meta_data(options),
     )
-    return ExternalImportPreflightResultModel.model_validate(body)
+    return ImportPreflightResultModel.model_validate(body)
 
 
 def import_report(
     transport: HTTPTransport,
     archive_data: bytes,
     options: ExternalImportArchiveOptions | None = None,
-) -> ExternalImportCommitResultModel:
+) -> ImportCommitResultModel:
     if options is None:
         options = ExternalImportArchiveOptions()
 
@@ -44,7 +44,7 @@ def import_report(
         files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
         data=_meta_data(options),
     )
-    return ExternalImportCommitResultModel.model_validate(body)
+    return ImportCommitResultModel.model_validate(body)
 
 
 def _meta_data(options: ExternalImportArchiveOptions) -> dict | None:

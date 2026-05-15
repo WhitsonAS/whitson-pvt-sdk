@@ -1,15 +1,15 @@
 from ..http import HTTPTransport
-from ..models import (
-    ExternalFluidModelsListModel,
-    ExternalGetFluidModelModel,
+from ..models.v1._generated import (
+    FluidModelsListModel,
+    GetFluidModelModel,
 )
 
 
-def list_fluid_models(transport: HTTPTransport, project_id: int) -> ExternalFluidModelsListModel:
+def list_fluid_models(transport: HTTPTransport, project_id: int) -> FluidModelsListModel:
     body = transport.get(f"/projects/{project_id}/fluid-models")
-    return ExternalFluidModelsListModel.model_validate(body)
+    return FluidModelsListModel.model_validate(body)
 
 
-def get_fluid_model(transport: HTTPTransport, fluid_model_id: int) -> ExternalGetFluidModelModel:
+def get_fluid_model(transport: HTTPTransport, fluid_model_id: int) -> GetFluidModelModel:
     body = transport.get(f"/fluid-models/{fluid_model_id}")
-    return ExternalGetFluidModelModel.model_validate(body)
+    return GetFluidModelModel.model_validate(body)

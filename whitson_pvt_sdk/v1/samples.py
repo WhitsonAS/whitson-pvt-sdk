@@ -1,56 +1,56 @@
 from ..http import HTTPTransport
-from ..models import (
-    ExternalCreateSampleListModel,
-    ExternalCreateSampleModel,
-    ExternalGetSampleListModel,
-    ExternalGetSampleModel,
-    ExternalUpdateSampleListModel,
-    ExternalUpdateSampleModel,
+from ..models.v1._generated import (
+    CreateSampleListModel,
+    CreateSampleModel,
+    GetSampleListModel,
+    GetSampleModel,
+    UpdateSampleListModel,
+    UpdateSampleModel,
 )
 
 
-def list_samples(transport: HTTPTransport, well_id: int) -> ExternalGetSampleListModel:
+def list_samples(transport: HTTPTransport, well_id: int) -> GetSampleListModel:
     body = transport.get(f"/wells/{well_id}")
-    return ExternalGetSampleListModel.model_validate(body)
+    return GetSampleListModel.model_validate(body)
 
 
-def get_sample(transport: HTTPTransport, sample_id: int) -> ExternalGetSampleModel:
+def get_sample(transport: HTTPTransport, sample_id: int) -> GetSampleModel:
     body = transport.get(f"/samples/{sample_id}")
-    return ExternalGetSampleModel.model_validate(body)
+    return GetSampleModel.model_validate(body)
 
 
 def create_sample(
-    transport: HTTPTransport, data: ExternalCreateSampleModel
-) -> ExternalGetSampleModel:
+    transport: HTTPTransport, data: CreateSampleModel
+) -> GetSampleModel:
     body = transport.post("/samples", body=data.model_dump(exclude_unset=True))
-    return ExternalGetSampleModel.model_validate(body)
+    return GetSampleModel.model_validate(body)
 
 
 def create_samples_bulk(
-    transport: HTTPTransport, data: ExternalCreateSampleListModel
-) -> ExternalGetSampleListModel:
+    transport: HTTPTransport, data: CreateSampleListModel
+) -> GetSampleListModel:
     body = transport.post(
         "/samples/bulk",
         body=[model.model_dump(exclude_unset=True) for model in data.root],
     )
-    return ExternalGetSampleListModel.model_validate(body)
+    return GetSampleListModel.model_validate(body)
 
 
 def update_sample(
-    transport: HTTPTransport, sample_id: int, data: ExternalUpdateSampleModel
-) -> ExternalGetSampleModel:
+    transport: HTTPTransport, sample_id: int, data: UpdateSampleModel
+) -> GetSampleModel:
     body = transport.put(f"/samples/{sample_id}", body=data.model_dump(exclude_unset=True))
-    return ExternalGetSampleModel.model_validate(body)
+    return GetSampleModel.model_validate(body)
 
 
 def update_samples_bulk(
-    transport: HTTPTransport, data: ExternalUpdateSampleListModel
-) -> ExternalGetSampleListModel:
+    transport: HTTPTransport, data: UpdateSampleListModel
+) -> GetSampleListModel:
     body = transport.put(
         "/samples/bulk",
         body=[s.model_dump(exclude_unset=True) for s in data.root],
     )
-    return ExternalGetSampleListModel.model_validate(body)
+    return GetSampleListModel.model_validate(body)
 
 
 def get_sample_experiment_types(transport: HTTPTransport, sample_id: int) -> list[str]:

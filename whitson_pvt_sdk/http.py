@@ -8,7 +8,7 @@ import httpx
 
 from whitson_pvt_sdk.auth import TokenManager
 from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
-from whitson_pvt_sdk.models._generated import ClientCredentials
+from whitson_pvt_sdk.models.manual import ClientCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +91,10 @@ class HTTPTransport:
     def get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._json(self._http.get(path, params=params))
 
-    def post(self, path: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def post(self, path: str, *, body: Any = None) -> dict[str, Any]:
         return self._json(self._http.post(path, json=body))
 
-    def put(self, path: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def put(self, path: str, *, body: Any = None) -> dict[str, Any]:
         return self._json(self._http.put(path, json=body))
 
     def get_bytes(self, path: str, *, params: dict[str, Any] | None = None) -> bytes:
