@@ -25,7 +25,7 @@ export WHITSON_BASE_URL="https://internal.pvt.whitson.com"  # optional, defaults
 
 | File | Description | Command |
 |---|---|---|
-| `basic_connect.py` | Connect, list regions, iterate pagination | `uv run examples/basic_connect.py` |
+| `basic_connect.py` | Connect, list regions, iterate pagination, run an optional flash calculation | `uv run examples/basic_connect.py` |
 | `basic_crud.py` | Create, read, update a region with Pydantic models | `uv run examples/basic_crud.py` |
 | `basic_reports.py` | Export a report to file, import/preflight | `uv run examples/basic_reports.py` |
 | `pagination.py` | Walk all pages of a v2 paginated endpoint | `uv run examples/pagination.py` |
