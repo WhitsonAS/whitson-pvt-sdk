@@ -59,5 +59,14 @@ class TokenManager:
             return self._cached_access_token
         except httpx.TimeoutException as e:
             raise AuthError("Authentication service timeout") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500:
+                raise AuthError("Authentication service unavailable") from e
+            try:
+                body = e.response.json()
+                detail = body.get("error_description") or body.get("error") or e.response.text
+            except ValueError:
+                detail = e.response.text
+            raise AuthError(f"Authentication failed: {detail}") from e
         except httpx.HTTPError as e:
             raise AuthError("Authentication service unavailable") from e

@@ -2,6 +2,7 @@ import warnings
 from typing import Literal, overload
 
 from .http import HTTPTransport
+from .models.manual import ClientCredentials
 from .v1 import WhitsonPVTClientV1
 from .v2 import WhitsonPVTClientV2
 
@@ -18,7 +19,7 @@ _SUPPORTED = frozenset({"v1", "v2"})
 @overload
 def WhitsonPVTClient(
     *,
-    credentials,
+    credentials: ClientCredentials,
     base_url: str,
     version: Literal["v2"] = "v2",
     auth0_domain: str | None = None,
@@ -29,7 +30,7 @@ def WhitsonPVTClient(
 @overload
 def WhitsonPVTClient(
     *,
-    credentials,
+    credentials: ClientCredentials,
     base_url: str,
     version: Literal["v1"],
     auth0_domain: str | None = None,
@@ -40,7 +41,7 @@ def WhitsonPVTClient(
 @overload
 def WhitsonPVTClient(
     *,
-    credentials,
+    credentials: ClientCredentials,
     base_url: str,
     version: str,
     auth0_domain: str | None = None,
@@ -50,7 +51,7 @@ def WhitsonPVTClient(
 
 def WhitsonPVTClient(
     *,
-    credentials,
+    credentials: ClientCredentials,
     base_url: str,
     version: str = "v2",
     auth0_domain: str | None = None,

@@ -81,6 +81,21 @@ def test_raises_auth_error_on_http_error(httpx_mock):
         tm.get_token()
 
 
+def test_raises_auth_error_with_detail_on_auth0_status_error(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://whitson.eu.auth0.com/oauth/token",
+        status_code=401,
+        json={
+            "error": "access_denied",
+            "error_description": "Invalid client credentials",
+        },
+    )
+    tm = TokenManager(ClientCredentials(client_id="bad", client_secret="bad"))
+    with pytest.raises(AuthError, match="Authentication failed: Invalid client credentials"):
+        tm.get_token()
+
+
 def test_uses_custom_auth0_domain(httpx_mock):
     httpx_mock.add_response(
         method="POST",
