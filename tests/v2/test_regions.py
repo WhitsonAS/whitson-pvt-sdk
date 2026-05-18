@@ -38,6 +38,18 @@ def test_list_regions_pagination_with_both_cursors(transport, httpx_mock):
     assert result.pagination.prev_cursor == "prv"
 
 
+def test_list_regions_passes_cursor(transport, httpx_mock):
+    httpx_mock.add_response(
+        url="https://pvt.whitson.com/external/v2/regions?cursor=nxt&limit=25",
+        json={
+            "regions": [],
+            "pagination": {"next_cursor": None, "prev_cursor": "prv"},
+        },
+    )
+    result = Regions(transport).list(cursor="nxt", limit=25)
+    assert result.pagination.prev_cursor == "prv"
+
+
 def test_get_region_v2(transport, httpx_mock):
     httpx_mock.add_response(
         url="https://pvt.whitson.com/external/v2/regions/1",
