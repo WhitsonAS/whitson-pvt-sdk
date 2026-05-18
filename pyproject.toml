@@ -47,4 +47,6 @@ dev = [
   "datamodel-code-generator>=0.28",
   "prek>=0.3.13",
   "ty>=0.0.34",
+  "pytest>=9.0.3",
+  "pytest-httpx>=0.30",
 ]
