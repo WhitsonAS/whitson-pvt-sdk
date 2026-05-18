@@ -10,8 +10,6 @@ def list_projects(transport: HTTPTransport, region_id: int) -> ProjectsListModel
     return ProjectsListModel.model_validate(body)
 
 
-def get_project(
-    transport: HTTPTransport, project_id: int
-) -> GetProjectWithFluidModelsModel:
+def get_project(transport: HTTPTransport, project_id: int) -> GetProjectWithFluidModelsModel:
     body = transport.get(f"/projects/{project_id}")
     return GetProjectWithFluidModelsModel.model_validate(body)

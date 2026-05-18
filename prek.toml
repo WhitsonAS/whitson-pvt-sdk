@@ -7,7 +7,7 @@ repo = "local"
 id = "ruff"
 name = "ruff"
 language = "system"
-entry = "uv run ruff check"
+entry = "uv run ruff check --fix"
 files = "\\.py$"
 
 [[repos.hooks]]

@@ -23,15 +23,11 @@ def create_well(transport: HTTPTransport, data: CreateWellModel) -> GetWellModel
     return GetWellModel.model_validate(body)
 
 
-def update_well(
-    transport: HTTPTransport, well_id: int, data: UpdateWellModel
-) -> GetWellModel:
+def update_well(transport: HTTPTransport, well_id: int, data: UpdateWellModel) -> GetWellModel:
     body = transport.put(f"/wells/{well_id}", body=data.model_dump(exclude_unset=True))
     return GetWellModel.model_validate(body)
 
 
-def update_wells_bulk(
-    transport: HTTPTransport, data: UpdateWellsListModel
-) -> WellsListModel:
+def update_wells_bulk(transport: HTTPTransport, data: UpdateWellsListModel) -> WellsListModel:
     body = transport.put("/wells/bulk", body=[w.model_dump(exclude_unset=True) for w in data.root])
     return WellsListModel.model_validate(body)

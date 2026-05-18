@@ -19,9 +19,7 @@ def get_sample(transport: HTTPTransport, sample_id: int) -> GetSampleModel:
     return GetSampleModel.model_validate(body)
 
 
-def create_sample(
-    transport: HTTPTransport, data: CreateSampleModel
-) -> GetSampleModel:
+def create_sample(transport: HTTPTransport, data: CreateSampleModel) -> GetSampleModel:
     body = transport.post("/samples", body=data.model_dump(exclude_unset=True))
     return GetSampleModel.model_validate(body)
 

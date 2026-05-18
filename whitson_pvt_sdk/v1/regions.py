@@ -17,9 +17,7 @@ def get_region(transport: HTTPTransport, region_id: int) -> GetRegionModel:
     return GetRegionModel.model_validate(body)
 
 
-def create_region(
-    transport: HTTPTransport, data: CreateRegionModel
-) -> GetRegionModel:
+def create_region(transport: HTTPTransport, data: CreateRegionModel) -> GetRegionModel:
     body = transport.post("/regions", body=data.model_dump(exclude_unset=True))
     return GetRegionModel.model_validate(body)
 

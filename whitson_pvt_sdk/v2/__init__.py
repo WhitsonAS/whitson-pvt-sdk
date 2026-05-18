@@ -2,7 +2,7 @@ from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.v2 import resources
 
 
-class WhitsonPVTV2Client:
+class WhitsonPVTClientV2:
     regions: resources.Regions
     wells: resources.Wells
     samples: resources.Samples
@@ -21,4 +21,4 @@ class WhitsonPVTV2Client:
         self.reports = resources.Reports(transport)
 
 
-__all__ = ["WhitsonPVTV2Client"]
+__all__ = ["WhitsonPVTClientV2"]

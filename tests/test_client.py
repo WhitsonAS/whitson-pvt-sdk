@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk.v1 import WhitsonPVTClientV1
 from whitson_pvt_sdk.v1.resources import (
     BlackOilTables as V1BlackOilTables,
 )
@@ -25,6 +26,7 @@ from whitson_pvt_sdk.v1.resources import (
 from whitson_pvt_sdk.v1.resources import (
     Wells as V1Wells,
 )
+from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.resources import (
     BlackOilTables as V2BlackOilTables,
 )
@@ -56,6 +58,7 @@ def _create_client(credentials, base_url, **kwargs):
 
 def test_defaults_to_v2(credentials, base_url):
     client = _create_client(credentials, base_url)
+    assert isinstance(client, WhitsonPVTClientV2)
     assert isinstance(client.regions, V2Regions)
     assert isinstance(client.wells, V2Wells)
     assert isinstance(client.samples, V2Samples)
@@ -69,6 +72,7 @@ def test_v1_loads_v1_resources(credentials, base_url):
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
         client = _create_client(credentials, base_url, version="v1")
+    assert isinstance(client, WhitsonPVTClientV1)
     assert isinstance(client.regions, V1Regions)
     assert isinstance(client.wells, V1Wells)
     assert isinstance(client.samples, V1Samples)

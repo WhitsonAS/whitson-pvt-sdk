@@ -2,8 +2,8 @@ import warnings
 from typing import Literal, overload
 
 from .http import HTTPTransport
-from .v1 import WhitsonPVTV1Client
-from .v2 import WhitsonPVTV2Client
+from .v1 import WhitsonPVTClientV1
+from .v2 import WhitsonPVTClientV2
 
 __version__ = "0.1.0"
 
@@ -23,7 +23,7 @@ def WhitsonPVTClient(
     version: Literal["v2"] = "v2",
     auth0_domain: str | None = None,
     audience: str | None = None,
-) -> WhitsonPVTV2Client: ...
+) -> WhitsonPVTClientV2: ...
 
 
 @overload
@@ -34,7 +34,7 @@ def WhitsonPVTClient(
     version: Literal["v1"],
     auth0_domain: str | None = None,
     audience: str | None = None,
-) -> WhitsonPVTV1Client: ...
+) -> WhitsonPVTClientV1: ...
 
 
 @overload
@@ -45,7 +45,7 @@ def WhitsonPVTClient(
     version: str,
     auth0_domain: str | None = None,
     audience: str | None = None,
-) -> WhitsonPVTV1Client | WhitsonPVTV2Client: ...
+) -> WhitsonPVTClientV1 | WhitsonPVTClientV2: ...
 
 
 def WhitsonPVTClient(
@@ -55,7 +55,7 @@ def WhitsonPVTClient(
     version: str = "v2",
     auth0_domain: str | None = None,
     audience: str | None = None,
-) -> WhitsonPVTV1Client | WhitsonPVTV2Client:
+) -> WhitsonPVTClientV1 | WhitsonPVTClientV2:
     """Create a whitson PVT SDK client for the selected external API version.
 
     Usage::
@@ -87,9 +87,9 @@ def WhitsonPVTClient(
 
     match version:
         case "v1":
-            return WhitsonPVTV1Client(transport)
+            return WhitsonPVTClientV1(transport)
         case "v2":
-            return WhitsonPVTV2Client(transport)
+            return WhitsonPVTClientV2(transport)
         case _:
             if version in _SUPPORTED:
                 raise RuntimeError(

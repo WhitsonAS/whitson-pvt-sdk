@@ -12,8 +12,6 @@ def list_black_oil_tables(
     return PaginatedBlackOilTablesModel.model_validate(body)
 
 
-def get_black_oil_table(
-    transport: HTTPTransport, black_oil_table_id: int
-) -> GetBlackOilTableModel:
+def get_black_oil_table(transport: HTTPTransport, black_oil_table_id: int) -> GetBlackOilTableModel:
     body = transport.get(f"/black-oil-tables/{black_oil_table_id}")
     return GetBlackOilTableModel.model_validate(body)
