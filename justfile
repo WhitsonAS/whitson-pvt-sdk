@@ -29,6 +29,13 @@ ty:
 check: lint format ty
     @echo "All checks passed"
 
+# ── test ───────────────────────────────────────────────────────────
+test:
+    uv run pytest tests/ -v
+
+test-cov:
+    uv run pytest tests/ -v --cov=whitson_pvt_sdk --cov-report=term-missing
+
 # ── build ─────────────────────────────────────────────────────────
 build:
     uv build
