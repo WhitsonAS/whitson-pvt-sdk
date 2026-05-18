@@ -10,6 +10,7 @@ class WhitsonPVTClientV2:
     fluid_models: resources.FluidModels
     black_oil_tables: resources.BlackOilTables
     reports: resources.Reports
+    calculations: resources.Calculations
 
     def __init__(self, transport: HTTPTransport) -> None:
         self.regions = resources.Regions(transport)
@@ -19,6 +20,7 @@ class WhitsonPVTClientV2:
         self.fluid_models = resources.FluidModels(transport)
         self.black_oil_tables = resources.BlackOilTables(transport)
         self.reports = resources.Reports(transport)
+        self.calculations = resources.Calculations(transport)
 
 
 __all__ = ["WhitsonPVTClientV2"]

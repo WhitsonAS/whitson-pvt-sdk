@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from whitson_pvt_sdk.v2 import (
     black_oil_tables,
+    calculations,
     fluid_models,
     projects,
     regions,
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
         CreateSampleListModel,
         CreateSampleModel,
         CreateWellModel,
+        FlashCalculationRequestModel,
+        FlashCalculationResponseModel,
         GetBlackOilTableModel,
         GetFluidModelModel,
         GetProjectWithFluidModelsModel,
@@ -36,6 +39,10 @@ if TYPE_CHECKING:
         PaginatedProjectsModel,
         PaginatedRegionsModel,
         PaginatedWellsModel,
+        PhaseEnvelopeCalculationRequestModel,
+        PhaseEnvelopeCalculationResponseModel,
+        SaturationPressureCalculationRequestModel,
+        SaturationPressureCalculationResponseModel,
         UpdateRegionModel,
         UpdateSampleListModel,
         UpdateSampleModel,
@@ -167,3 +174,21 @@ class Reports:
         self, archive_data: bytes, options: ExternalImportArchiveOptions | None = None
     ) -> ImportCommitResultModel:
         return reports.import_report(self._transport, archive_data, options)
+
+
+class Calculations:
+    def __init__(self, transport: HTTPTransport) -> None:
+        self._transport = transport
+
+    def run_flash(self, data: FlashCalculationRequestModel) -> FlashCalculationResponseModel:
+        return calculations.run_flash(self._transport, data)
+
+    def run_saturation_pressure(
+        self, data: SaturationPressureCalculationRequestModel
+    ) -> SaturationPressureCalculationResponseModel:
+        return calculations.run_saturation_pressure(self._transport, data)
+
+    def run_phase_envelope(
+        self, data: PhaseEnvelopeCalculationRequestModel
+    ) -> PhaseEnvelopeCalculationResponseModel:
+        return calculations.run_phase_envelope(self._transport, data)
