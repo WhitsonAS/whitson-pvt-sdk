@@ -7,12 +7,14 @@ repo = "local"
 id = "ruff"
 name = "ruff"
 language = "system"
-entry = "uv run ruff check --fix"
+entry = "just lint-fix"
 files = "\\.py$"
+pass_filenames = false
 
 [[repos.hooks]]
 id = "ty"
 name = "ty"
 language = "system"
-entry = "uv run ty check"
+entry = "just ty"
 files = "\\.py$"
+pass_filenames = false
