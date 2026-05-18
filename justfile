@@ -11,11 +11,11 @@ generate-all:
     just generate v2
 
 # ── lint & typecheck ──────────────────────────────────────────────
-lint:
-    uv run ruff check whitson_pvt_sdk/
+lint +files='whitson_pvt_sdk/':
+    uv run ruff check {{files}}
 
-lint-fix:
-    uv run ruff check whitson_pvt_sdk/ --fix
+lint-fix +files='whitson_pvt_sdk/':
+    uv run ruff check {{files}} --fix
 
 format:
     uv run ruff format whitson_pvt_sdk/
@@ -23,8 +23,8 @@ format:
 fmt format:
 
 
-ty:
-    uv run ty check
+ty +files='':
+    uv run ty check {{files}}
 
 check: lint format ty
     @echo "All checks passed"

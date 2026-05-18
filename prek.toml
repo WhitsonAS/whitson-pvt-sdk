@@ -7,9 +7,8 @@ repo = "local"
 id = "ruff"
 name = "ruff"
 language = "system"
-entry = "just lint-fix"
+entry = "just lint"
 files = "\\.py$"
-pass_filenames = false
 
 [[repos.hooks]]
 id = "ty"
@@ -17,4 +16,3 @@ name = "ty"
 language = "system"
 entry = "just ty"
 files = "\\.py$"
-pass_filenames = false
