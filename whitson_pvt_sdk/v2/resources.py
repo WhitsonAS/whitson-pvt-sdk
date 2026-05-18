@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         PaginatedFluidModelsModel,
         PaginatedProjectsModel,
         PaginatedRegionsModel,
+        PaginatedWellsModel,
         UpdateRegionModel,
         UpdateSampleListModel,
         UpdateSampleModel,
@@ -48,8 +49,8 @@ class Regions:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(self) -> PaginatedRegionsModel:
-        return regions.list_regions(self._transport)
+    def list(self, cursor: str | None = None, limit: int | None = None) -> PaginatedRegionsModel:
+        return regions.list_regions(self._transport, cursor, limit)
 
     def get(self, region_id: int) -> GetRegionModel:
         return regions.get_region(self._transport, region_id)
@@ -65,8 +66,10 @@ class Wells:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(self, region_id: int) -> WellsListModel:
-        return wells.list_wells(self._transport, region_id)
+    def list(
+        self, region_id: int, cursor: str | None = None, limit: int | None = None
+    ) -> PaginatedWellsModel:
+        return wells.list_wells(self._transport, region_id, cursor, limit)
 
     def get(self, well_id: int) -> GetWellModel:
         return wells.get_well(self._transport, well_id)
@@ -111,8 +114,10 @@ class Projects:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(self, region_id: int) -> PaginatedProjectsModel:
-        return projects.list_projects(self._transport, region_id)
+    def list(
+        self, region_id: int, cursor: str | None = None, limit: int | None = None
+    ) -> PaginatedProjectsModel:
+        return projects.list_projects(self._transport, region_id, cursor, limit)
 
     def get(self, project_id: int) -> GetProjectWithFluidModelsModel:
         return projects.get_project(self._transport, project_id)
@@ -122,8 +127,10 @@ class FluidModels:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(self, project_id: int) -> PaginatedFluidModelsModel:
-        return fluid_models.list_fluid_models(self._transport, project_id)
+    def list(
+        self, project_id: int, cursor: str | None = None, limit: int | None = None
+    ) -> PaginatedFluidModelsModel:
+        return fluid_models.list_fluid_models(self._transport, project_id, cursor, limit)
 
     def get(self, fluid_model_id: int) -> GetFluidModelModel:
         return fluid_models.get_fluid_model(self._transport, fluid_model_id)
@@ -133,8 +140,12 @@ class BlackOilTables:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(self, fluid_model_id: int) -> PaginatedBlackOilTablesModel:
-        return black_oil_tables.list_black_oil_tables(self._transport, fluid_model_id)
+    def list(
+        self, fluid_model_id: int, cursor: str | None = None, limit: int | None = None
+    ) -> PaginatedBlackOilTablesModel:
+        return black_oil_tables.list_black_oil_tables(
+            self._transport, fluid_model_id, cursor, limit
+        )
 
     def get(self, black_oil_table_id: int) -> GetBlackOilTableModel:
         return black_oil_tables.get_black_oil_table(self._transport, black_oil_table_id)

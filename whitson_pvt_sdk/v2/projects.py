@@ -1,12 +1,16 @@
 from ..http import HTTPTransport
+from ..models.manual import PaginationParams
 from ..models.v2._generated import (
     GetProjectWithFluidModelsModel,
     PaginatedProjectsModel,
 )
 
 
-def list_projects(transport: HTTPTransport, region_id: int) -> PaginatedProjectsModel:
-    body = transport.get(f"/regions/{region_id}/projects")
+def list_projects(
+    transport: HTTPTransport, region_id: int, cursor: str | None = None, limit: int | None = None
+) -> PaginatedProjectsModel:
+    params = PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True)
+    body = transport.get(f"/regions/{region_id}/projects", params=params)
     return PaginatedProjectsModel.model_validate(body)
 
 

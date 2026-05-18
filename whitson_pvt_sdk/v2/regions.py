@@ -1,4 +1,5 @@
 from ..http import HTTPTransport
+from ..models.manual import PaginationParams
 from ..models.v2._generated import (
     CreateRegionModel,
     GetRegionModel,
@@ -7,8 +8,13 @@ from ..models.v2._generated import (
 )
 
 
-def list_regions(transport: HTTPTransport) -> PaginatedRegionsModel:
-    body = transport.get("/regions")
+def list_regions(
+    transport: HTTPTransport, cursor: str | None = None, limit: int | None = None
+) -> PaginatedRegionsModel:
+    body = transport.get(
+        "/regions",
+        params=PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+    )
     return PaginatedRegionsModel.model_validate(body)
 
 
