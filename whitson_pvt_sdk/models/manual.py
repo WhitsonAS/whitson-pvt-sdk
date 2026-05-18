@@ -6,6 +6,11 @@ class ClientCredentials(BaseModel):
     client_secret: str
 
 
+class PaginationParams(BaseModel):
+    cursor: str | None = None
+    limit: int | None = Field(default=None, ge=1, le=250)
+
+
 class ExternalImportResolutionModel(BaseModel):
     entity: str
     natural_key_id: str | None = None
