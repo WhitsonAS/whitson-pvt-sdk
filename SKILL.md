@@ -76,6 +76,26 @@ black_oil_table = client.black_oil_tables.get(black_oil_table_id=987)
 
 For paginated v2 list endpoints, pass `cursor=page.pagination.next_cursor` to fetch the next page and `limit=<int>` to control page size.
 
+## Pagination
+
+v2 list endpoints (regions, wells, projects, fluid models, black oil tables) return a
+`pagination: PaginationMeta` field with `next_cursor` and `prev_cursor`.
+Iterate pages by following `next_cursor`:
+
+```python
+page = client.regions.list(limit=50)
+
+for region in page.regions:
+    print(region.name)
+
+while page.pagination.next_cursor:
+    page = client.regions.list(cursor=page.pagination.next_cursor)
+    for region in page.regions:
+        print(region.name)
+```
+
+Passing `limit` sets the page size (1–250). When omitted, the API default applies (usually 20).
+
 ## Creating And Updating Data
 
 Use generated Pydantic models from the selected API version for create and update requests.
