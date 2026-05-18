@@ -24,7 +24,7 @@ fmt format:
 
 
 ty +files='':
-    uv run ty check {{files}}
+    uv run ty check --force-exclude {{files}}
 
 check: lint format ty
     @echo "All checks passed"

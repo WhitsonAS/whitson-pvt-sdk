@@ -53,9 +53,13 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/regions")
-def list_regions(client: Annotated[WhitsonPVTClientV2, Depends(get_client)]):
+def list_regions(
+    client: Annotated[WhitsonPVTClientV2, Depends(get_client)],
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None),
+):
     try:
-        page = client.regions.list()
+        page = client.regions.list(cursor=cursor, limit=limit)
         return {
             "regions": [r.model_dump() for r in page.regions],
             "next_cursor": page.pagination.next_cursor,
@@ -82,11 +86,15 @@ def get_region(region_id: int, client: Annotated[WhitsonPVTClientV2, Depends(get
 def list_wells(
     region_id: int,
     client: Annotated[WhitsonPVTClientV2, Depends(get_client)],
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None),
 ):
     try:
-        wells = client.wells.list(region_id)
+        page = client.wells.list(region_id, cursor=cursor, limit=limit)
         return {
-            "wells": [w.model_dump() for w in wells.wells],
+            "wells": [w.model_dump() for w in page.wells],
+            "next_cursor": page.pagination.next_cursor,
+            "prev_cursor": page.pagination.prev_cursor,
         }
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Region not found")
@@ -99,9 +107,10 @@ def list_projects(
     region_id: int,
     client: Annotated[WhitsonPVTClientV2, Depends(get_client)],
     cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None),
 ):
     try:
-        page = client.projects.list(region_id)
+        page = client.projects.list(region_id, cursor=cursor, limit=limit)
         return {
             "projects": [p.model_dump() for p in page.projects],
             "next_cursor": page.pagination.next_cursor,

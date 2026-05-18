@@ -26,14 +26,14 @@ def main() -> None:
         base_url=base_url,
     )
 
-    page = client.regions.list()
+    page = client.regions.list(limit=50)
     print(f"Regions (page 1): {len(page.regions)}")
 
     for region in page.regions:
         print(f"  - {region.name} (id={region.id})")
 
     while page.pagination.next_cursor:
-        page = client.regions.list()
+        page = client.regions.list(cursor=page.pagination.next_cursor, limit=50)
         print(f"Regions (next page): {len(page.regions)}")
         for region in page.regions:
             print(f"  - {region.name} (id={region.id})")

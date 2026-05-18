@@ -13,28 +13,30 @@ from whitson_pvt_sdk.models.manual import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 
-def collect_all_regions(client: WhitsonPVTClientV2) -> list:
+def collect_all_regions(client: WhitsonPVTClientV2, limit: int = 100) -> list:
     all_regions = []
-    page = client.regions.list()
+    cursor = None
 
     while True:
+        page = client.regions.list(cursor=cursor, limit=limit)
         all_regions.extend(page.regions)
-        if not page.pagination.next_cursor:
+        cursor = page.pagination.next_cursor
+        if not cursor:
             break
-        page = client.regions.list()
 
     return all_regions
 
 
-def collect_all(client, list_method, collection_attr: str) -> list:
+def collect_all(client, list_method, collection_attr: str, limit: int = 100) -> list:
     all_items = []
-    page = list_method()
+    cursor = None
 
     while True:
+        page = list_method(cursor, limit)
         all_items.extend(getattr(page, collection_attr))
-        if not page.pagination.next_cursor:
+        cursor = page.pagination.next_cursor
+        if not cursor:
             break
-        page = list_method()
 
     return all_items
 
@@ -53,9 +55,19 @@ def main() -> None:
 
     for region in regions[:5]:
         print(f"  - {region.name} (id={region.id})")
+        wells = collect_all(
+            client,
+            lambda cursor, limit, rid=region.id: client.wells.list(
+                rid, cursor=cursor, limit=limit
+            ),
+            "wells",
+        )
+        print(f"    {len(wells)} wells")
         projects = collect_all(
             client,
-            lambda rid=region.id: client.projects.list(rid),
+            lambda cursor, limit, rid=region.id: client.projects.list(
+                rid, cursor=cursor, limit=limit
+            ),
             "projects",
         )
         print(f"    {len(projects)} projects")
