@@ -28,6 +28,29 @@ well = client.wells.get(well_id=123)
 sample = client.samples.get(sample_id=456)
 ```
 
+### Pagination (v2)
+
+v2 list endpoints (regions, projects, fluid models, black oil tables, wells) are
+cursor-paginated. Each response includes a `pagination` field:
+
+```python
+page = client.regions.list()
+for region in page.regions:
+    print(region.name)
+
+while page.pagination.next_cursor:
+    page = client.regions.list()
+```
+
+Pass `cursor` and `limit` to control pagination:
+
+```python
+page = client.regions.list(limit=50)
+page = client.regions.list(cursor=page.pagination.next_cursor)
+```
+
+Limit defaults to the API default (usually 20) when omitted.
+
 ## Development
 
 ### Prerequisites

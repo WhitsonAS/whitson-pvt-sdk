@@ -32,6 +32,22 @@ export WHITSON_BASE_URL="https://internal.pvt.whitson.com"  # optional, defaults
 | `cli_list.py` | argparse CLI for listing resources | `uv run examples/cli_list.py regions` |
 | `fastapi_demo.py` | FastAPI app with SDK-backed routes | `uv run examples/fastapi_demo.py` |
 
+## Pagination (v2)
+
+v2 list endpoints return a `PaginationMeta` field (`next_cursor`, `prev_cursor`).
+Pass `cursor` and `limit` to `list()` methods:
+
+```python
+page = client.regions.list(limit=50)
+print(page.pagination.next_cursor)  # "abc123" or None
+
+page2 = client.regions.list(cursor=page.pagination.next_cursor)
+```
+
+The `pagination.py` example shows how to collect all pages into a single list.
+
+Limit defaults to the API default (usually 20) when omitted. Valid range: 1–250. |
+
 For the FastAPI example, install the extra dependency first:
 
 ```bash
