@@ -30,7 +30,7 @@ def main() -> None:
             reservoir_type="Conventional",
         )
     )
-    assert created.id is not None
+
     print(f"Created region: {created.name} (id={created.id})")
 
     fetched = client.regions.get(region_id=created.id)
