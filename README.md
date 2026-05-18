@@ -16,17 +16,16 @@ pip install whitson-pvt-sdk
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.models import ClientCredentials
+from whitson_pvt_sdk.models.manual import ClientCredentials
 
-v2 = WhitsonPVTClient(
+client = WhitsonPVTClient(
     credentials=ClientCredentials(client_id="...", client_secret="..."),
     base_url="https://internal.pvt.whitson.com",
-    version="v2",
 )
 
-regions = v2.regions.list()
-well = v2.wells.get(well_id=123)
-sample = v2.samples.get(sample_id=456)
+regions = client.regions.list()
+well = client.wells.get(well_id=123)
+sample = client.samples.get(sample_id=456)
 ```
 
 ## Development

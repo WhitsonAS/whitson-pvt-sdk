@@ -8,7 +8,12 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 - Focused checks: `just lint`, `just ty`, `just build`.
 - `just check` runs `lint -> format -> ty`; it is not read-only because `format` runs `ruff format whitson_pvt_sdk/`.
 - `just all` regenerates models, applies lint fixes/formatting, typechecks, then builds.
-- No test suite is configured in this repo; do not invent a pytest command unless tests are added.
+
+## Tests
+
+- Run the test suite with `just test`; it executes `uv run pytest tests/ -v`.
+- Run coverage with `just test-cov`; it executes `uv run pytest tests/ -v --cov=whitson_pvt_sdk --cov-report=term-missing`.
+- Prefer `just test` over invoking pytest directly unless you are intentionally running a focused subset.
 
 ## Codegen
 
@@ -37,6 +42,6 @@ For new endpoint wrappers:
 
 ## Final Checks
 
-Before finishing a change, run the narrowest applicable checks: `just lint`, `just ty`, and/or `just build`.
+Before finishing a change, run the narrowest applicable checks: `just test`, `just lint`, `just ty`, and/or `just build`.
 
 Mention if a check was skipped because it would format, regenerate code, require the local API, or depend on missing tooling.
