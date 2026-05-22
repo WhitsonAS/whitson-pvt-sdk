@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+import argparse
+import difflib
+import json
+import sys
+import tempfile
+from collections import defaultdict
+from pathlib import Path
+from typing import Any
+
+from datamodel_code_generator import GenerateConfig, InputFileType, PythonVersion, generate
+from datamodel_code_generator.enums import DataModelType
+from datamodel_code_generator.format import Formatter
+from datamodel_code_generator.parser import LiteralType
+
+from sdk_generator.config import MODELS_DIR, SDK_DIR, SUPPORTED_VERSIONS
+from sdk_generator.models import Endpoint
+from sdk_generator.openapi import load_openapi, parse_endpoints
+from sdk_generator.render import format_python, render_client_init, render_module, render_resources
+
+
+def main() -> None:
+    args = parse_args()
+    versions = SUPPORTED_VERSIONS if args.version == "all" else (args.version,)
+
+    for version in versions:
+        spec = load_openapi(version, args.openapi, args.base_url)
+        if not args.endpoints_only:
+            generate_models(version, spec, check=args.check)
+        if not args.models_only:
+            generate_endpoints(version, spec, check=args.check)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate whitson PVT SDK models and endpoint wrappers."
+    )
+    parser.add_argument("version", choices=[*SUPPORTED_VERSIONS, "all"])
+    parser.add_argument("--base-url", default="http://localhost:4000/external")
+    parser.add_argument(
+        "--openapi", type=Path, help="OpenAPI JSON file. Only valid for one version."
+    )
+    parser.add_argument("--models-only", action="store_true")
+    parser.add_argument("--endpoints-only", action="store_true")
+    parser.add_argument(
+        "--check", action="store_true", help="Diff generated output without writing files."
+    )
+    args = parser.parse_args()
+    if args.openapi and args.version == "all":
+        parser.error("--openapi can only be used with a single version")
+    if args.models_only and args.endpoints_only:
+        parser.error("--models-only and --endpoints-only are mutually exclusive")
+    return args
+
+
+def generate_models(version: str, spec: dict[str, Any], *, check: bool) -> None:
+    output = MODELS_DIR / version / "_generated.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "_generated.py" if check else output
+        config = GenerateConfig(
+            input_file_type=InputFileType.OpenAPI,
+            input_filename=f"{version}/openapi.json",
+            output=target,
+            output_model_type=DataModelType.PydanticV2BaseModel,
+            target_python_version=PythonVersion.PY_310,
+            base_class="pydantic.BaseModel",
+            collapse_root_models=True,
+            snake_case_field=True,
+            use_field_description=True,
+            use_union_operator=True,
+            use_standard_collections=True,
+            use_standard_primitive_types=True,
+            use_annotated=True,
+            field_constraints=True,
+            enum_field_as_literal=LiteralType.All,
+            formatters=[Formatter.RUFF_CHECK, Formatter.RUFF_FORMAT],
+        )
+        generate(json.dumps(spec), config=config)
+        if check:
+            assert_same(output, target.read_text())
+
+
+def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> None:
+    endpoints = sorted(
+        parse_endpoints(version, spec), key=lambda e: (e.resource, e.path, e.http_method)
+    )
+    by_resource: dict[str, list[Endpoint]] = defaultdict(list)
+    for endpoint in endpoints:
+        by_resource[endpoint.resource].append(endpoint)
+
+    version_dir = SDK_DIR / version
+    generated: dict[Path, str] = {}
+    for resource, resource_endpoints in by_resource.items():
+        generated[version_dir / f"{resource}.py"] = render_module(
+            version, resource, resource_endpoints
+        )
+    generated[version_dir / "resources.py"] = render_resources(version, by_resource)
+    generated[version_dir / "__init__.py"] = render_client_init(version, by_resource)
+
+    for path, content in generated.items():
+        content = format_python(content)
+        if check:
+            assert_same(path, content)
+        else:
+            path.write_text(content)
+
+
+def assert_same(path: Path, generated: str) -> None:
+    current = path.read_text() if path.exists() else ""
+    if current == generated:
+        return
+    diff = "".join(
+        difflib.unified_diff(
+            current.splitlines(keepends=True),
+            generated.splitlines(keepends=True),
+            fromfile=str(path),
+            tofile=f"{path} (generated)",
+        )
+    )
+    sys.stderr.write(diff)
+    raise SystemExit(1)
