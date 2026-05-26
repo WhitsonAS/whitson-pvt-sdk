@@ -1,14 +1,20 @@
 # ── code generation ───────────────────────────────────────────────
 BASE_URL := "http://localhost:4000/external"
-OUTPUT_DIR := "whitson_pvt_sdk/models"
 
 generate version:
-    uv run datamodel-codegen --url {{BASE_URL}}/{{version}}/docs/openapi.json --output {{OUTPUT_DIR}}/{{version}}/_generated.py
-    @echo "{{version}} models → {{OUTPUT_DIR}}/{{version}}/_generated.py"
+    uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}}
+
+generate-models version:
+    uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}} --models-only
+
+generate-endpoints version:
+    uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}} --endpoints-only
+
+generate-check version:
+    uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}} --check
 
 generate-all:
-    just generate v1
-    just generate v2
+    uv run python scripts/generate_sdk.py all --base-url {{BASE_URL}}
 
 # ── lint & typecheck ──────────────────────────────────────────────
 lint +files='whitson_pvt_sdk/':
