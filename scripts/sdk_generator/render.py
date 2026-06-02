@@ -6,8 +6,6 @@ import tempfile
 from pathlib import Path
 
 from sdk_generator.config import (
-    EXTRA_MODULE_FUNCTIONS,
-    EXTRA_RESOURCE_METHODS,
     RESOURCE_CLASS_NAMES,
     ROOT,
 )
@@ -15,17 +13,23 @@ from sdk_generator.models import Endpoint, EndpointParam
 from sdk_generator.naming import sort_resources, to_pascal, to_snake
 
 
-def format_python(content: str) -> str:
+def format_python(content: str | list[str]) -> str | list[str]:
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "generated.py"
-        path.write_text(content)
+        if isinstance(content, str):
+            paths = [Path(tmp) / "generated.py"]
+            paths[0].write_text(content)
+        else:
+            paths = [Path(tmp) / f"{i}.py" for i in range(len(content))]
+            for p, c in zip(paths, content):
+                p.write_text(c)
+
         subprocess.run(
-            ["uv", "run", "ruff", "format", str(path)],
+            ["uv", "run", "ruff", "format", str(tmp)],
             cwd=ROOT,
             check=True,
             stdout=subprocess.DEVNULL,
         )
-        return path.read_text()
+        return [p.read_text() for p in paths] if isinstance(content, list) else paths[0].read_text()
 
 
 def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str:
@@ -49,7 +53,6 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
         lines.append(")\n")
     lines.append("\n")
     lines.extend(render_endpoint(endpoint) for endpoint in endpoints)
-    lines.extend(EXTRA_MODULE_FUNCTIONS.get(version, {}).get(resource, []))
     if any(endpoint.body_kind == "multipart" for endpoint in endpoints):
         lines.append(render_meta_data_helper())
     return "".join(lines).rstrip() + "\n"
@@ -220,7 +223,6 @@ def render_resource_class(resource: str, endpoints: list[Endpoint], version: str
     ]
     for endpoint in endpoints:
         lines.append(render_resource_method(resource, endpoint))
-    lines.extend(EXTRA_RESOURCE_METHODS.get(version, {}).get(resource, []))
     return "".join(lines)
 
 

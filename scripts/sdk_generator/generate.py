@@ -85,6 +85,8 @@ def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> No
     endpoints = sorted(
         parse_endpoints(version, spec), key=lambda e: (e.resource, e.path, e.http_method)
     )
+    detect_collisions(endpoints)
+
     by_resource: dict[str, list[Endpoint]] = defaultdict(list)
     for endpoint in endpoints:
         by_resource[endpoint.resource].append(endpoint)
@@ -98,12 +100,52 @@ def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> No
     generated[version_dir / "resources.py"] = render_resources(version, by_resource)
     generated[version_dir / "__init__.py"] = render_client_init(version, by_resource)
 
-    for path, content in generated.items():
-        content = format_python(content)
+    # Format all files in one batch
+    ordered = sorted(generated)
+    contents = format_python([generated[p] for p in ordered])
+    for path, content in zip(ordered, contents):
         if check:
             assert_same(path, content)
         else:
             path.write_text(content)
+
+    _print_summary(version, endpoints, by_resource, ordered)
+
+
+def detect_collisions(endpoints: list[Endpoint]) -> None:
+    by_func: dict[tuple[str, str], list[Endpoint]] = defaultdict(list)
+    by_public: dict[tuple[str, str], list[Endpoint]] = defaultdict(list)
+    for ep in endpoints:
+        by_func[(ep.resource, ep.function_name)].append(ep)
+        by_public[(ep.resource, ep.public_method_name)].append(ep)
+
+    for key, eps in by_func.items():
+        if len(eps) > 1:
+            paths = ", ".join(f"{e.http_method.upper()} {e.path}" for e in eps)
+            raise SystemExit(
+                f"Collision: resource {key[0]!r} has duplicate function_name {key[1]!r} "
+                f"for endpoints: {paths}"
+            )
+    for key, eps in by_public.items():
+        if len(eps) > 1:
+            paths = ", ".join(f"{e.http_method.upper()} {e.path}" for e in eps)
+            raise SystemExit(
+                f"Collision: resource {key[0]!r} has duplicate public method {key[1]!r} "
+                f"for endpoints: {paths}"
+            )
+
+
+def _print_summary(
+    version: str,
+    endpoints: list[Endpoint],
+    by_resource: dict[str, list[Endpoint]],
+    files: list[Path],
+) -> None:
+    n_overrides = sum(1 for ep in endpoints if ep.response_model is None or ep.body_kind != "none")
+    print(f"  {version}: {len(by_resource)} resources, {len(endpoints)} endpoints", file=sys.stderr)
+    if n_overrides:
+        print(f"  {version}: {n_overrides} endpoints use overrides", file=sys.stderr)
+    print(f"  generated: {', '.join(p.name for p in files)}", file=sys.stderr)
 
 
 def assert_same(path: Path, generated: str) -> None:

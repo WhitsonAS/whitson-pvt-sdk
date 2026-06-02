@@ -26,10 +26,22 @@ def parse_endpoints(version: str, spec: dict[str, Any]) -> list[Endpoint]:
         for method, operation in path_item.items():
             if method not in HTTP_METHODS:
                 continue
+            _validate_operation(method, raw_path, operation)
             params = [*path_params, *parse_params(operation.get("parameters", []))]
             endpoint = infer_endpoint(version, method, raw_path, operation, params)
             endpoints.append(apply_override(endpoint))
     return endpoints
+
+
+def _validate_operation(method: str, path: str, operation: dict[str, Any]) -> None:
+    if "$ref" in operation:
+        raise SystemExit(f"Unsupported $ref operation at {method.upper()} {path}")
+    responses = operation.get("responses") or {}
+    for status in ("200", "201", "202", "default"):
+        if status in responses:
+            break
+    else:
+        raise SystemExit(f"No recognized response status at {method.upper()} {path}")
 
 
 def infer_endpoint(
@@ -155,17 +167,23 @@ def infer_resource(path: str, operation: dict[str, Any]) -> str:
     return to_snake(static_parts[-1] if static_parts else "root")
 
 
+# This generator expects external API operationIds to be stable, short SDK method
+# names (e.g. "list_regions", "get_region", "run_flash").  pvt-api should set
+# ``operation_id_callback=operation_id_from_function_name`` on external blueprints.
+
 def infer_function_name(method: str, path: str, resource: str, operation: dict[str, Any]) -> str:
     if operation_id := operation.get("operationId"):
         return to_snake(operation_id)
+
+    if path.endswith("/bulk"):
+        prefix = "create" if method == "post" else "update"
+        return f"{prefix}_{resource}_bulk"
     if method == "get" and path.endswith(f"/{resource.replace('_', '-')}"):
         return f"list_{resource}"
     if method == "get":
         return f"get_{singular(resource)}"
     if method == "post":
         return f"create_{singular(resource)}"
-    if method == "put" and path.endswith("/bulk"):
-        return f"update_{resource}_bulk"
     if method == "put":
         return f"update_{singular(resource)}"
     return f"{method}_{resource}"

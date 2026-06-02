@@ -39,48 +39,6 @@ OVERRIDES: dict[tuple[str, str, str], EndpointOverride] = {
     ),
 }
 
-EXTRA_RESOURCE_METHODS: dict[str, dict[str, list[str]]] = {
-    "v1": {
-        "samples": [
-            "    def experiment_types(\n"
-            "        self, sample_id: int\n"
-            "    ) -> list[str]:  # ty: ignore[invalid-type-form]\n"
-            "        return samples.get_sample_experiment_types(self._transport, sample_id)\n"
-        ]
-    },
-    "v2": {
-        "samples": [
-            "    def experiment_types(\n"
-            "        self, sample_id: int\n"
-            "    ) -> list[str]:  # ty: ignore[invalid-type-form]\n"
-            "        return samples.get_sample_experiment_types(self._transport, sample_id)\n"
-        ]
-    },
-}
-
-EXTRA_MODULE_FUNCTIONS: dict[str, dict[str, list[str]]] = {
-    "v1": {
-        "samples": [
-            "def get_sample_experiment_types(\n"
-            "    transport: HTTPTransport, sample_id: int\n"
-            ") -> list[str]:\n"
-            '    body = transport.get(f"/samples/{sample_id}")\n'
-            '    experiments = body.get("experiments", [])\n'
-            '    return sorted({e.get("type", "Unknown") for e in experiments})\n'
-        ]
-    },
-    "v2": {
-        "samples": [
-            "def get_sample_experiment_types(\n"
-            "    transport: HTTPTransport, sample_id: int\n"
-            ") -> list[str]:\n"
-            '    body = transport.get(f"/samples/{sample_id}")\n'
-            '    experiments = body.get("experiments", [])\n'
-            '    return sorted({e.get("type", "Unknown") for e in experiments})\n'
-        ]
-    },
-}
-
 RESOURCE_CLASS_NAMES = {
     "black_oil_tables": "BlackOilTables",
     "fluid_models": "FluidModels",
