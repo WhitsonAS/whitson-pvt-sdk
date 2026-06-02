@@ -113,9 +113,6 @@ class Samples:
     def update_bulk(self, data: UpdateSampleListModel) -> GetSampleListModel:
         return samples.update_samples_bulk(self._transport, data)
 
-    def experiment_types(self, sample_id: int) -> list[str]:  # ty: ignore[invalid-type-form]
-        return samples.get_sample_experiment_types(self._transport, sample_id)
-
 
 class Projects:
     def __init__(self, transport: HTTPTransport) -> None:
