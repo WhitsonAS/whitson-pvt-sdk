@@ -1,5 +1,5 @@
+from whitson_pvt_sdk._generated.v2 import resources
 from whitson_pvt_sdk.http import HTTPTransport
-from whitson_pvt_sdk.v2 import resources
 
 
 class WhitsonPVTClientV2:

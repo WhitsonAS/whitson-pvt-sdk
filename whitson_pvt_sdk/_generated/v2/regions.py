@@ -1,6 +1,6 @@
-from ..http import HTTPTransport
-from ..models.manual import PaginationParams
-from ..models.v2._generated import (
+from ...http import HTTPTransport
+from ...models.manual import PaginationParams
+from ...models.v2 import (
     CreateRegionModel,
     GetRegionModel,
     PaginatedRegionsModel,

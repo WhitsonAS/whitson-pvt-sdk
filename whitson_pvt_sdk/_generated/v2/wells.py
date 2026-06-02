@@ -1,16 +1,24 @@
-from ..http import HTTPTransport
-from ..models.v1._generated import (
+from ...http import HTTPTransport
+from ...models.manual import PaginationParams
+from ...models.v2 import (
     CreateWellModel,
     GetWellModel,
+    PaginatedWellsModel,
     UpdateWellModel,
     UpdateWellsListModel,
     WellsListModel,
 )
 
 
-def list_wells(transport: HTTPTransport, region_id: int) -> WellsListModel:
-    body = transport.get(f"/regions/{region_id}/wells")
-    return WellsListModel.model_validate(body)
+def list_wells(
+    transport: HTTPTransport,
+    region_id: int,
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> PaginatedWellsModel:
+    params = PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True)
+    body = transport.get(f"/regions/{region_id}/wells", params=params)
+    return PaginatedWellsModel.model_validate(body)
 
 
 def get_well(transport: HTTPTransport, well_id: int) -> GetWellModel:

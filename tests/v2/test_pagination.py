@@ -1,4 +1,4 @@
-from whitson_pvt_sdk.models.v2._generated import PaginatedWellsModel
+from whitson_pvt_sdk.models.v2 import PaginatedWellsModel
 from whitson_pvt_sdk.v2.resources import BlackOilTables, FluidModels, Projects, Wells
 
 

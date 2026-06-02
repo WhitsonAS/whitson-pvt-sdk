@@ -41,14 +41,14 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
             if model and model != "ExternalImportArchiveOptions"
         }
     )
-    lines = ["from ..http import HTTPTransport\n"]
+    lines = ["from ...http import HTTPTransport\n"]
     if any(endpoint.body_kind == "multipart" for endpoint in endpoints):
         lines.insert(0, "from io import BytesIO\n\n")
-        lines.append("from ..models.manual import ExternalImportArchiveOptions\n")
+        lines.append("from ...models.manual import ExternalImportArchiveOptions\n")
     elif needs_pagination(endpoints):
-        lines.append("from ..models.manual import PaginationParams\n")
+        lines.append("from ...models.manual import PaginationParams\n")
     if model_imports:
-        lines.append(f"from ..models.{version}._generated import (\n")
+        lines.append(f"from ...models.{version} import (\n")
         lines.extend(f"    {name},\n" for name in model_imports)
         lines.append(")\n")
     lines.append("\n")
@@ -172,7 +172,7 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         }
     )
     lines = ["from __future__ import annotations\n\n", "from typing import TYPE_CHECKING\n\n"]
-    lines.append(f"from whitson_pvt_sdk.{version} import (\n")
+    lines.append(f"from whitson_pvt_sdk._generated.{version} import (\n")
     lines.extend(f"    {resource},\n" for resource in resources)
     lines.append(")\n\n")
     lines.append("if TYPE_CHECKING:\n")
@@ -184,7 +184,7 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         lines.extend(f"        {model},\n" for model in manual_models)
         lines.append("    )\n")
     if generated_models:
-        lines.append(f"    from whitson_pvt_sdk.models.{version}._generated import (\n")
+        lines.append(f"    from whitson_pvt_sdk.models.{version} import (\n")
         lines.extend(f"        {model},\n" for model in generated_models)
         lines.append("    )\n")
     lines.append("\n")
@@ -198,7 +198,7 @@ def render_client_init(version: str, by_resource: dict[str, list[Endpoint]]) -> 
     resources = sort_resources(by_resource)
     lines = [
         "from whitson_pvt_sdk.http import HTTPTransport\n",
-        f"from whitson_pvt_sdk.{version} import resources\n\n\n",
+        f"from whitson_pvt_sdk._generated.{version} import resources\n\n\n",
         f"class {class_name}:\n",
     ]
     for resource in resources:

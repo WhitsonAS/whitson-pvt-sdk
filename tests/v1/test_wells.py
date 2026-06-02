@@ -1,4 +1,4 @@
-from whitson_pvt_sdk.models.v1._generated import (
+from whitson_pvt_sdk.models.v1 import (
     CreateWellModel,
     GetWellModel,
     UpdateWellModel,

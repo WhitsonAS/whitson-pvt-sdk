@@ -401,9 +401,9 @@ def test_render_module_imports():
         response_model="PaginatedRegionsModel",
     )
     rendered = render_module("v2", "regions", [ep])
-    assert "from ..http import HTTPTransport" in rendered
-    assert "from ..models.manual import PaginationParams" in rendered
-    assert "from ..models.v2._generated import" in rendered
+    assert "from ...http import HTTPTransport" in rendered
+    assert "from ...models.manual import PaginationParams" in rendered
+    assert "from ...models.v2 import" in rendered
     assert "PaginatedRegionsModel" in rendered
 
 

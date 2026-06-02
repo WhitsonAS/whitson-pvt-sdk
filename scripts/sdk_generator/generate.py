@@ -14,10 +14,10 @@ from datamodel_code_generator.enums import DataModelType
 from datamodel_code_generator.format import Formatter
 from datamodel_code_generator.parser import LiteralType
 
-from sdk_generator.config import MODELS_DIR, SDK_DIR, SUPPORTED_VERSIONS
+from sdk_generator.config import GENERATED_DIR, SUPPORTED_VERSIONS
 from sdk_generator.models import Endpoint
 from sdk_generator.openapi import load_openapi, parse_endpoints
-from sdk_generator.render import format_python, render_client_init, render_module, render_resources
+from sdk_generator.render import format_python, render_module, render_resources
 
 
 def main() -> None:
@@ -55,9 +55,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def generate_models(version: str, spec: dict[str, Any], *, check: bool) -> None:
-    output = MODELS_DIR / version / "_generated.py"
+    output = GENERATED_DIR / version / "models.py"
     with tempfile.TemporaryDirectory() as tmp:
-        target = Path(tmp) / "_generated.py" if check else output
+        target = Path(tmp) / "models.py" if check else output
+        target.parent.mkdir(parents=True, exist_ok=True)
         config = GenerateConfig(
             input_file_type=InputFileType.OpenAPI,
             input_filename=f"{version}/openapi.json",
@@ -91,14 +92,13 @@ def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> No
     for endpoint in endpoints:
         by_resource[endpoint.resource].append(endpoint)
 
-    version_dir = SDK_DIR / version
+    version_dir = GENERATED_DIR / version
     generated: dict[Path, str] = {}
     for resource, resource_endpoints in by_resource.items():
         generated[version_dir / f"{resource}.py"] = render_module(
             version, resource, resource_endpoints
         )
     generated[version_dir / "resources.py"] = render_resources(version, by_resource)
-    generated[version_dir / "__init__.py"] = render_client_init(version, by_resource)
 
     # Format all files in one batch
     ordered = sorted(generated)

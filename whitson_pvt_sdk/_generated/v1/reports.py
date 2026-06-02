@@ -1,12 +1,12 @@
 from io import BytesIO
 
 from whitson_pvt_sdk.models.manual import ExternalImportArchiveOptions
-from whitson_pvt_sdk.models.v1._generated import (
+from whitson_pvt_sdk.models.v1 import (
     ImportCommitResultModel,
     ImportPreflightResultModel,
 )
 
-from ..http import HTTPTransport
+from ...http import HTTPTransport
 
 
 def export_report(transport: HTTPTransport, report_id: int) -> tuple[bytes, str]:

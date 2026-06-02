@@ -5,8 +5,8 @@ from pathlib import Path
 from sdk_generator.models import EndpointOverride
 
 ROOT = Path(__file__).resolve().parents[2]
-MODELS_DIR = ROOT / "whitson_pvt_sdk" / "models"
 SDK_DIR = ROOT / "whitson_pvt_sdk"
+GENERATED_DIR = SDK_DIR / "_generated"
 
 HTTP_METHODS = {"get", "post", "put"}
 SUPPORTED_VERSIONS = ("v1", "v2")

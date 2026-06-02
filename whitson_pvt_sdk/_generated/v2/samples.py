@@ -1,5 +1,5 @@
-from ..http import HTTPTransport
-from ..models.v1._generated import (
+from ...http import HTTPTransport
+from ...models.v2 import (
     CreateSampleListModel,
     CreateSampleModel,
     GetSampleListModel,
