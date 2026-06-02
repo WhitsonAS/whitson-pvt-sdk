@@ -49,9 +49,3 @@ def update_samples_bulk(
         body=[s.model_dump(exclude_unset=True) for s in data.root],
     )
     return GetSampleListModel.model_validate(body)
-
-
-def get_sample_experiment_types(transport: HTTPTransport, sample_id: int) -> list[str]:
-    body = transport.get(f"/samples/{sample_id}")
-    experiments = body.get("experiments", [])
-    return sorted({e.get("type", "Unknown") for e in experiments})
