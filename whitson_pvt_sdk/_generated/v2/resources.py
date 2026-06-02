@@ -15,7 +15,7 @@ from whitson_pvt_sdk._generated.v2 import (
 
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
-    from whitson_pvt_sdk.models.manual import (
+    from whitson_pvt_sdk.shared.models import (
         ExternalImportArchiveOptions,
     )
     from whitson_pvt_sdk.v2.models import (

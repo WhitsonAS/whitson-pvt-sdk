@@ -1,4 +1,4 @@
-from whitson_pvt_sdk.models.manual import ExternalImportArchiveOptions
+from whitson_pvt_sdk.shared.models import ExternalImportArchiveOptions
 from whitson_pvt_sdk.v2.models import ImportCommitResultModel, ImportPreflightResultModel
 from whitson_pvt_sdk.v2.resources import Reports
 

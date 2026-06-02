@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from whitson_pvt_sdk.http import HTTPTransport
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 
 @pytest.fixture

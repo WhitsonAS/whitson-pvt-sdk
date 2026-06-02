@@ -5,7 +5,7 @@ import pytest
 
 from whitson_pvt_sdk.auth import TokenManager
 from whitson_pvt_sdk.errors import AuthError
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 
 def test_exchanges_token_on_first_call(httpx_mock):

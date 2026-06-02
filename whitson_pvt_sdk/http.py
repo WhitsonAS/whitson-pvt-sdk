@@ -8,7 +8,7 @@ import httpx
 
 from whitson_pvt_sdk.auth import TokenManager
 from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 logger = logging.getLogger(__name__)
 

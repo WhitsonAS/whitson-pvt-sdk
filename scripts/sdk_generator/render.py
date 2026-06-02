@@ -44,9 +44,9 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
     lines = ["from ...http import HTTPTransport\n"]
     if any(endpoint.body_kind == "multipart" for endpoint in endpoints):
         lines.insert(0, "from io import BytesIO\n\n")
-        lines.append("from ...models.manual import ExternalImportArchiveOptions\n")
+        lines.append("from ...shared.models import ExternalImportArchiveOptions\n")
     elif needs_pagination(endpoints):
-        lines.append("from ...models.manual import PaginationParams\n")
+        lines.append("from ...shared.models import PaginationParams\n")
     if model_imports:
         lines.append(f"from ...{version}.models import (\n")
         lines.extend(f"    {name},\n" for name in model_imports)
@@ -180,7 +180,7 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
     manual_models = [model for model in model_imports if model == "ExternalImportArchiveOptions"]
     generated_models = [model for model in model_imports if model != "ExternalImportArchiveOptions"]
     if manual_models:
-        lines.append("    from whitson_pvt_sdk.models.manual import (\n")
+        lines.append("    from whitson_pvt_sdk.shared.models import (\n")
         lines.extend(f"        {model},\n" for model in manual_models)
         lines.append("    )\n")
     if generated_models:

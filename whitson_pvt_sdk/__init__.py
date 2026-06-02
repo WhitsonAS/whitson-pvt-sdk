@@ -2,7 +2,7 @@ import warnings
 from typing import Literal, overload
 
 from .http import HTTPTransport
-from .models.manual import ClientCredentials
+from .shared.models import ClientCredentials
 from .v1 import WhitsonPVTClientV1
 from .v2 import WhitsonPVTClientV2
 
@@ -62,7 +62,7 @@ def WhitsonPVTClient(
     Usage::
 
         from whitson_pvt_sdk import WhitsonPVTClient
-        from whitson_pvt_sdk.models.manual import ClientCredentials
+        from whitson_pvt_sdk.shared.models import ClientCredentials
 
         client = WhitsonPVTClient(
             credentials=ClientCredentials(client_id="...", client_secret="..."),

@@ -2,7 +2,7 @@ import pytest
 
 from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
 from whitson_pvt_sdk.http import HTTPTransport
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 
 def test_strips_trailing_slash_from_base_url(httpx_mock, auth_mock):
