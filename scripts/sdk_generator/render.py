@@ -48,7 +48,7 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
     elif needs_pagination(endpoints):
         lines.append("from ...models.manual import PaginationParams\n")
     if model_imports:
-        lines.append(f"from ...models.{version} import (\n")
+        lines.append(f"from ...{version}.models import (\n")
         lines.extend(f"    {name},\n" for name in model_imports)
         lines.append(")\n")
     lines.append("\n")
@@ -184,7 +184,7 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         lines.extend(f"        {model},\n" for model in manual_models)
         lines.append("    )\n")
     if generated_models:
-        lines.append(f"    from whitson_pvt_sdk.models.{version} import (\n")
+        lines.append(f"    from whitson_pvt_sdk.{version}.models import (\n")
         lines.extend(f"        {model},\n" for model in generated_models)
         lines.append("    )\n")
     lines.append("\n")

@@ -3,8 +3,7 @@ import time
 import httpx
 
 from .errors import AuthError
-from .models.manual import ClientCredentials
-from .models.v1 import TokenData
+from .models.manual import ClientCredentials, TokenData
 
 _MIN_TOKEN_LIFETIME = 300
 _DEFAULT_AUTH0_DOMAIN = "whitson.eu.auth0.com"

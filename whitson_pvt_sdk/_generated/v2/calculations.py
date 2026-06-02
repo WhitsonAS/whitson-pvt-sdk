@@ -1,5 +1,5 @@
 from ...http import HTTPTransport
-from ...models.v2 import (
+from ...v2.models import (
     FlashCalculationRequestModel,
     FlashCalculationResponseModel,
     PhaseEnvelopeCalculationRequestModel,

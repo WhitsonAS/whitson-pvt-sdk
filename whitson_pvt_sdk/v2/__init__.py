@@ -1,5 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from whitson_pvt_sdk._generated.v2 import resources
-from whitson_pvt_sdk.http import HTTPTransport
+
+if TYPE_CHECKING:
+    from whitson_pvt_sdk.http import HTTPTransport
 
 
 class WhitsonPVTClientV2:

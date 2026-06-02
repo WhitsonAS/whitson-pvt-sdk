@@ -1,7 +1,7 @@
 from io import BytesIO
 
 from whitson_pvt_sdk.models.manual import ExternalImportArchiveOptions
-from whitson_pvt_sdk.models.v2 import (
+from whitson_pvt_sdk.v2.models import (
     ImportCommitResultModel,
     ImportPreflightResultModel,
 )

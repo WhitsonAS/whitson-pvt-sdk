@@ -1,6 +1,6 @@
 from ...http import HTTPTransport
 from ...models.manual import PaginationParams
-from ...models.v2 import (
+from ...v2.models import (
     GetProjectWithFluidModelsModel,
     PaginatedProjectsModel,
 )

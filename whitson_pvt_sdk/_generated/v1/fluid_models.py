@@ -1,5 +1,5 @@
 from ...http import HTTPTransport
-from ...models.v1 import (
+from ...v1.models import (
     FluidModelsListModel,
     GetFluidModelModel,
 )

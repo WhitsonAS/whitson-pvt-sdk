@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from whitson_pvt_sdk.models.manual import (
         ExternalImportArchiveOptions,
     )
-    from whitson_pvt_sdk.models.v1 import (
+    from whitson_pvt_sdk.v1.models import (
         BlackOilTablesListModel,
         CreateRegionModel,
         CreateSampleListModel,

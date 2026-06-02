@@ -1,4 +1,4 @@
-from whitson_pvt_sdk.models.v1 import ImportCommitResultModel
+from whitson_pvt_sdk.v1.models import ImportCommitResultModel
 from whitson_pvt_sdk.v1.resources import Reports
 
 
