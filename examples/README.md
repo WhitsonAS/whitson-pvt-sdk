@@ -61,6 +61,29 @@ token = client.get_access_token()
 Auth is not exposed as a resource like `client.authentication`; it is an SDK
 transport concern.
 
+## Retries And Timeouts
+
+The SDK retries transient read failures by default. Retries apply to `GET`
+requests and downloads only, not writes or multipart uploads. Retry timing honors
+`Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset` headers when present.
+
+Configure retry attempts and timeouts on the client:
+
+```python
+from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+
+client = WhitsonPVTClient(
+    credentials=ClientCredentials(client_id="...", client_secret="..."),
+    base_url="https://internal.pvt.whitson.com",
+    retry_config=RetryConfig(max_attempts=3),
+    timeout=30.0,
+    file_timeout=60.0,
+)
+```
+
+Use `RetryConfig(max_attempts=1)` to disable retries.
+
 For the FastAPI example, install the extra dependency first:
 
 ```bash

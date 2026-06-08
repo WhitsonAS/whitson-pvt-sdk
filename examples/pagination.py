@@ -9,7 +9,7 @@ Demonstrates:
 import os
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 

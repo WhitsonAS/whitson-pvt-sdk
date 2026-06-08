@@ -11,8 +11,8 @@ Demonstrates:
 import os
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.models.manual import ClientCredentials
-from whitson_pvt_sdk.models.v2 import (
+from whitson_pvt_sdk.shared.models import ClientCredentials
+from whitson_pvt_sdk.v2.models import (
     ExternalCalculationCompositionEntryModel,
     ExternalFlashCalculationInputModel,
     FlashCalculationRequestModel,
@@ -46,7 +46,7 @@ def main() -> None:
 
     # NOTE: Replace this with a valid fluid model id from your whitson PVT account.
     fluid_model_id = 123
-    flash = client.calculations.run_flash(
+    flash = client.calculations.calculate_flash(
         FlashCalculationRequestModel(
             fluid_model_id=fluid_model_id,
             pressure_unit="bara",
