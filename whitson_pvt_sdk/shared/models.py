@@ -1,9 +1,24 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ClientCredentials(BaseModel):
     client_id: str
     client_secret: str
+
+
+class RetryConfig(BaseModel):
+    max_attempts: int = Field(default=3, ge=1)
+    backoff_factor: float = Field(default=0.25, ge=0)
+    max_backoff: float = Field(default=2.0, ge=0)
+    statuses: set[int] = Field(
+        default_factory=lambda: {408, 429, 500, 502, 503, 504}
+    )
+    methods: set[str] = Field(default_factory=lambda: {"GET"})
+
+    @field_validator("methods")
+    @classmethod
+    def _uppercase_methods(cls, methods: set[str]) -> set[str]:
+        return {method.upper() for method in methods}
 
 
 class PaginationParams(BaseModel):

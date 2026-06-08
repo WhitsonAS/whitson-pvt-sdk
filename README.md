@@ -35,6 +35,42 @@ external integration, use the explicit token helper rather than an auth resource
 token = client.get_access_token()
 ```
 
+### Retries
+
+The SDK retries transient read failures by default. `GET` requests are attempted up
+to 3 times for network timeouts/transport errors and HTTP `408`, `429`, `500`,
+`502`, `503`, and `504` responses. Mutating requests (`POST`, `PUT`, and
+multipart uploads) are not retried by default.
+
+Retry delays honor `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
+headers when present. `X-RateLimit-Limit` and `X-RateLimit-Remaining` are left
+available on the raw HTTP response internally, but do not affect retry timing.
+
+Configure retries on the client:
+
+```python
+from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+
+client = WhitsonPVTClient(
+    credentials=ClientCredentials(client_id="...", client_secret="..."),
+    base_url="https://internal.pvt.whitson.com",
+    retry_config=RetryConfig(max_attempts=1),  # disables retries
+)
+```
+
+Configure default request timeouts with `timeout`; downloads and uploads use
+`file_timeout`:
+
+```python
+client = WhitsonPVTClient(
+    credentials=ClientCredentials(client_id="...", client_secret="..."),
+    base_url="https://internal.pvt.whitson.com",
+    timeout=30.0,
+    file_timeout=60.0,
+)
+```
+
 ### Pagination (v2)
 
 v2 list endpoints (regions, projects, fluid models, black oil tables, wells) are
