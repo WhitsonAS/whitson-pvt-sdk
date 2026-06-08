@@ -30,10 +30,16 @@ def auth_mock(httpx_mock: Any) -> None:
 
 
 @pytest.fixture
-def transport(credentials: ClientCredentials, base_url: str, auth_mock: Any) -> HTTPTransport:
+def transport(
+    credentials: ClientCredentials, base_url: str, request: pytest.FixtureRequest
+) -> HTTPTransport:
+    request.getfixturevalue("auth_mock")
     return HTTPTransport(credentials, base_url, version="v2")
 
 
 @pytest.fixture
-def transport_v1(credentials: ClientCredentials, base_url: str, auth_mock: Any) -> HTTPTransport:
+def transport_v1(
+    credentials: ClientCredentials, base_url: str, request: pytest.FixtureRequest
+) -> HTTPTransport:
+    request.getfixturevalue("auth_mock")
     return HTTPTransport(credentials, base_url, version="v1")
