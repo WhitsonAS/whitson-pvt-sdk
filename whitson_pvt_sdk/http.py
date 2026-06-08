@@ -143,9 +143,7 @@ class HTTPTransport:
     def _should_retry_exception(self, method: str, attempt: int) -> bool:
         return self._is_retryable_method(method) and self._has_attempt_remaining(attempt)
 
-    def _should_retry_response(
-        self, method: str, response: httpx.Response, attempt: int
-    ) -> bool:
+    def _should_retry_response(self, method: str, response: httpx.Response, attempt: int) -> bool:
         return (
             self._is_retryable_method(method)
             and self._has_attempt_remaining(attempt)
@@ -158,9 +156,7 @@ class HTTPTransport:
     def _has_attempt_remaining(self, attempt: int) -> bool:
         return attempt < self._retry_config.max_attempts
 
-    def _sleep_before_retry(
-        self, attempt: int, response: httpx.Response | None = None
-    ) -> None:
+    def _sleep_before_retry(self, attempt: int, response: httpx.Response | None = None) -> None:
         retry_after = self._retry_after(response) if response is not None else None
         if retry_after is None:
             retry_after = min(
@@ -213,9 +209,7 @@ class HTTPTransport:
         return self._json(self._request("PUT", path, json=body))
 
     def get_bytes(self, path: str, *, params: Params = None) -> bytes:
-        return self._bytes(
-            self._request("GET", path, params=params, timeout=self._file_timeout)
-        )
+        return self._bytes(self._request("GET", path, params=params, timeout=self._file_timeout))
 
     def post_multipart(
         self, path: str, *, files: dict[str, Any], data: dict[str, Any] | None = None

@@ -10,9 +10,7 @@ class RetryConfig(BaseModel):
     max_attempts: int = Field(default=3, ge=1)
     backoff_factor: float = Field(default=0.25, ge=0)
     max_backoff: float = Field(default=2.0, ge=0)
-    statuses: set[int] = Field(
-        default_factory=lambda: {408, 429, 500, 502, 503, 504}
-    )
+    statuses: set[int] = Field(default_factory=lambda: {408, 429, 500, 502, 503, 504})
     methods: set[str] = Field(default_factory=lambda: {"GET"})
 
     @field_validator("methods")
