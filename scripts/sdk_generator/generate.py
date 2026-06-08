@@ -117,20 +117,21 @@ def detect_collisions(endpoints: list[Endpoint]) -> None:
         by_func[(ep.resource, ep.function_name)].append(ep)
         by_public[(ep.resource, ep.public_method_name)].append(ep)
 
-    for key, eps in by_func.items():
-        if len(eps) > 1:
-            paths = ", ".join(f"{e.http_method.upper()} {e.path}" for e in eps)
-            raise SystemExit(
-                f"Collision: resource {key[0]!r} has duplicate function_name {key[1]!r} "
-                f"for endpoints: {paths}"
-            )
-    for key, eps in by_public.items():
-        if len(eps) > 1:
-            paths = ", ".join(f"{e.http_method.upper()} {e.path}" for e in eps)
-            raise SystemExit(
-                f"Collision: resource {key[0]!r} has duplicate public method {key[1]!r} "
-                f"for endpoints: {paths}"
-            )
+    _raise_collisions(by_func, "function_name")
+    _raise_collisions(by_public, "public method")
+
+
+def _raise_collisions(
+    grouped: dict[tuple[str, str], list[Endpoint]], field_name: str
+) -> None:
+    for (resource, name), endpoints in grouped.items():
+        if len(endpoints) <= 1:
+            continue
+        paths = ", ".join(f"{e.http_method.upper()} {e.path}" for e in endpoints)
+        raise SystemExit(
+            f"Collision: resource {resource!r} has duplicate {field_name} {name!r} "
+            f"for endpoints: {paths}"
+        )
 
 
 def _print_summary(

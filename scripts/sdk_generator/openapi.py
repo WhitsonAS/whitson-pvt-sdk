@@ -64,7 +64,9 @@ def infer_endpoint(
         version=cast(Version, version),
         resource=resource,
         function_name=function_name,
-        public_method_name=infer_public_method_name(function_name, resource),
+        public_method_name=infer_public_method_name(
+            function_name, resource, method, path, body_kind
+        ),
         http_method=cast(Literal["get", "post", "put"], method),
         path=path,
         path_params=[p for p in params if p.location == "path"],
@@ -104,15 +106,13 @@ def apply_override(endpoint: Endpoint) -> Endpoint:
         return endpoint
 
     data = endpoint.model_dump()
-    for key, value in override.model_dump(exclude_none=True).items():
-        data[key] = value
+    data.update(override.model_dump(exclude_none=True))
     return Endpoint.model_validate(data)
 
 
 def request_schema(operation: dict[str, Any]) -> dict[str, Any] | None:
     request_body = operation.get("requestBody") or {}
-    content = request_body.get("content") or {}
-    media = content.get("application/json") or next(iter(content.values()), {}) if content else {}
+    media = first_media(request_body.get("content") or {})
     return media.get("schema")
 
 
@@ -122,14 +122,17 @@ def response_schema(operation: dict[str, Any]) -> dict[str, Any] | None:
         response = responses.get(status)
         if not response:
             continue
-        content = response.get("content") or {}
-        media = (
-            content.get("application/json") or next(iter(content.values()), {}) if content else {}
-        )
+        media = first_media(response.get("content") or {})
         schema = media.get("schema")
         if schema:
             return schema
     return None
+
+
+def first_media(content: dict[str, Any]) -> dict[str, Any]:
+    if not content:
+        return {}
+    return content.get("application/json") or next(iter(content.values()), {})
 
 
 def has_multipart_body(operation: dict[str, Any]) -> bool:
@@ -183,15 +186,27 @@ def infer_function_name(method: str, path: str, resource: str, operation: dict[s
     return f"{method}_{resource}"
 
 
-def infer_public_method_name(function_name: str, resource: str) -> str:
+def infer_public_method_name(
+    function_name: str, resource: str, method: str, path: str, body_kind: BodyKind
+) -> str:
+    if path.endswith(f"/{resource.replace('_', '-')}"):
+        if method == "get":
+            return "list"
+        if method == "post" and body_kind == "root_list":
+            return "create_bulk"
+        if method == "post":
+            return "create"
+
+    if path.endswith("/bulk") and body_kind == "root_list":
+        if method == "post":
+            return "create_bulk"
+        if method == "put":
+            return "update_bulk"
+
     singular_resource = singular(resource)
     method_names = (
-        (f"list_{resource}", "list"),
         (f"get_{singular_resource}", "get"),
-        (f"create_{singular_resource}", "create"),
         (f"update_{singular_resource}", "update"),
-        (f"create_{resource}_bulk", "create_bulk"),
-        (f"update_{resource}_bulk", "update_bulk"),
     )
     for expected, public in method_names:
         if function_name == expected:

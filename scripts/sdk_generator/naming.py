@@ -1,5 +1,5 @@
 import re
-from typing import Any
+from collections.abc import Mapping
 
 from sdk_generator.config import RESOURCE_ORDER
 
@@ -24,6 +24,6 @@ def singular(value: str) -> str:
     return value
 
 
-def sort_resources(resources: dict[str, Any]) -> list[str]:
+def sort_resources(resources: Mapping[str, object]) -> list[str]:
     order = {resource: index for index, resource in enumerate(RESOURCE_ORDER)}
     return sorted(resources, key=lambda resource: (order.get(resource, len(order)), resource))

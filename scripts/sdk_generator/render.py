@@ -31,6 +31,7 @@ def format_python(content: str | list[str]) -> str | list[str]:
 
 
 def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str:
+    has_multipart = any(endpoint.body_kind == "multipart" for endpoint in endpoints)
     model_imports = sorted(
         {
             model
@@ -40,7 +41,7 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
         }
     )
     lines = ["from ...http import HTTPTransport\n"]
-    if any(endpoint.body_kind == "multipart" for endpoint in endpoints):
+    if has_multipart:
         lines.insert(0, "from io import BytesIO\n\n")
         lines.append("from ...shared.models import ExternalImportArchiveOptions\n")
     elif needs_pagination(endpoints):
@@ -51,7 +52,7 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
         lines.append(")\n")
     lines.append("\n")
     lines.extend(render_endpoint(endpoint) for endpoint in endpoints)
-    if any(endpoint.body_kind == "multipart" for endpoint in endpoints):
+    if has_multipart:
         lines.append(render_meta_data_helper())
     return "".join(lines).rstrip() + "\n"
 
@@ -187,32 +188,11 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         lines.append("    )\n")
     lines.append("\n")
     for resource in resources:
-        lines.append(render_resource_class(resource, by_resource[resource], version))
+        lines.append(render_resource_class(resource, by_resource[resource]))
     return "".join(lines).rstrip() + "\n"
 
 
-def render_client_init(version: str, by_resource: dict[str, list[Endpoint]]) -> str:
-    class_name = f"WhitsonPVTClient{version.upper()}"
-    resources = sort_resources(by_resource)
-    lines = [
-        "from whitson_pvt_sdk.http import HTTPTransport\n",
-        f"from whitson_pvt_sdk._generated.{version} import resources\n\n\n",
-        f"class {class_name}:\n",
-    ]
-    for resource in resources:
-        class_resource = RESOURCE_CLASS_NAMES.get(resource, to_pascal(resource))
-        lines.append(f"    {resource}: resources.{class_resource}\n")
-    lines.append("\n")
-    lines.append("    def __init__(self, transport: HTTPTransport) -> None:\n")
-    for resource in resources:
-        class_resource = RESOURCE_CLASS_NAMES.get(resource, to_pascal(resource))
-        lines.append(f"        self.{resource} = resources.{class_resource}(transport)\n")
-    lines.append("\n\n")
-    lines.append(f'__all__ = ["{class_name}"]\n')
-    return "".join(lines)
-
-
-def render_resource_class(resource: str, endpoints: list[Endpoint], version: str) -> str:
+def render_resource_class(resource: str, endpoints: list[Endpoint]) -> str:
     class_name = RESOURCE_CLASS_NAMES.get(resource, to_pascal(resource))
     lines = [
         f"class {class_name}:\n",
