@@ -4,6 +4,9 @@ from unittest.mock import patch
 import pytest
 
 from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk._generated.v1.resources import (
+    Samples as GeneratedV1Samples,
+)
 from whitson_pvt_sdk.v1 import WhitsonPVTClientV1
 from whitson_pvt_sdk.v1.resources import (
     BlackOilTables as V1BlackOilTables,
@@ -76,6 +79,7 @@ def test_v1_loads_v1_resources(credentials, base_url):
     assert isinstance(client.regions, V1Regions)
     assert isinstance(client.wells, V1Wells)
     assert isinstance(client.samples, V1Samples)
+    assert type(client.samples) is not GeneratedV1Samples
     assert isinstance(client.projects, V1Projects)
     assert isinstance(client.fluid_models, V1FluidModels)
     assert isinstance(client.black_oil_tables, V1BlackOilTables)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from whitson_pvt_sdk._generated.v1 import resources
+from whitson_pvt_sdk.v1 import resources
 
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
