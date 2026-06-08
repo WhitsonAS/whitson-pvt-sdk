@@ -357,6 +357,50 @@ def test_validate_operation_ref():
         _validate_operation("get", "/regions", {"$ref": "#/paths/foo"})
 
 
+def test_parse_endpoints_rejects_missing_response_schema():
+    spec = {
+        "paths": {
+            "/widgets": {
+                "get": {
+                    "operationId": "list_widgets",
+                    "tags": ["widgets"],
+                    "responses": {"200": {}},
+                }
+            }
+        }
+    }
+
+    with pytest.raises(SystemExit, match="No response schema for GET /widgets"):
+        parse_endpoints("v1", spec)
+
+
+def test_parse_endpoints_allows_bytes_override_without_response_schema():
+    spec = {
+        "paths": {
+            "/reports/{report_id}/export": {
+                "get": {
+                    "operationId": "get_report_export",
+                    "tags": ["reports"],
+                    "parameters": [
+                        {
+                            "name": "report_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "integer"},
+                        }
+                    ],
+                    "responses": {"200": {}},
+                }
+            }
+        }
+    }
+
+    endpoints = parse_endpoints("v1", spec)
+
+    assert endpoints[0].return_kind == "tuple_bytes_filename"
+    assert endpoints[0].response_model is None
+
+
 # ── rendering ──
 
 

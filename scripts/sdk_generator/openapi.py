@@ -27,8 +27,10 @@ def parse_endpoints(version: str, spec: dict[str, Any]) -> list[Endpoint]:
             _validate_operation(method, raw_path, operation)
             params = [*path_params, *parse_params(operation.get("parameters", []))]
             endpoint = apply_override(infer_endpoint(version, method, raw_path, operation, params))
-            if endpoint.resource not in EXCLUDED_RESOURCES:
-                endpoints.append(endpoint)
+            if endpoint.resource in EXCLUDED_RESOURCES:
+                continue
+            _validate_endpoint(endpoint)
+            endpoints.append(endpoint)
     return endpoints
 
 
@@ -109,6 +111,16 @@ def apply_override(endpoint: Endpoint) -> Endpoint:
     data = endpoint.model_dump()
     data.update(override.model_dump(exclude_none=True))
     return Endpoint.model_validate(data)
+
+
+def _validate_endpoint(endpoint: Endpoint) -> None:
+    if endpoint.return_kind == "tuple_bytes_filename":
+        return
+    if endpoint.response_model is None:
+        raise SystemExit(
+            f"No response schema for {endpoint.http_method.upper()} {endpoint.path}; "
+            "SDK endpoints require response schemas or an explicit generator override"
+        )
 
 
 def request_schema(operation: dict[str, Any]) -> dict[str, Any] | None:
