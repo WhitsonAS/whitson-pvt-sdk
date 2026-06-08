@@ -42,8 +42,9 @@ class HTTPTransport:
         if audience:
             token_kwargs["audience"] = audience
 
+        self._token_manager = TokenManager(credentials, **token_kwargs)
         self._http = httpx.Client(
-            auth=_BearerAuth(TokenManager(credentials, **token_kwargs)),
+            auth=_BearerAuth(self._token_manager),
             base_url=f"{base_url.rstrip('/')}/external/{version}",
             timeout=30.0,
         )
@@ -62,6 +63,9 @@ class HTTPTransport:
 
     def close(self) -> None:
         self._http.close()
+
+    def get_access_token(self) -> str:
+        return self._token_manager.get_token()
 
     @staticmethod
     def _error_message(response: httpx.Response) -> str:

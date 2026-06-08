@@ -89,7 +89,5 @@ class MultiDomainCopyConfig(BaseModel):
         valid = set(self.domain_configs.keys())
         for src in self.sources:
             if src.domain not in valid:
-                raise ValueError(
-                    f"Unknown domain key: {src.domain!r}"
-                )
+                raise ValueError(f"Unknown domain key: {src.domain!r}")
         return self

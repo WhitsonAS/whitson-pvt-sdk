@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from whitson_pvt_sdk._generated.v1 import (
-    authentication,
     black_oil_tables,
     fluid_models,
     projects,
@@ -36,7 +35,6 @@ if TYPE_CHECKING:
         ImportPreflightResultModel,
         ProjectsListModel,
         RegionsListModel,
-        TokenData,
         UpdateRegionModel,
         UpdateSampleListModel,
         UpdateSampleModel,
@@ -67,13 +65,13 @@ class Wells:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list_wells_info(self, region_id: int) -> WellsListModel:
+    def list(self, region_id: int) -> WellsListModel:
         return wells.list_wells_info(self._transport, region_id)
 
     def create(self, data: CreateWellModel) -> GetWellModel:
         return wells.create_well(self._transport, data)
 
-    def update_wells(self, data: UpdateWellsListModel) -> WellsListModel:
+    def update_bulk(self, data: UpdateWellsListModel) -> WellsListModel:
         return wells.update_wells(self._transport, data)
 
     def create_well_deprecated(self, data: CreateWellModel) -> GetWellModel:
@@ -93,10 +91,10 @@ class Samples:
     def create(self, data: CreateSampleModel) -> GetSampleModel:
         return samples.create_sample(self._transport, data)
 
-    def create_samples(self, data: CreateSampleListModel) -> GetSampleListModel:
+    def create_bulk(self, data: CreateSampleListModel) -> GetSampleListModel:
         return samples.create_samples(self._transport, data)
 
-    def update_samples(self, data: UpdateSampleListModel) -> GetSampleListModel:
+    def update_bulk(self, data: UpdateSampleListModel) -> GetSampleListModel:
         return samples.update_samples(self._transport, data)
 
     def create_sample_deprecated(self, data: CreateSampleModel) -> GetSampleModel:
@@ -161,11 +159,3 @@ class Reports:
 
     def export(self, report_id: int) -> tuple[bytes, str]:
         return reports.export_report(self._transport, report_id)
-
-
-class Authentication:
-    def __init__(self, transport: HTTPTransport) -> None:
-        self._transport = transport
-
-    def get_token(self) -> TokenData:
-        return authentication.get_token(self._transport)

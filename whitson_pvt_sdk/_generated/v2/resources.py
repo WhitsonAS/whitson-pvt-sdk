@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from whitson_pvt_sdk._generated.v2 import (
-    authentication,
     black_oil_tables,
     calculations,
     fluid_models,
@@ -48,7 +47,6 @@ if TYPE_CHECKING:
         SampleToEosSlateConversionCalculationResponseModel,
         SaturationPressureCalculationRequestModel,
         SaturationPressureCalculationResponseModel,
-        TokenData,
         UpdateRegionModel,
         UpdateSampleListModel,
         UpdateSampleModel,
@@ -79,7 +77,7 @@ class Wells:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list_wells_info(
+    def list(
         self, region_id: int, cursor: str | None = None, limit: int | None = None
     ) -> PaginatedWellsModel:
         return wells.list_wells_info(self._transport, region_id, cursor, limit)
@@ -87,7 +85,7 @@ class Wells:
     def create(self, data: CreateWellModel) -> GetWellModel:
         return wells.create_well(self._transport, data)
 
-    def update_wells(self, data: UpdateWellsListModel) -> WellsListModel:
+    def update_bulk(self, data: UpdateWellsListModel) -> WellsListModel:
         return wells.update_wells(self._transport, data)
 
     def get(self, well_id: int) -> GetWellModel:
@@ -104,10 +102,10 @@ class Samples:
     def create(self, data: CreateSampleModel) -> GetSampleModel:
         return samples.create_sample(self._transport, data)
 
-    def create_samples(self, data: CreateSampleListModel) -> GetSampleListModel:
+    def create_bulk(self, data: CreateSampleListModel) -> GetSampleListModel:
         return samples.create_samples(self._transport, data)
 
-    def update_samples(self, data: UpdateSampleListModel) -> GetSampleListModel:
+    def update_bulk(self, data: UpdateSampleListModel) -> GetSampleListModel:
         return samples.update_samples(self._transport, data)
 
     def get(self, sample_id: int) -> GetSampleModel:
@@ -202,11 +200,3 @@ class Calculations:
         self, data: SaturationPressureCalculationRequestModel
     ) -> SaturationPressureCalculationResponseModel:
         return calculations.calculate_saturation_pressure(self._transport, data)
-
-
-class Authentication:
-    def __init__(self, transport: HTTPTransport) -> None:
-        self._transport = transport
-
-    def get_token(self) -> TokenData:
-        return authentication.get_token(self._transport)

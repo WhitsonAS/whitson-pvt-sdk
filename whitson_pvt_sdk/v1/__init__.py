@@ -18,6 +18,7 @@ class WhitsonPVTClientV1:
     reports: resources.Reports
 
     def __init__(self, transport: HTTPTransport) -> None:
+        self._transport = transport
         self.regions = resources.Regions(transport)
         self.wells = resources.Wells(transport)
         self.samples = resources.Samples(transport)
@@ -25,6 +26,9 @@ class WhitsonPVTClientV1:
         self.fluid_models = resources.FluidModels(transport)
         self.black_oil_tables = resources.BlackOilTables(transport)
         self.reports = resources.Reports(transport)
+
+    def get_access_token(self) -> str:
+        return self._transport.get_access_token()
 
 
 __all__ = ["WhitsonPVTClientV1"]
