@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from whitson_pvt_sdk.v2 import resources
@@ -18,7 +16,7 @@ class WhitsonPVTClientV2:
     reports: resources.Reports
     calculations: resources.Calculations
 
-    def __init__(self, transport: HTTPTransport) -> None:
+    def __init__(self, transport: "HTTPTransport") -> None:
         self._transport = transport
         self.regions = resources.Regions(transport)
         self.wells = resources.Wells(transport)

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 from sdk_generator.generate import detect_collisions
 from sdk_generator.models import (

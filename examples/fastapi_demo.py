@@ -14,8 +14,6 @@ Usage:
     # then open http://localhost:8000/regions
 """
 
-from __future__ import annotations
-
 import os
 from contextlib import asynccontextmanager
 from typing import Annotated

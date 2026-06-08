@@ -31,6 +31,7 @@ export WHITSON_BASE_URL="https://internal.pvt.whitson.com"  # optional, defaults
 | `pagination.py` | Walk all pages of a v2 paginated endpoint | `uv run examples/pagination.py` |
 | `cli_list.py` | argparse CLI for listing resources | `uv run examples/cli_list.py regions` |
 | `fastapi_demo.py` | FastAPI app with SDK-backed routes | `uv run examples/fastapi_demo.py` |
+| `multi_domain_copy.py` | Copy reports from multiple source domains into one target domain via a JSON config | `uv run examples/multi_domain_copy.py config.json` |
 
 ## Pagination (v2)
 
@@ -46,7 +47,19 @@ page2 = client.regions.list(cursor=page.pagination.next_cursor)
 
 The `pagination.py` example shows how to collect all pages into a single list.
 
-Limit defaults to the API default (usually 20) when omitted. Valid range: 1–250. |
+Limit defaults to the API default (usually 20) when omitted. Valid range: 1-250.
+
+## Authentication Token
+
+The SDK handles bearer auth automatically. For integrations that need the same
+token outside SDK resource methods, use:
+
+```python
+token = client.get_access_token()
+```
+
+Auth is not exposed as a resource like `client.authentication`; it is an SDK
+transport concern.
 
 For the FastAPI example, install the extra dependency first:
 

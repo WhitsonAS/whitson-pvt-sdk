@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from whitson_pvt_sdk.v1 import resources
@@ -17,7 +15,7 @@ class WhitsonPVTClientV1:
     black_oil_tables: resources.BlackOilTables
     reports: resources.Reports
 
-    def __init__(self, transport: HTTPTransport) -> None:
+    def __init__(self, transport: "HTTPTransport") -> None:
         self._transport = transport
         self.regions = resources.Regions(transport)
         self.wells = resources.Wells(transport)

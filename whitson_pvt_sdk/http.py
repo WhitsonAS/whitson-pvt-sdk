@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from types import TracebackType
 from typing import Any, TypeAlias
@@ -49,7 +47,7 @@ class HTTPTransport:
             timeout=30.0,
         )
 
-    def __enter__(self) -> HTTPTransport:
+    def __enter__(self) -> "HTTPTransport":
         self._http.__enter__()
         return self
 
