@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from whitson_pvt_sdk._generated.v2 import (
+    authentication,
     black_oil_tables,
     calculations,
     fluid_models,
@@ -32,6 +33,8 @@ if TYPE_CHECKING:
         GetSampleListModel,
         GetSampleModel,
         GetWellModel,
+        GorRecombinationCalculationRequestModel,
+        GorRecombinationCalculationResponseModel,
         ImportCommitResultModel,
         ImportPreflightResultModel,
         PaginatedBlackOilTablesModel,
@@ -41,8 +44,11 @@ if TYPE_CHECKING:
         PaginatedWellsModel,
         PhaseEnvelopeCalculationRequestModel,
         PhaseEnvelopeCalculationResponseModel,
+        SampleToEosSlateConversionCalculationRequestModel,
+        SampleToEosSlateConversionCalculationResponseModel,
         SaturationPressureCalculationRequestModel,
         SaturationPressureCalculationResponseModel,
+        TokenData,
         UpdateRegionModel,
         UpdateSampleListModel,
         UpdateSampleModel,
@@ -59,11 +65,11 @@ class Regions:
     def list(self, cursor: str | None = None, limit: int | None = None) -> PaginatedRegionsModel:
         return regions.list_regions(self._transport, cursor, limit)
 
-    def get(self, region_id: int) -> GetRegionModel:
-        return regions.get_region(self._transport, region_id)
-
     def create(self, data: CreateRegionModel) -> GetRegionModel:
         return regions.create_region(self._transport, data)
+
+    def get(self, region_id: int) -> GetRegionModel:
+        return regions.get_region(self._transport, region_id)
 
     def update(self, region_id: int, data: UpdateRegionModel) -> GetRegionModel:
         return regions.update_region(self._transport, region_id, data)
@@ -73,79 +79,76 @@ class Wells:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(
+    def list_wells_info(
         self, region_id: int, cursor: str | None = None, limit: int | None = None
     ) -> PaginatedWellsModel:
-        return wells.list_wells(self._transport, region_id, cursor, limit)
-
-    def get(self, well_id: int) -> GetWellModel:
-        return wells.get_well(self._transport, well_id)
+        return wells.list_wells_info(self._transport, region_id, cursor, limit)
 
     def create(self, data: CreateWellModel) -> GetWellModel:
         return wells.create_well(self._transport, data)
 
+    def update_wells(self, data: UpdateWellsListModel) -> WellsListModel:
+        return wells.update_wells(self._transport, data)
+
+    def get(self, well_id: int) -> GetWellModel:
+        return wells.get_well(self._transport, well_id)
+
     def update(self, well_id: int, data: UpdateWellModel) -> GetWellModel:
         return wells.update_well(self._transport, well_id, data)
-
-    def update_bulk(self, data: UpdateWellsListModel) -> WellsListModel:
-        return wells.update_wells_bulk(self._transport, data)
 
 
 class Samples:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(self, well_id: int) -> GetSampleListModel:
-        return samples.list_samples(self._transport, well_id)
+    def create(self, data: CreateSampleModel) -> GetSampleModel:
+        return samples.create_sample(self._transport, data)
+
+    def create_samples(self, data: CreateSampleListModel) -> GetSampleListModel:
+        return samples.create_samples(self._transport, data)
+
+    def update_samples(self, data: UpdateSampleListModel) -> GetSampleListModel:
+        return samples.update_samples(self._transport, data)
 
     def get(self, sample_id: int) -> GetSampleModel:
         return samples.get_sample(self._transport, sample_id)
 
-    def create(self, data: CreateSampleModel) -> GetSampleModel:
-        return samples.create_sample(self._transport, data)
-
-    def create_bulk(self, data: CreateSampleListModel) -> GetSampleListModel:
-        return samples.create_samples_bulk(self._transport, data)
-
     def update(self, sample_id: int, data: UpdateSampleModel) -> GetSampleModel:
         return samples.update_sample(self._transport, sample_id, data)
-
-    def update_bulk(self, data: UpdateSampleListModel) -> GetSampleListModel:
-        return samples.update_samples_bulk(self._transport, data)
-
-    def experiment_types(self, sample_id: int) -> list[str]:  # ty: ignore[invalid-type-form]
-        return samples.get_sample_experiment_types(self._transport, sample_id)
 
 
 class Projects:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
+    def get(self, project_id: int) -> GetProjectWithFluidModelsModel:
+        return projects.get_project(self._transport, project_id)
+
     def list(
         self, region_id: int, cursor: str | None = None, limit: int | None = None
     ) -> PaginatedProjectsModel:
         return projects.list_projects(self._transport, region_id, cursor, limit)
-
-    def get(self, project_id: int) -> GetProjectWithFluidModelsModel:
-        return projects.get_project(self._transport, project_id)
 
 
 class FluidModels:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
+    def get(self, fluid_model_id: int) -> GetFluidModelModel:
+        return fluid_models.get_fluid_model(self._transport, fluid_model_id)
+
     def list(
         self, project_id: int, cursor: str | None = None, limit: int | None = None
     ) -> PaginatedFluidModelsModel:
         return fluid_models.list_fluid_models(self._transport, project_id, cursor, limit)
 
-    def get(self, fluid_model_id: int) -> GetFluidModelModel:
-        return fluid_models.get_fluid_model(self._transport, fluid_model_id)
-
 
 class BlackOilTables:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
+
+    def get(self, black_oil_table_id: int) -> GetBlackOilTableModel:
+        return black_oil_tables.get_black_oil_table(self._transport, black_oil_table_id)
 
     def list(
         self, fluid_model_id: int, cursor: str | None = None, limit: int | None = None
@@ -154,41 +157,56 @@ class BlackOilTables:
             self._transport, fluid_model_id, cursor, limit
         )
 
-    def get(self, black_oil_table_id: int) -> GetBlackOilTableModel:
-        return black_oil_tables.get_black_oil_table(self._transport, black_oil_table_id)
-
 
 class Reports:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
-
-    def export(self, report_id: int) -> tuple[bytes, str]:
-        return reports.export_report(self._transport, report_id)
-
-    def preflight_import(
-        self, archive_data: bytes, options: ExternalImportArchiveOptions | None = None
-    ) -> ImportPreflightResultModel:
-        return reports.preflight_import(self._transport, archive_data, options)
 
     def import_archive(
         self, archive_data: bytes, options: ExternalImportArchiveOptions | None = None
     ) -> ImportCommitResultModel:
         return reports.import_report(self._transport, archive_data, options)
 
+    def preflight_import(
+        self, archive_data: bytes, options: ExternalImportArchiveOptions | None = None
+    ) -> ImportPreflightResultModel:
+        return reports.preflight_import(self._transport, archive_data, options)
+
+    def export(self, report_id: int) -> tuple[bytes, str]:
+        return reports.export_report(self._transport, report_id)
+
 
 class Calculations:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def run_flash(self, data: FlashCalculationRequestModel) -> FlashCalculationResponseModel:
-        return calculations.run_flash(self._transport, data)
+    def calculate_flash(self, data: FlashCalculationRequestModel) -> FlashCalculationResponseModel:
+        return calculations.calculate_flash(self._transport, data)
 
-    def run_saturation_pressure(
-        self, data: SaturationPressureCalculationRequestModel
-    ) -> SaturationPressureCalculationResponseModel:
-        return calculations.run_saturation_pressure(self._transport, data)
+    def calculate_gor_recombination(
+        self, data: GorRecombinationCalculationRequestModel
+    ) -> GorRecombinationCalculationResponseModel:
+        return calculations.calculate_gor_recombination(self._transport, data)
 
-    def run_phase_envelope(
+    def calculate_phase_envelope(
         self, data: PhaseEnvelopeCalculationRequestModel
     ) -> PhaseEnvelopeCalculationResponseModel:
-        return calculations.run_phase_envelope(self._transport, data)
+        return calculations.calculate_phase_envelope(self._transport, data)
+
+    def calculate_sample_to_eos_slate_conversion(
+        self, data: SampleToEosSlateConversionCalculationRequestModel
+    ) -> SampleToEosSlateConversionCalculationResponseModel:
+        return calculations.calculate_sample_to_eos_slate_conversion(self._transport, data)
+
+    def calculate_saturation_pressure(
+        self, data: SaturationPressureCalculationRequestModel
+    ) -> SaturationPressureCalculationResponseModel:
+        return calculations.calculate_saturation_pressure(self._transport, data)
+
+
+class Authentication:
+    def __init__(self, transport: HTTPTransport) -> None:
+        self._transport = transport
+
+    def get_token(self) -> TokenData:
+        return authentication.get_token(self._transport)

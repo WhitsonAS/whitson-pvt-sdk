@@ -1,18 +1,27 @@
 from io import BytesIO
 
-from whitson_pvt_sdk.shared.models import ExternalImportArchiveOptions
-from whitson_pvt_sdk.v2.models import (
+from ...http import HTTPTransport
+from ...shared.models import ExternalImportArchiveOptions
+from ...v2.models import (
     ImportCommitResultModel,
     ImportPreflightResultModel,
 )
 
-from ...http import HTTPTransport
 
+def import_report(
+    transport: HTTPTransport,
+    archive_data: bytes,
+    options: ExternalImportArchiveOptions | None = None,
+) -> ImportCommitResultModel:
+    if options is None:
+        options = ExternalImportArchiveOptions()
 
-def export_report(transport: HTTPTransport, report_id: int) -> tuple[bytes, str]:
-    data = transport.get_bytes(f"/reports/{report_id}/export")
-    filename = f"report_{report_id}_export.zip"
-    return data, filename
+    body = transport.post_multipart(
+        "/reports/import",
+        files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
+        data=_meta_data(options),
+    )
+    return ImportCommitResultModel.model_validate(body)
 
 
 def preflight_import(
@@ -31,20 +40,10 @@ def preflight_import(
     return ImportPreflightResultModel.model_validate(body)
 
 
-def import_report(
-    transport: HTTPTransport,
-    archive_data: bytes,
-    options: ExternalImportArchiveOptions | None = None,
-) -> ImportCommitResultModel:
-    if options is None:
-        options = ExternalImportArchiveOptions()
-
-    body = transport.post_multipart(
-        "/reports/import",
-        files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
-        data=_meta_data(options),
-    )
-    return ImportCommitResultModel.model_validate(body)
+def export_report(transport: HTTPTransport, report_id: int) -> tuple[bytes, str]:
+    data = transport.get_bytes(f"/reports/{report_id}/export")
+    filename = f"report_{report_id}_export.zip"
+    return data, filename
 
 
 def _meta_data(options: ExternalImportArchiveOptions) -> dict | None:

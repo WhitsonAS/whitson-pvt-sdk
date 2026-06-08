@@ -1,5 +1,5 @@
 from ...http import HTTPTransport
-from ...v2.models import (
+from ...v1.models import (
     TokenData,
 )
 
