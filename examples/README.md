@@ -31,6 +31,7 @@ export WHITSON_BASE_URL="https://internal.pvt.whitson.com"  # optional, defaults
 | `pagination.py` | Walk all pages of a v2 paginated endpoint | `uv run examples/pagination.py` |
 | `cli_list.py` | argparse CLI for listing resources | `uv run examples/cli_list.py regions` |
 | `fastapi_demo.py` | FastAPI app with SDK-backed routes | `uv run examples/fastapi_demo.py` |
+| `multi_domain_copy.py` | Copy reports from multiple source domains into one target domain via a JSON config | `uv run examples/multi_domain_copy.py config.json` |
 
 ## Pagination (v2)
 
@@ -46,7 +47,42 @@ page2 = client.regions.list(cursor=page.pagination.next_cursor)
 
 The `pagination.py` example shows how to collect all pages into a single list.
 
-Limit defaults to the API default (usually 20) when omitted. Valid range: 1–250. |
+Limit defaults to the API default (usually 20) when omitted. Valid range: 1-250.
+
+## Authentication Token
+
+The SDK handles bearer auth automatically. For integrations that need the same
+token outside SDK resource methods, use:
+
+```python
+token = client.get_access_token()
+```
+
+Auth is not exposed as a resource like `client.authentication`; it is an SDK
+transport concern.
+
+## Retries And Timeouts
+
+The SDK retries transient read failures by default. Retries apply to `GET`
+requests and downloads only, not writes or multipart uploads. Retry timing honors
+`Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset` headers when present.
+
+Configure retry attempts and timeouts on the client:
+
+```python
+from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+
+client = WhitsonPVTClient(
+    credentials=ClientCredentials(client_id="...", client_secret="..."),
+    base_url="https://internal.pvt.whitson.com",
+    retry_config=RetryConfig(max_attempts=3),
+    timeout=30.0,
+    file_timeout=60.0,
+)
+```
+
+Use `RetryConfig(max_attempts=1)` to disable retries.
 
 For the FastAPI example, install the extra dependency first:
 

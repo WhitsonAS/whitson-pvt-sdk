@@ -53,3 +53,6 @@ dev = [
   "pytest>=9.0.3",
   "pytest-httpx>=0.30",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]

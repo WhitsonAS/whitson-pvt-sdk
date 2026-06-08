@@ -1,5 +1,5 @@
-from ..http import HTTPTransport
-from ..models.v1._generated import (
+from ...http import HTTPTransport
+from ...v1.models import (
     CreateRegionModel,
     GetRegionModel,
     RegionsListModel,
@@ -12,13 +12,13 @@ def list_regions(transport: HTTPTransport) -> RegionsListModel:
     return RegionsListModel.model_validate(body)
 
 
-def get_region(transport: HTTPTransport, region_id: int) -> GetRegionModel:
-    body = transport.get(f"/regions/{region_id}")
+def create_region(transport: HTTPTransport, data: CreateRegionModel) -> GetRegionModel:
+    body = transport.post("/regions", body=data.model_dump(exclude_unset=True))
     return GetRegionModel.model_validate(body)
 
 
-def create_region(transport: HTTPTransport, data: CreateRegionModel) -> GetRegionModel:
-    body = transport.post("/regions", body=data.model_dump(exclude_unset=True))
+def get_region(transport: HTTPTransport, region_id: int) -> GetRegionModel:
+    body = transport.get(f"/regions/{region_id}")
     return GetRegionModel.model_validate(body)
 
 

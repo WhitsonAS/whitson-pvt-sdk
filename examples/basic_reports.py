@@ -10,7 +10,10 @@ import os
 from pathlib import Path
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.models.manual import ClientCredentials, ExternalImportArchiveOptions
+from whitson_pvt_sdk.shared.models import (
+    ClientCredentials,
+    ExternalImportArchiveOptions,
+)
 
 
 def main() -> None:

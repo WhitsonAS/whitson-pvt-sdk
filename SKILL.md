@@ -25,7 +25,7 @@ Import the public client and credential model:
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 client = WhitsonPVTClient(
     credentials=ClientCredentials(
@@ -49,6 +49,41 @@ client = WhitsonPVTClient(
 )
 ```
 
+Authentication is handled automatically. If a caller needs the same bearer token
+for a non-SDK integration, use the explicit helper:
+
+```python
+token = client.get_access_token()
+```
+
+Do not use `client.authentication`; auth is not exposed as a resource.
+
+## Retries And Timeouts
+
+The SDK retries transient read failures by default. Retries apply to `GET` requests
+and downloads only, not `POST`, `PUT`, or multipart uploads. Retryable statuses
+are `408`, `429`, `500`, `502`, `503`, and `504`.
+
+Retry timing honors `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
+headers when present.
+
+Configure retries and timeouts on `WhitsonPVTClient`:
+
+```python
+from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+
+client = WhitsonPVTClient(
+    credentials=ClientCredentials(client_id="...", client_secret="..."),
+    base_url="https://internal.pvt.whitson.com",
+    retry_config=RetryConfig(max_attempts=3),
+    timeout=30.0,
+    file_timeout=60.0,
+)
+```
+
+Use `RetryConfig(max_attempts=1)` to disable retries.
+
 ## Common Resource Calls
 
 Access resources from the client:
@@ -62,7 +97,6 @@ well = client.wells.get(well_id=456)
 
 samples = client.samples.list(well_id=456)
 sample = client.samples.get(sample_id=789)
-experiment_types = client.samples.experiment_types(sample_id=789)
 
 projects = client.projects.list(region_id=123, limit=100)
 project = client.projects.get(project_id=321)
@@ -101,7 +135,7 @@ Passing `limit` sets the page size (1–250). When omitted, the API default appl
 Use generated Pydantic models from the selected API version for create and update requests.
 
 ```python
-from whitson_pvt_sdk.models.v2._generated import CreateRegionModel, UpdateRegionModel
+from whitson_pvt_sdk.v2.models import CreateRegionModel, UpdateRegionModel
 
 created = client.regions.create(
     CreateRegionModel(
@@ -116,7 +150,7 @@ updated = client.regions.update(
 )
 ```
 
-For legacy `version="v1"` usage, import request models from `whitson_pvt_sdk.models.v1._generated`.
+For legacy `version="v1"` usage, import request models from `whitson_pvt_sdk.v1.models`.
 
 Use the SDK methods instead of manually constructing HTTP requests. Returned values are Pydantic response models, so callers can use normal attribute access and `model_dump()` when they need dictionaries.
 
@@ -133,7 +167,7 @@ Report import and preflight accept zip bytes. Pass `ExternalImportArchiveOptions
 ```python
 from pathlib import Path
 
-from whitson_pvt_sdk.models.manual import ExternalImportArchiveOptions
+from whitson_pvt_sdk.shared.models import ExternalImportArchiveOptions
 
 archive_data = Path("archive.zip").read_bytes()
 

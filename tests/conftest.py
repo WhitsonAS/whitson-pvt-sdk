@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from whitson_pvt_sdk.http import HTTPTransport
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 
 @pytest.fixture
@@ -30,10 +30,16 @@ def auth_mock(httpx_mock: Any) -> None:
 
 
 @pytest.fixture
-def transport(credentials: ClientCredentials, base_url: str, auth_mock: Any) -> HTTPTransport:
+def transport(
+    credentials: ClientCredentials, base_url: str, request: pytest.FixtureRequest
+) -> HTTPTransport:
+    request.getfixturevalue("auth_mock")
     return HTTPTransport(credentials, base_url, version="v2")
 
 
 @pytest.fixture
-def transport_v1(credentials: ClientCredentials, base_url: str, auth_mock: Any) -> HTTPTransport:
+def transport_v1(
+    credentials: ClientCredentials, base_url: str, request: pytest.FixtureRequest
+) -> HTTPTransport:
+    request.getfixturevalue("auth_mock")
     return HTTPTransport(credentials, base_url, version="v1")

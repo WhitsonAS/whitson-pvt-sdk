@@ -2,7 +2,7 @@ import warnings
 from typing import Literal, overload
 
 from .http import HTTPTransport
-from .models.manual import ClientCredentials
+from .shared.models import ClientCredentials, RetryConfig
 from .v1 import WhitsonPVTClientV1
 from .v2 import WhitsonPVTClientV2
 
@@ -24,6 +24,9 @@ def WhitsonPVTClient(
     version: Literal["v2"] = "v2",
     auth0_domain: str | None = None,
     audience: str | None = None,
+    retry_config: RetryConfig | None = None,
+    timeout: float = 30.0,
+    file_timeout: float = 60.0,
 ) -> WhitsonPVTClientV2: ...
 
 
@@ -35,6 +38,9 @@ def WhitsonPVTClient(
     version: Literal["v1"],
     auth0_domain: str | None = None,
     audience: str | None = None,
+    retry_config: RetryConfig | None = None,
+    timeout: float = 30.0,
+    file_timeout: float = 60.0,
 ) -> WhitsonPVTClientV1: ...
 
 
@@ -46,6 +52,9 @@ def WhitsonPVTClient(
     version: str,
     auth0_domain: str | None = None,
     audience: str | None = None,
+    retry_config: RetryConfig | None = None,
+    timeout: float = 30.0,
+    file_timeout: float = 60.0,
 ) -> WhitsonPVTClientV1 | WhitsonPVTClientV2: ...
 
 
@@ -56,13 +65,16 @@ def WhitsonPVTClient(
     version: str = "v2",
     auth0_domain: str | None = None,
     audience: str | None = None,
+    retry_config: RetryConfig | None = None,
+    timeout: float = 30.0,
+    file_timeout: float = 60.0,
 ) -> WhitsonPVTClientV1 | WhitsonPVTClientV2:
     """Create a whitson PVT SDK client for the selected external API version.
 
     Usage::
 
         from whitson_pvt_sdk import WhitsonPVTClient
-        from whitson_pvt_sdk.models.manual import ClientCredentials
+        from whitson_pvt_sdk.shared.models import ClientCredentials
 
         client = WhitsonPVTClient(
             credentials=ClientCredentials(client_id="...", client_secret="..."),
@@ -77,6 +89,9 @@ def WhitsonPVTClient(
         version=version,
         auth0_domain=auth0_domain,
         audience=audience,
+        retry_config=retry_config,
+        timeout=timeout,
+        file_timeout=file_timeout,
     )
 
     if version in _DEPRECATED:

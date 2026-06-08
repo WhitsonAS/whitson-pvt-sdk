@@ -1,4 +1,4 @@
-from whitson_pvt_sdk.models.v2._generated import (
+from whitson_pvt_sdk.v2.models import (
     CreateRegionModel,
     PaginatedRegionsModel,
     UpdateRegionModel,

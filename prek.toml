@@ -7,7 +7,7 @@ repo = "local"
 id = "ruff"
 name = "ruff"
 language = "system"
-entry = "just lint"
+entry = "just lint-fix"
 files = "\\.py$"
 
 [[repos.hooks]]

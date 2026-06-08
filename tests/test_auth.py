@@ -5,7 +5,8 @@ import pytest
 
 from whitson_pvt_sdk.auth import TokenManager
 from whitson_pvt_sdk.errors import AuthError
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.http import HTTPTransport
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 
 def test_exchanges_token_on_first_call(httpx_mock):
@@ -123,3 +124,15 @@ def test_uses_custom_audience(httpx_mock):
     tm.get_token()
     body = json.loads(httpx_mock.get_requests()[0].read().decode())
     assert body["audience"] == "https://custom.api.com"
+
+
+def test_transport_exposes_access_token(credentials, base_url, httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://whitson.eu.auth0.com/oauth/token",
+        json={"access_token": "tok-1", "expires_in": 86400, "token_type": "Bearer"},
+    )
+    transport = HTTPTransport(credentials, base_url, version="v2")
+
+    assert transport.get_access_token() == "tok-1"
+    assert len(httpx_mock.get_requests()) == 1

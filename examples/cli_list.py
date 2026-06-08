@@ -18,7 +18,7 @@ import os
 import sys
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 
@@ -60,8 +60,8 @@ def cmd_samples(args: argparse.Namespace) -> None:
     samples = client.samples.list(well_id=args.well_id)
     for sample in samples.samples:
         assert sample.id is not None
-        types = client.samples.experiment_types(sample_id=sample.id)
-        print(f"{sample.id:>6}  {sample.name:30s}  experiments={types}")
+        experiment_count = len(sample.experiments or [])
+        print(f"{sample.id:>6}  {sample.name:30s}  experiments={experiment_count}")
 
 
 def cmd_fluid_models(args: argparse.Namespace) -> None:

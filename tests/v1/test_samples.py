@@ -1,4 +1,4 @@
-from whitson_pvt_sdk.models.v1._generated import (
+from whitson_pvt_sdk.v1.models import (
     CreateSampleListModel,
     CreateSampleModel,
     GetSampleListModel,
@@ -85,37 +85,3 @@ def test_update_samples_bulk_serializes_as_list(transport_v1, httpx_mock):
     data = UpdateSampleListModel.model_validate([{"id": 1, "name": "U1"}])
     result = Samples(transport_v1).update_bulk(data)
     assert isinstance(result, GetSampleListModel)
-
-
-def test_experiment_types_extracts_unique_sorted(transport_v1, httpx_mock):
-    httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v1/samples/1",
-        json={
-            "id": 1,
-            "experiments": [
-                {"type": "CCE", "id": 1},
-                {"type": "CVD", "id": 2},
-                {"type": "CCE", "id": 3},
-            ],
-        },
-    )
-    result = Samples(transport_v1).experiment_types(1)
-    assert result == ["CCE", "CVD"]
-
-
-def test_experiment_types_handles_missing_experiments_key(transport_v1, httpx_mock):
-    httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v1/samples/1",
-        json={"id": 1},
-    )
-    result = Samples(transport_v1).experiment_types(1)
-    assert result == []
-
-
-def test_experiment_types_falls_back_to_unknown(transport_v1, httpx_mock):
-    httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v1/samples/1",
-        json={"id": 1, "experiments": [{"type": "CCE"}, {"id": 99}]},
-    )
-    result = Samples(transport_v1).experiment_types(1)
-    assert result == ["CCE", "Unknown"]

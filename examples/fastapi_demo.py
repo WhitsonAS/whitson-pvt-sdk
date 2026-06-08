@@ -14,8 +14,6 @@ Usage:
     # then open http://localhost:8000/regions
 """
 
-from __future__ import annotations
-
 import os
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -24,7 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.errors import AuthError, NotFoundError, SDKError
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 _client: WhitsonPVTClientV2 | None = None

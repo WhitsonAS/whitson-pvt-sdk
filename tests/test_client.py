@@ -4,6 +4,10 @@ from unittest.mock import patch
 import pytest
 
 from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk._generated.v1.resources import (
+    Samples as GeneratedV1Samples,
+)
+from whitson_pvt_sdk.shared.models import RetryConfig
 from whitson_pvt_sdk.v1 import WhitsonPVTClientV1
 from whitson_pvt_sdk.v1.resources import (
     BlackOilTables as V1BlackOilTables,
@@ -76,6 +80,7 @@ def test_v1_loads_v1_resources(credentials, base_url):
     assert isinstance(client.regions, V1Regions)
     assert isinstance(client.wells, V1Wells)
     assert isinstance(client.samples, V1Samples)
+    assert type(client.samples) is not GeneratedV1Samples
     assert isinstance(client.projects, V1Projects)
     assert isinstance(client.fluid_models, V1FluidModels)
     assert isinstance(client.black_oil_tables, V1BlackOilTables)
@@ -111,3 +116,24 @@ def test_passes_auth0_overrides(credentials, base_url):
         auth0_domain="custom.auth0.com",
         audience="https://custom.api",
     )
+
+
+def test_client_exposes_access_token(credentials, base_url):
+    client = _create_client(credentials, base_url)
+
+    assert client.get_access_token() == "fake-token"
+
+
+def test_passes_retry_config(credentials, base_url):
+    retry_config = RetryConfig(max_attempts=1)
+
+    client = _create_client(credentials, base_url, retry_config=retry_config)
+
+    assert client._transport._retry_config is retry_config
+
+
+def test_passes_timeout_config(credentials, base_url):
+    client = _create_client(credentials, base_url, timeout=12.5, file_timeout=19.5)
+
+    assert client._transport._http.timeout.read == 12.5
+    assert client._transport._file_timeout == 19.5
