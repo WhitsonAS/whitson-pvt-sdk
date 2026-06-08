@@ -69,6 +69,7 @@ region = client.regions.get(region_id=123)
 wells = client.wells.list(region_id=123, limit=100)
 well = client.wells.get(well_id=456)
 
+samples = client.samples.list(well_id=456)
 sample = client.samples.get(sample_id=789)
 
 projects = client.projects.list(region_id=123, limit=100)
@@ -79,12 +80,6 @@ fluid_model = client.fluid_models.get(fluid_model_id=654)
 
 black_oil_tables = client.black_oil_tables.list(fluid_model_id=654, limit=100)
 black_oil_table = client.black_oil_tables.get(black_oil_table_id=987)
-```
-
-For v1 legacy clients, samples can also be listed by well:
-
-```python
-samples = client.samples.list(well_id=456)
 ```
 
 For paginated v2 list endpoints, pass `cursor=page.pagination.next_cursor` to fetch the next page and `limit=<int>` to control page size.

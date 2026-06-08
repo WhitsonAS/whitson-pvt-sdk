@@ -27,7 +27,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 
 - Public entrypoint is `WhitsonPVTClient` in `whitson_pvt_sdk/__init__.py`; it wires `v1` or `v2` resources and exposes `get_access_token()` for explicit token reuse.
 - `HTTPTransport` owns the `base_url.rstrip('/') + /external/{version}` prefix, Auth0 bearer auth, token caching, timeouts, error mapping, JSON parsing, bytes downloads, and multipart uploads.
-- Public resource classes in `whitson_pvt_sdk/v1/resources.py` and `v2/resources.py` re-export generated facades from `whitson_pvt_sdk/_generated/{version}/resources.py`.
+- Public resource classes in `whitson_pvt_sdk/v1/resources.py` and `v2/resources.py` usually re-export generated facades from `whitson_pvt_sdk/_generated/{version}/resources.py`; put manual SDK conveniences there by subclassing/wrapping generated classes.
 - Generated resource methods use SDK-shaped names (`list`, `get`, `create`, `update`, `create_bulk`, `update_bulk`) while lower-level generated module functions keep OpenAPI operation IDs.
 - Keep v1/v2 behavior aligned unless generated models intentionally differ; v2 list endpoints use paginated models for regions/projects/fluid models/black oil tables/wells.
 - Report import/export is special: export returns raw zip bytes plus a synthetic filename, and import/preflight upload `archive.zip` with optional `meta_data` serialized from `ExternalImportArchiveOptions`.
@@ -40,8 +40,10 @@ For new endpoint wrappers or generator behavior:
 2. Call `HTTPTransport.get`, `post`, `put`, `get_bytes`, or `post_multipart`.
 3. Serialize Pydantic inputs with `model_dump(exclude_unset=True)`.
 4. Validate structured responses with the generated model's `model_validate`.
-5. Add or update the matching resource facade method through generator inference or `OVERRIDES`.
+5. Add or update the matching generated resource facade method through generator inference or `OVERRIDES` when the endpoint exists in OpenAPI.
 6. Keep v1 and v2 behavior aligned unless generated models intentionally differ.
+
+For SDK-only conveniences or compatibility shims that are not OpenAPI-derived, add them to `whitson_pvt_sdk/{version}/resources.py`, not `_generated/**`.
 
 ## Final Checks
 
