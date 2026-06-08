@@ -17,27 +17,30 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 
 ## Codegen
 
-- Treat `whitson_pvt_sdk/models/v1/_generated.py` and `whitson_pvt_sdk/models/v2/_generated.py` as generated Pydantic model output.
+- Treat `whitson_pvt_sdk/_generated/**` and `whitson_pvt_sdk/{v1,v2}/models/__init__.py` as generated output.
 - Regenerate only when a live local API is available at `http://localhost:4000`; use `just generate v1`, `just generate v2`, or `just generate-all`, which fetch `http://localhost:4000/external/{version}/docs/openapi.json`.
-- Put hand-maintained models in `whitson_pvt_sdk/models/manual.py`; avoid hand-editing generated files unless intentionally patching generated output when the API spec is unavailable.
+- The repo-specific generator lives in `scripts/sdk_generator/`. It runs `ruff check --fix --select I,F401` and `ruff format` on rendered endpoint/resource files, so generated files should not require a second formatting pass.
+- Put hand-maintained shared models in `whitson_pvt_sdk/shared/models.py`; avoid hand-editing generated files unless intentionally patching generated output when the API spec is unavailable.
+- Authentication is excluded from generated resources via `EXCLUDED_RESOURCES`; keep auth as transport infrastructure, not as `client.authentication`.
 
 ## Architecture
 
-- Public entrypoint is `WhitsonPVTClient` in `whitson_pvt_sdk/__init__.py`; it only wires `v1` or `v2` resources.
-- `HTTPTransport` owns the `base_url.rstrip('/') + /external/{version}` prefix, Auth0 bearer auth, timeouts, error mapping, JSON parsing, bytes downloads, and multipart uploads.
-- Resource classes in `whitson_pvt_sdk/v1/resources.py` and `v2/resources.py` are thin facades over same-named module functions.
-- Keep v1/v2 behavior aligned unless generated models intentionally differ; v2 list endpoints use paginated models for regions/projects/fluid models/black oil tables.
+- Public entrypoint is `WhitsonPVTClient` in `whitson_pvt_sdk/__init__.py`; it wires `v1` or `v2` resources and exposes `get_access_token()` for explicit token reuse.
+- `HTTPTransport` owns the `base_url.rstrip('/') + /external/{version}` prefix, Auth0 bearer auth, token caching, timeouts, error mapping, JSON parsing, bytes downloads, and multipart uploads.
+- Public resource classes in `whitson_pvt_sdk/v1/resources.py` and `v2/resources.py` re-export generated facades from `whitson_pvt_sdk/_generated/{version}/resources.py`.
+- Generated resource methods use SDK-shaped names (`list`, `get`, `create`, `update`, `create_bulk`, `update_bulk`) while lower-level generated module functions keep OpenAPI operation IDs.
+- Keep v1/v2 behavior aligned unless generated models intentionally differ; v2 list endpoints use paginated models for regions/projects/fluid models/black oil tables/wells.
 - Report import/export is special: export returns raw zip bytes plus a synthetic filename, and import/preflight upload `archive.zip` with optional `meta_data` serialized from `ExternalImportArchiveOptions`.
 
 ## Endpoint Wrappers
 
-For new endpoint wrappers:
+For new endpoint wrappers or generator behavior:
 
-1. Add the thin module function near related functions.
+1. Prefer changing `scripts/sdk_generator/` and regenerating over hand-editing generated endpoint/resource files.
 2. Call `HTTPTransport.get`, `post`, `put`, `get_bytes`, or `post_multipart`.
 3. Serialize Pydantic inputs with `model_dump(exclude_unset=True)`.
 4. Validate structured responses with the generated model's `model_validate`.
-5. Add or update the matching resource facade method.
+5. Add or update the matching resource facade method through generator inference or `OVERRIDES`.
 6. Keep v1 and v2 behavior aligned unless generated models intentionally differ.
 
 ## Final Checks

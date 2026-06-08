@@ -25,7 +25,7 @@ Import the public client and credential model:
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.models.manual import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials
 
 client = WhitsonPVTClient(
     credentials=ClientCredentials(
@@ -49,6 +49,15 @@ client = WhitsonPVTClient(
 )
 ```
 
+Authentication is handled automatically. If a caller needs the same bearer token
+for a non-SDK integration, use the explicit helper:
+
+```python
+token = client.get_access_token()
+```
+
+Do not use `client.authentication`; auth is not exposed as a resource.
+
 ## Common Resource Calls
 
 Access resources from the client:
@@ -60,9 +69,7 @@ region = client.regions.get(region_id=123)
 wells = client.wells.list(region_id=123, limit=100)
 well = client.wells.get(well_id=456)
 
-samples = client.samples.list(well_id=456)
 sample = client.samples.get(sample_id=789)
-experiment_types = client.samples.experiment_types(sample_id=789)
 
 projects = client.projects.list(region_id=123, limit=100)
 project = client.projects.get(project_id=321)
@@ -72,6 +79,12 @@ fluid_model = client.fluid_models.get(fluid_model_id=654)
 
 black_oil_tables = client.black_oil_tables.list(fluid_model_id=654, limit=100)
 black_oil_table = client.black_oil_tables.get(black_oil_table_id=987)
+```
+
+For v1 legacy clients, samples can also be listed by well:
+
+```python
+samples = client.samples.list(well_id=456)
 ```
 
 For paginated v2 list endpoints, pass `cursor=page.pagination.next_cursor` to fetch the next page and `limit=<int>` to control page size.
@@ -101,7 +114,7 @@ Passing `limit` sets the page size (1–250). When omitted, the API default appl
 Use generated Pydantic models from the selected API version for create and update requests.
 
 ```python
-from whitson_pvt_sdk.models.v2._generated import CreateRegionModel, UpdateRegionModel
+from whitson_pvt_sdk.v2.models import CreateRegionModel, UpdateRegionModel
 
 created = client.regions.create(
     CreateRegionModel(
@@ -116,7 +129,7 @@ updated = client.regions.update(
 )
 ```
 
-For legacy `version="v1"` usage, import request models from `whitson_pvt_sdk.models.v1._generated`.
+For legacy `version="v1"` usage, import request models from `whitson_pvt_sdk.v1.models`.
 
 Use the SDK methods instead of manually constructing HTTP requests. Returned values are Pydantic response models, so callers can use normal attribute access and `model_dump()` when they need dictionaries.
 
@@ -133,7 +146,7 @@ Report import and preflight accept zip bytes. Pass `ExternalImportArchiveOptions
 ```python
 from pathlib import Path
 
-from whitson_pvt_sdk.models.manual import ExternalImportArchiveOptions
+from whitson_pvt_sdk.shared.models import ExternalImportArchiveOptions
 
 archive_data = Path("archive.zip").read_bytes()
 
