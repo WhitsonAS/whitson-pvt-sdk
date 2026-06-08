@@ -8,6 +8,7 @@ GENERATED_DIR = SDK_DIR / "_generated"
 
 HTTP_METHODS = {"get", "post", "put"}
 SUPPORTED_VERSIONS = ("v1", "v2")
+EXCLUDED_RESOURCES = {"authentication"}
 
 OVERRIDES: dict[tuple[str, str, str], EndpointOverride] = {
     ("*", "get", "/reports/{report_id}/export"): EndpointOverride(

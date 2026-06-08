@@ -21,12 +21,16 @@ def format_python(content: str | list[str]) -> str | list[str]:
             for p, c in zip(paths, content):
                 p.write_text(c)
 
-        subprocess.run(
+        for command in (
+            ["uv", "run", "ruff", "check", str(tmp), "--fix", "--select", "I,F401"],
             ["uv", "run", "ruff", "format", str(tmp)],
-            cwd=ROOT,
-            check=True,
-            stdout=subprocess.DEVNULL,
-        )
+        ):
+            subprocess.run(
+                command,
+                cwd=ROOT,
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
         return [p.read_text() for p in paths] if isinstance(content, list) else paths[0].read_text()
 
 

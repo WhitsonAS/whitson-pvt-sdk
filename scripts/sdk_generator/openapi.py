@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 from urllib.request import urlopen
 
-from sdk_generator.config import HTTP_METHODS, OVERRIDES
+from sdk_generator.config import EXCLUDED_RESOURCES, HTTP_METHODS, OVERRIDES
 from sdk_generator.models import BodyKind, Endpoint, EndpointParam, Version
 from sdk_generator.naming import singular, to_snake
 
@@ -26,8 +26,9 @@ def parse_endpoints(version: str, spec: dict[str, Any]) -> list[Endpoint]:
                 continue
             _validate_operation(method, raw_path, operation)
             params = [*path_params, *parse_params(operation.get("parameters", []))]
-            endpoint = infer_endpoint(version, method, raw_path, operation, params)
-            endpoints.append(apply_override(endpoint))
+            endpoint = apply_override(infer_endpoint(version, method, raw_path, operation, params))
+            if endpoint.resource not in EXCLUDED_RESOURCES:
+                endpoints.append(endpoint)
     return endpoints
 
 
