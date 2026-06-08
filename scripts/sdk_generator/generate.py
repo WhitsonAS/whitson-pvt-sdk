@@ -54,30 +54,36 @@ def parse_args() -> argparse.Namespace:
 
 def generate_models(version: str, spec: dict[str, Any], *, check: bool) -> None:
     output = GENERATED_DIR / version / "models.py"
-    with tempfile.TemporaryDirectory() as tmp:
-        target = Path(tmp) / "models.py" if check else output
-        target.parent.mkdir(parents=True, exist_ok=True)
-        config = GenerateConfig(
-            input_file_type=InputFileType.OpenAPI,
-            input_filename=f"{version}/openapi.json",
-            output=target,
-            output_model_type=DataModelType.PydanticV2BaseModel,
-            target_python_version=PythonVersion.PY_310,
-            base_class="pydantic.BaseModel",
-            collapse_root_models=True,
-            snake_case_field=True,
-            use_field_description=True,
-            use_union_operator=True,
-            use_standard_collections=True,
-            use_standard_primitive_types=True,
-            use_annotated=True,
-            field_constraints=True,
-            enum_field_as_literal=LiteralType.All,
-            formatters=[Formatter.RUFF_CHECK, Formatter.RUFF_FORMAT],
-        )
-        generate(json.dumps(spec), config=config)
-        if check:
+    if check:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "models.py"
+            generate_model_file(version, spec, target)
             assert_same(output, target.read_text())
+    else:
+        generate_model_file(version, spec, output)
+
+
+def generate_model_file(version: str, spec: dict[str, Any], target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    config = GenerateConfig(
+        input_file_type=InputFileType.OpenAPI,
+        input_filename=f"{version}/openapi.json",
+        output=target,
+        output_model_type=DataModelType.PydanticV2BaseModel,
+        target_python_version=PythonVersion.PY_310,
+        base_class="pydantic.BaseModel",
+        collapse_root_models=True,
+        snake_case_field=True,
+        use_field_description=True,
+        use_union_operator=True,
+        use_standard_collections=True,
+        use_standard_primitive_types=True,
+        use_annotated=True,
+        field_constraints=True,
+        enum_field_as_literal=LiteralType.All,
+        formatters=[Formatter.RUFF_CHECK, Formatter.RUFF_FORMAT],
+    )
+    generate(json.dumps(spec), config=config)
 
 
 def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> None:
@@ -91,6 +97,8 @@ def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> No
         by_resource[endpoint.resource].append(endpoint)
 
     version_dir = GENERATED_DIR / version
+    if not check:
+        version_dir.mkdir(parents=True, exist_ok=True)
     generated: dict[Path, str] = {}
     for resource, resource_endpoints in by_resource.items():
         generated[version_dir / f"{resource}.py"] = render_module(
