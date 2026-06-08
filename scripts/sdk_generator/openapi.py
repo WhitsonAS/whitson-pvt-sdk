@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -166,10 +164,6 @@ def infer_resource(path: str, operation: dict[str, Any]) -> str:
     static_parts = [part for part in path.strip("/").split("/") if not part.startswith("{")]
     return to_snake(static_parts[-1] if static_parts else "root")
 
-
-# This generator expects external API operationIds to be stable, short SDK method
-# names (e.g. "list_regions", "get_region", "run_flash").  pvt-api should set
-# ``operation_id_callback=operation_id_from_function_name`` on external blueprints.
 
 def infer_function_name(method: str, path: str, resource: str, operation: dict[str, Any]) -> str:
     if operation_id := operation.get("operationId"):

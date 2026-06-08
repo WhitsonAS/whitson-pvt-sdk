@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import re
 import subprocess
 import tempfile
@@ -102,7 +100,7 @@ def render_multipart_endpoint(endpoint: Endpoint) -> str:
         "        options = ExternalImportArchiveOptions()\n\n"
         "    body = transport.post_multipart(\n"
         f"        {render_path(endpoint.path)},\n"
-        "        files={\"file\": (\"archive.zip\", BytesIO(archive_data), \"application/zip\")},\n"
+        '        files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},\n'
         "        data=_meta_data(options),\n"
         "    )\n"
         f"    return {return_model}.model_validate(body)\n"
