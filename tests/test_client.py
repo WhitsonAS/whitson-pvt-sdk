@@ -111,3 +111,9 @@ def test_passes_auth0_overrides(credentials, base_url):
         auth0_domain="custom.auth0.com",
         audience="https://custom.api",
     )
+
+
+def test_client_exposes_access_token(credentials, base_url):
+    client = _create_client(credentials, base_url)
+
+    assert client.get_access_token() == "fake-token"

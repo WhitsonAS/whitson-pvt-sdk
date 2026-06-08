@@ -20,7 +20,6 @@ from sdk_generator.openapi import (
 )
 from sdk_generator.render import (
     format_python,
-    render_client_init,
     render_endpoint,
     render_module,
     render_resources,
@@ -140,16 +139,45 @@ def test_infer_function_name_fallback_put_bulk():
 
 
 def test_infer_public_method_name_standard():
-    assert infer_public_method_name("list_regions", "regions") == "list"
-    assert infer_public_method_name("get_region", "regions") == "get"
-    assert infer_public_method_name("create_region", "regions") == "create"
-    assert infer_public_method_name("update_region", "regions") == "update"
-    assert infer_public_method_name("create_samples_bulk", "samples") == "create_bulk"
-    assert infer_public_method_name("update_samples_bulk", "samples") == "update_bulk"
+    assert infer_public_method_name("list_regions", "regions", "get", "/regions", "none") == "list"
+    assert (
+        infer_public_method_name("get_region", "regions", "get", "/regions/{id}", "none")
+        == "get"
+    )
+    assert (
+        infer_public_method_name("create_region", "regions", "post", "/regions", "model")
+        == "create"
+    )
+    assert (
+        infer_public_method_name("update_region", "regions", "put", "/regions/{id}", "model")
+        == "update"
+    )
+    assert (
+        infer_public_method_name("create_samples", "samples", "post", "/samples/bulk", "root_list")
+        == "create_bulk"
+    )
+    assert (
+        infer_public_method_name("update_wells", "wells", "put", "/wells/bulk", "root_list")
+        == "update_bulk"
+    )
+
+
+def test_infer_public_method_name_nested_list():
+    assert (
+        infer_public_method_name(
+            "list_wells_info", "wells", "get", "/regions/{region_id}/wells", "none"
+        )
+        == "list"
+    )
 
 
 def test_infer_public_method_name_non_standard():
-    assert infer_public_method_name("run_flash", "calculations") == "run_flash"
+    assert (
+        infer_public_method_name(
+            "run_flash", "calculations", "post", "/calculations/flash", "model"
+        )
+        == "run_flash"
+    )
 
 
 # ── endpoint inference ──
@@ -189,7 +217,7 @@ def test_infer_endpoint_post_with_body():
 
 def test_infer_endpoint_post_list_model():
     op = {
-        "operationId": "create_samples_bulk",
+        "operationId": "create_samples",
         "requestBody": {
             "content": {
                 "application/json": {
@@ -208,6 +236,8 @@ def test_infer_endpoint_post_list_model():
         },
     }
     ep = infer_endpoint("v2", "post", "/samples/bulk", op, [])
+    assert ep.function_name == "create_samples"
+    assert ep.public_method_name == "create_bulk"
     assert ep.body_kind == "root_list"
 
 
@@ -353,6 +383,14 @@ def test_render_endpoint_strips_extra_newlines():
     assert formatted.count("def get_region") == 1
 
 
+def test_format_python_applies_ruff_fixes():
+    formatted = format_python("import sys\nimport os\n\nprint(sys.version)\n")
+
+    assert isinstance(formatted, str)
+    assert "import os" not in formatted
+    assert formatted.startswith("import sys\n")
+
+
 def test_render_bytes_endpoint():
     ep = Endpoint(
         version="v1",
@@ -422,22 +460,6 @@ def test_render_resources_output():
     assert "def list(self" in rendered
 
 
-def test_render_client_init():
-    ep = Endpoint(
-        version="v1",
-        resource="regions",
-        function_name="list_regions",
-        public_method_name="list",
-        http_method="get",
-        path="/regions",
-        response_model="RegionsListModel",
-    )
-    rendered = render_client_init("v1", {"regions": [ep]})
-    assert "class WhitsonPVTClientV1:" in rendered
-    assert "regions: resources.Regions" in rendered
-    assert "self.regions = resources.Regions(transport)" in rendered
-
-
 # ── full parse ──
 
 
@@ -489,3 +511,19 @@ def test_parse_endpoints_applies_overrides():
     endpoints = parse_endpoints("v1", spec)
     assert endpoints[0].return_kind == "tuple_bytes_filename"
     assert endpoints[0].function_name == "export_report"
+
+
+def test_parse_endpoints_excludes_authentication_resource():
+    spec = {
+        "paths": {
+            "/auth/token": {
+                "post": {
+                    "operationId": "get_token",
+                    "tags": ["authentication"],
+                    "responses": {"200": {"content": {"application/json": {}}}},
+                }
+            }
+        }
+    }
+
+    assert parse_endpoints("v1", spec) == []
