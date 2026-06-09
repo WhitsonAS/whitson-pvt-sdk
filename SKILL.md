@@ -162,23 +162,23 @@ Report export returns zip bytes and a synthetic filename:
 archive_data, filename = client.reports.export(report_id=123)
 ```
 
-Report import and preflight accept zip bytes. Pass `ExternalImportArchiveOptions` when import options are needed:
+Report import and preflight accept zip bytes. Pass `ImportArchiveOptions` when import options are needed:
 
 ```python
 from pathlib import Path
 
-from whitson_pvt_sdk.shared.models import ExternalImportArchiveOptions
+from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 
 archive_data = Path("archive.zip").read_bytes()
 
 preflight = client.reports.preflight_import(
     archive_data,
-    options=ExternalImportArchiveOptions(region_id=123),
+    options=ImportArchiveOptions(region_id=123),
 )
 
 result = client.reports.import_archive(
     archive_data,
-    options=ExternalImportArchiveOptions(
+    options=ImportArchiveOptions(
         region_id=123,
         acknowledge_suggestions=True,
     ),
