@@ -29,7 +29,7 @@ from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import (
     ClientCredentials,
     DomainAuthConfig,
-    ExternalImportArchiveOptions,
+    ImportArchiveOptions,
     MultiDomainCopyConfig,
     SourceDomainConfig,
 )
@@ -93,19 +93,19 @@ def _build_opts(
     src: SourceDomainConfig,
     config: MultiDomainCopyConfig,
     region_map: dict[str, int],
-) -> ExternalImportArchiveOptions:
+) -> ImportArchiveOptions:
     region_id = _resolve_region_id(src, config, region_map)
     ack = (
         src.acknowledge_suggestions
         if src.acknowledge_suggestions is not None
         else config.acknowledge_suggestions
     )
-    return ExternalImportArchiveOptions(region_id=region_id, acknowledge_suggestions=ack)
+    return ImportArchiveOptions(region_id=region_id, acknowledge_suggestions=ack)
 
 
 def _copy_one_report(
     domain_auth: DomainAuthConfig,
-    import_opts: ExternalImportArchiveOptions,
+    import_opts: ImportArchiveOptions,
     target: WhitsonPVTClient,  # type: ignore[valid-type]
     domain: str,
     report_id: int,

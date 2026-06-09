@@ -16,7 +16,7 @@ from whitson_pvt_sdk._generated.v2 import (
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
     from whitson_pvt_sdk.shared.models import (
-        ExternalImportArchiveOptions,
+        ImportArchiveOptions,
     )
     from whitson_pvt_sdk.v2.models import (
         CreateRegionModel,
@@ -161,12 +161,12 @@ class Reports:
         self._transport = transport
 
     def import_archive(
-        self, archive_data: bytes, options: ExternalImportArchiveOptions | None = None
+        self, archive_data: bytes, options: ImportArchiveOptions | None = None
     ) -> ImportCommitResultModel:
         return reports.import_report(self._transport, archive_data, options)
 
     def preflight_import(
-        self, archive_data: bytes, options: ExternalImportArchiveOptions | None = None
+        self, archive_data: bytes, options: ImportArchiveOptions | None = None
     ) -> ImportPreflightResultModel:
         return reports.preflight_import(self._transport, archive_data, options)
 

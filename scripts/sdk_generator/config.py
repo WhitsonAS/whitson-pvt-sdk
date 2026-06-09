@@ -23,14 +23,14 @@ OVERRIDES: dict[tuple[str, str, str], EndpointOverride] = {
         resource="reports",
         function_name="preflight_import",
         public_method_name="preflight_import",
-        request_model="ExternalImportArchiveOptions",
+        request_model="ImportArchiveOptions",
         body_kind="multipart",
     ),
     ("*", "post", "/reports/import"): EndpointOverride(
         resource="reports",
         function_name="import_report",
         public_method_name="import_archive",
-        request_model="ExternalImportArchiveOptions",
+        request_model="ImportArchiveOptions",
         body_kind="multipart",
     ),
     ("*", "post", "/wells"): EndpointOverride(

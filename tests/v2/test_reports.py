@@ -1,4 +1,4 @@
-from whitson_pvt_sdk.shared.models import ExternalImportArchiveOptions
+from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 from whitson_pvt_sdk.v2.models import ImportCommitResultModel, ImportPreflightResultModel
 from whitson_pvt_sdk.v2.resources import Reports
 
@@ -43,7 +43,7 @@ def test_preflight_import_v2_sends_meta_data_json(transport, httpx_mock):
     )
     Reports(transport).preflight_import(
         b"archive",
-        ExternalImportArchiveOptions(region_id=42, acknowledge_suggestions=True),
+        ImportArchiveOptions(region_id=42, acknowledge_suggestions=True),
     )
     body = httpx_mock.get_requests()[-1].read().decode()
     assert "archive.zip" in body

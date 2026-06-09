@@ -41,13 +41,13 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
             model
             for endpoint in endpoints
             for model in (endpoint.request_model, endpoint.response_model)
-            if model and model != "ExternalImportArchiveOptions"
+            if model and model != "ImportArchiveOptions"
         }
     )
     lines = ["from ...http import HTTPTransport\n"]
     if has_multipart:
         lines.insert(0, "from io import BytesIO\n\n")
-        lines.append("from ...shared.models import ExternalImportArchiveOptions\n")
+        lines.append("from ...shared.models import ImportArchiveOptions\n")
     elif needs_pagination(endpoints):
         lines.append("from ...shared.models import PaginationParams\n")
     if model_imports:
@@ -99,10 +99,10 @@ def render_multipart_endpoint(endpoint: Endpoint) -> str:
         f"def {endpoint.function_name}(\n"
         "    transport: HTTPTransport,\n"
         "    archive_data: bytes,\n"
-        "    options: ExternalImportArchiveOptions | None = None,\n"
+        "    options: ImportArchiveOptions | None = None,\n"
         f") -> {return_model}:\n"
         "    if options is None:\n"
-        "        options = ExternalImportArchiveOptions()\n\n"
+        "        options = ImportArchiveOptions()\n\n"
         "    body = transport.post_multipart(\n"
         f"        {render_path(endpoint.path)},\n"
         '        files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},\n'
@@ -151,7 +151,7 @@ def render_body_expr(endpoint: Endpoint) -> str:
 
 def render_meta_data_helper() -> str:
     return (
-        "def _meta_data(options: ExternalImportArchiveOptions) -> dict | None:\n"
+        "def _meta_data(options: ImportArchiveOptions) -> dict | None:\n"
         "    dumped = options.model_dump(exclude_unset=True, exclude_defaults=True)\n"
         "    if not dumped:\n"
         "        return None\n"
@@ -180,8 +180,8 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
     lines.append(")\n\n")
     lines.append("if TYPE_CHECKING:\n")
     lines.append("    from whitson_pvt_sdk.http import HTTPTransport\n")
-    manual_models = [model for model in model_imports if model == "ExternalImportArchiveOptions"]
-    generated_models = [model for model in model_imports if model != "ExternalImportArchiveOptions"]
+    manual_models = [model for model in model_imports if model == "ImportArchiveOptions"]
+    generated_models = [model for model in model_imports if model != "ImportArchiveOptions"]
     if manual_models:
         lines.append("    from whitson_pvt_sdk.shared.models import (\n")
         lines.extend(f"        {model},\n" for model in manual_models)
@@ -212,7 +212,7 @@ def render_resource_method(resource: str, endpoint: Endpoint) -> str:
     args = []
     call_args = ["self._transport"]
     if endpoint.body_kind == "multipart":
-        args = ["archive_data: bytes", "options: ExternalImportArchiveOptions | None = None"]
+        args = ["archive_data: bytes", "options: ImportArchiveOptions | None = None"]
         call_args.extend(["archive_data", "options"])
     else:
         for param in endpoint.path_params:

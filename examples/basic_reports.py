@@ -12,7 +12,7 @@ from pathlib import Path
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import (
     ClientCredentials,
-    ExternalImportArchiveOptions,
+    ImportArchiveOptions,
 )
 
 
@@ -35,7 +35,7 @@ def main() -> None:
 
     preflight = client.reports.preflight_import(
         archive_data,
-        options=ExternalImportArchiveOptions(region_id=1),
+        options=ImportArchiveOptions(region_id=1),
     )
     print(f"Preflight: can_commit={preflight.can_commit}")
     print(f"  summary: {preflight.summary}")
@@ -44,7 +44,7 @@ def main() -> None:
 
     result = client.reports.import_archive(
         archive_data,
-        options=ExternalImportArchiveOptions(
+        options=ImportArchiveOptions(
             region_id=1,
             acknowledge_suggestions=True,
         ),

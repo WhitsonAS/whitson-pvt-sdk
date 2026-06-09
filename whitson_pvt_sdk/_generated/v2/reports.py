@@ -1,7 +1,7 @@
 from io import BytesIO
 
 from ...http import HTTPTransport
-from ...shared.models import ExternalImportArchiveOptions
+from ...shared.models import ImportArchiveOptions
 from ...v2.models import (
     ImportCommitResultModel,
     ImportPreflightResultModel,
@@ -11,10 +11,10 @@ from ...v2.models import (
 def import_report(
     transport: HTTPTransport,
     archive_data: bytes,
-    options: ExternalImportArchiveOptions | None = None,
+    options: ImportArchiveOptions | None = None,
 ) -> ImportCommitResultModel:
     if options is None:
-        options = ExternalImportArchiveOptions()
+        options = ImportArchiveOptions()
 
     body = transport.post_multipart(
         "/reports/import",
@@ -27,10 +27,10 @@ def import_report(
 def preflight_import(
     transport: HTTPTransport,
     archive_data: bytes,
-    options: ExternalImportArchiveOptions | None = None,
+    options: ImportArchiveOptions | None = None,
 ) -> ImportPreflightResultModel:
     if options is None:
-        options = ExternalImportArchiveOptions()
+        options = ImportArchiveOptions()
 
     body = transport.post_multipart(
         "/reports/import/preflight",
@@ -46,7 +46,7 @@ def export_report(transport: HTTPTransport, report_id: int) -> tuple[bytes, str]
     return data, filename
 
 
-def _meta_data(options: ExternalImportArchiveOptions) -> dict | None:
+def _meta_data(options: ImportArchiveOptions) -> dict | None:
     dumped = options.model_dump(exclude_unset=True, exclude_defaults=True)
     if not dumped:
         return None

@@ -31,17 +31,17 @@ class TokenData(BaseModel):
     token_type: str
 
 
-class ExternalImportResolutionModel(BaseModel):
+class ImportResolutionModel(BaseModel):
     entity: str
     natural_key_id: str | None = None
     import_parent_natural_key_id: str | None = None
     action: str
 
 
-class ExternalImportArchiveOptions(BaseModel):
+class ImportArchiveOptions(BaseModel):
     region_id: int | None = None
     acknowledge_suggestions: bool = False
-    resolutions: list[ExternalImportResolutionModel] = Field(default_factory=list)
+    resolutions: list[ImportResolutionModel] = Field(default_factory=list)
 
 
 class RegionSpec(BaseModel):
