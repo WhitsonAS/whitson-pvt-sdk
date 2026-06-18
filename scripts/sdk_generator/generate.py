@@ -25,7 +25,13 @@ def main() -> None:
     for version in versions:
         spec = load_openapi(version, args.openapi, args.base_url)
         if not args.endpoints_only:
-            generate_models(version, spec, check=args.check)
+            generate_models(
+                version,
+                spec,
+                check=args.check,
+                reuse_model=args.reuse_model,
+                collapse_reuse_models=args.collapse_reuse_models,
+            )
         if not args.models_only:
             generate_endpoints(version, spec, check=args.check)
 
@@ -40,6 +46,8 @@ def parse_args() -> argparse.Namespace:
         "--openapi", type=Path, help="OpenAPI JSON file. Only valid for one version."
     )
     parser.add_argument("--models-only", action="store_true")
+    parser.add_argument("--reuse-model", action="store_true")
+    parser.add_argument("--collapse-reuse-models", action="store_true")
     parser.add_argument("--endpoints-only", action="store_true")
     parser.add_argument(
         "--check", action="store_true", help="Diff generated output without writing files."
@@ -52,18 +60,44 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def generate_models(version: str, spec: dict[str, Any], *, check: bool) -> None:
+def generate_models(
+    version: str,
+    spec: dict[str, Any],
+    *,
+    check: bool,
+    reuse_model: bool,
+    collapse_reuse_models: bool,
+) -> None:
     output = GENERATED_DIR / version / "models.py"
     if check:
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "models.py"
-            generate_model_file(version, spec, target)
+            generate_model_file(
+                version,
+                spec,
+                target,
+                reuse_model=reuse_model,
+                collapse_reuse_models=collapse_reuse_models,
+            )
             assert_same(output, target.read_text())
     else:
-        generate_model_file(version, spec, output)
+        generate_model_file(
+            version,
+            spec,
+            output,
+            reuse_model=reuse_model,
+            collapse_reuse_models=collapse_reuse_models,
+        )
 
 
-def generate_model_file(version: str, spec: dict[str, Any], target: Path) -> None:
+def generate_model_file(
+    version: str,
+    spec: dict[str, Any],
+    target: Path,
+    *,
+    reuse_model: bool,
+    collapse_reuse_models: bool,
+) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     config = GenerateConfig(
         input_file_type=InputFileType.OpenAPI,
@@ -73,6 +107,8 @@ def generate_model_file(version: str, spec: dict[str, Any], target: Path) -> Non
         target_python_version=PythonVersion.PY_310,
         base_class="pydantic.BaseModel",
         collapse_root_models=True,
+        reuse_model=reuse_model,
+        collapse_reuse_models=collapse_reuse_models,
         snake_case_field=True,
         use_field_description=True,
         use_union_operator=True,
