@@ -13,12 +13,14 @@ uv sync
 
 ## Configuration
 
-All examples read credentials from environment variables. Set these before running:
+All examples read credentials from environment variables. Start from the example
+env file, edit the values, then source it before running examples:
 
 ```bash
-export WHITSON_CLIENT_ID="your-client-id"
-export WHITSON_CLIENT_SECRET="your-client-secret"
-export WHITSON_BASE_URL="https://internal.pvt.whitson.com"  # optional, defaults to this
+cp .env.example .env
+$EDITOR .env
+source .env
+uv run examples/basic_connect.py
 ```
 
 ## Examples
