@@ -46,5 +46,12 @@ test-cov:
 build:
     uv build
 
+publish-check: build
+    uvx twine check dist/*
+
+# Create a GitHub Release; publishing to PyPI is handled by GitHub Actions.
+release version:
+    gh release create v{{version}} --title "v{{version}}" --notes "Release v{{version}}"
+
 # ── run all ───────────────────────────────────────────────────────
 all: generate-all lint-fix format ty build

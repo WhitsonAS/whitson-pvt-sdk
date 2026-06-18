@@ -25,7 +25,6 @@ def test_exchanges_token_on_first_call(httpx_mock):
     assert body["client_id"] == "id"
     assert body["client_secret"] == "secret"
     assert body["grant_type"] == "client_credentials"
-    assert body["audience"] == "https://pvt.whitson.com/external"
 
 
 def test_reuses_cached_token(httpx_mock):

@@ -125,6 +125,28 @@ just generate-all                # regenerate both v1 and v2
 just all                         # generate-all + lint/format + build
 ```
 
+### Publishing
+
+Publishing uses GitHub Actions and PyPI Trusted Publishing; no PyPI API token is
+stored in this repository. Configure the `whitson-pvt-sdk` project on PyPI to
+trust this GitHub repository and the `pypi` environment, then publish a GitHub
+Release to build and upload the package.
+
+Before creating a release, update `version` in `pyproject.toml` and run:
+
+```bash
+just test
+just lint
+just ty
+just publish-check
+```
+
+Create the GitHub Release with:
+
+```bash
+just release 0.1.1
+```
+
 ### Code generation
 
 Generated code comes from the live API's OpenAPI spec:
