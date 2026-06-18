@@ -17,6 +17,9 @@ generate-all:
     uv run python scripts/generate_sdk.py all --base-url {{BASE_URL}}
 
 # ── lint & typecheck ──────────────────────────────────────────────
+install-hooks:
+    uv run prek install --hook-type commit-msg
+
 lint +files='whitson_pvt_sdk/':
     uv run ruff check {{files}}
 

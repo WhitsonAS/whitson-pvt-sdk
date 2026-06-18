@@ -109,6 +109,32 @@ Limit defaults to the API default (usually 20) when omitted.
 ```bash
 uv sync                           # installs Python deps + dev tools
 uv tool install rust-just         # installs just (command runner) globally
+just install-hooks                # installs the commit message hook
+```
+
+### Commit Messages
+
+Commit messages use Conventional Commits so release notes can be generated from
+Git history. The local `commit-msg` hook validates messages after running
+`just install-hooks`.
+
+Use:
+
+```text
+type: subject
+type(scope): subject
+type!: breaking subject
+```
+
+Allowed types are `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`,
+`ci`, `chore`, and `release`.
+
+Examples:
+
+```text
+feat: add pypi publishing workflow
+fix(http): normalize localhost base urls
+docs: add examples env setup
 ```
 
 ### Tasks
