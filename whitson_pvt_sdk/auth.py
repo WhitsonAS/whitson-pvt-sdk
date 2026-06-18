@@ -7,7 +7,7 @@ from .shared.models import ClientCredentials, TokenData
 
 _MIN_TOKEN_LIFETIME = 300
 _DEFAULT_AUTH0_DOMAIN = "whitson.eu.auth0.com"
-_DEFAULT_AUDIENCE = "https://pvt.whitson.com/external"
+_DEFAULT_AUDIENCE = "https://internal.whitson.com/"
 
 
 class TokenManager:
