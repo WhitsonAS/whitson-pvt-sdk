@@ -47,6 +47,8 @@ if TYPE_CHECKING:
         SampleToEosSlateConversionCalculationResponseModel,
         SaturationPressureCalculationRequestModel,
         SaturationPressureCalculationResponseModel,
+        SeparatorProcessCalculationRequestModel,
+        SeparatorProcessCalculationResponseModel,
         UpdateRegionModel,
         UpdateSampleListModel,
         UpdateSampleModel,
@@ -200,3 +202,8 @@ class Calculations:
         self, data: SaturationPressureCalculationRequestModel
     ) -> SaturationPressureCalculationResponseModel:
         return calculations.calculate_saturation_pressure(self._transport, data)
+
+    def calculate_separator_process(
+        self, data: SeparatorProcessCalculationRequestModel
+    ) -> SeparatorProcessCalculationResponseModel:
+        return calculations.calculate_separator_process(self._transport, data)

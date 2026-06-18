@@ -10,6 +10,8 @@ from ...v2.models import (
     SampleToEosSlateConversionCalculationResponseModel,
     SaturationPressureCalculationRequestModel,
     SaturationPressureCalculationResponseModel,
+    SeparatorProcessCalculationRequestModel,
+    SeparatorProcessCalculationResponseModel,
 )
 
 
@@ -52,3 +54,12 @@ def calculate_saturation_pressure(
         "/calculations/saturation-pressure", body=data.model_dump(exclude_unset=True)
     )
     return SaturationPressureCalculationResponseModel.model_validate(body)
+
+
+def calculate_separator_process(
+    transport: HTTPTransport, data: SeparatorProcessCalculationRequestModel
+) -> SeparatorProcessCalculationResponseModel:
+    body = transport.post(
+        "/calculations/separator-process", body=data.model_dump(exclude_unset=True)
+    )
+    return SeparatorProcessCalculationResponseModel.model_validate(body)

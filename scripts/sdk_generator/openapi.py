@@ -1,20 +1,93 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, cast
 from urllib.request import urlopen
+
+from datamodel_code_generator.parser.base import title_to_class_name
 
 from sdk_generator.config import EXCLUDED_RESOURCES, HTTP_METHODS, OVERRIDES
 from sdk_generator.models import BodyKind, Endpoint, EndpointParam, Version
 from sdk_generator.naming import singular, to_snake
 
+JsonObject = dict[str, Any]
 
-def load_openapi(version: str, openapi_path: Path | None, base_url: str) -> dict[str, Any]:
+SCHEMA_REF_PREFIX = "#/components/schemas/"
+
+
+def load_openapi(
+    version: str,
+    openapi_path: Path | None,
+    base_url: str,
+) -> JsonObject:
     if openapi_path:
-        return json.loads(openapi_path.read_text())
+        spec = json.loads(openapi_path.read_text())
+        return normalize_schema_titles(spec)
 
     url = f"{base_url.rstrip('/')}/{version}/docs/openapi.json"
     with urlopen(url, timeout=30) as response:
-        return json.loads(response.read().decode())
+        spec = json.loads(response.read().decode())
+        return normalize_schema_titles(spec)
+
+
+def normalize_schema_titles(spec: JsonObject) -> JsonObject:
+    normalized = deepcopy(spec)
+    components = normalized.get("components")
+    if not isinstance(components, dict):
+        return normalized
+    raw_schemas = components.get("schemas")
+    if not isinstance(raw_schemas, dict):
+        return normalized
+    schemas = cast(dict[str, Any], raw_schemas)
+
+    renames: dict[str, str] = {}
+    for name, schema in list(schemas.items()):
+        if not isinstance(schema, dict):
+            continue
+        title = schema.get("title")
+        if not isinstance(title, str):
+            continue
+        schema_name = schema_name_from_title(title)
+        if schema_name == name:
+            continue
+        if schema_name in schemas and schemas[schema_name] != schema:
+            continue
+        if schema_name in schemas:
+            del schemas[name]
+        else:
+            schemas[schema_name] = schemas.pop(name)
+        renames[name] = schema_name
+
+    rewrite_schema_refs(normalized, renames)
+    return normalized
+
+
+def rewrite_schema_refs(value: Any, renames: dict[str, str]) -> None:
+    if isinstance(value, dict):
+        ref = value.get("$ref")
+        if isinstance(ref, str):
+            value["$ref"] = rename_schema_ref(ref, renames)
+        for child in value.values():
+            rewrite_schema_refs(child, renames)
+    elif isinstance(value, list):
+        for child in value:
+            rewrite_schema_refs(child, renames)
+
+
+def schema_name_from_title(title: str) -> str:
+    if title.isidentifier():
+        return title
+    return title_to_class_name(title)
+
+
+def rename_schema_ref(ref: str, renames: dict[str, str]) -> str:
+    name = ref.removeprefix(SCHEMA_REF_PREFIX)
+    if name == ref:
+        return ref
+
+    while name in renames:
+        name = renames[name]
+    return f"{SCHEMA_REF_PREFIX}{name}"
 
 
 def parse_endpoints(version: str, spec: dict[str, Any]) -> list[Endpoint]:

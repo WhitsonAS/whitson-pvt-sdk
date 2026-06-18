@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from sdk_generator.generate import detect_collisions
 from sdk_generator.models import (
@@ -12,6 +14,8 @@ from sdk_generator.openapi import (
     infer_function_name,
     infer_public_method_name,
     infer_resource,
+    load_openapi,
+    normalize_schema_titles,
     parse_endpoints,
     parse_params,
     schema_ref_name,
@@ -88,6 +92,172 @@ def test_schema_ref_name_array_items():
 def test_schema_ref_name_none():
     assert schema_ref_name(None) is None
     assert schema_ref_name({}) is None
+
+
+def test_normalize_schema_titles_renames_components_and_refs():
+    spec = {
+        "openapi": "3.1.0",
+        "info": {"title": "test", "version": "1"},
+        "paths": {
+            "/calculations/flash": {
+                "post": {
+                    "operationId": "run_flash",
+                    "tags": ["calculations"],
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": (
+                                        "#/components/schemas/"
+                                        "ExternalFlashCalculationInputModel"
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": (
+                                            "#/components/schemas/"
+                                            "ExternalFlashCalculationResponseModel"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "ExternalFlashCalculationInputModel": {
+                    "type": "object",
+                    "title": "Flash Calculation Input Model",
+                    "properties": {
+                        "sample": {"$ref": "#/components/schemas/ExternalCreateSampleModel"}
+                    },
+                },
+                "ExternalFlashCalculationResponseModel": {
+                    "type": "object",
+                    "title": "Flash Calculation Response Model",
+                },
+                "CreateSampleModel": {
+                    "type": "object",
+                    "title": "CreateSampleModel",
+                    "properties": {"name": {"type": "string"}},
+                },
+                "ExternalCreateSampleModel": {
+                    "type": "object",
+                    "title": "CreateSampleModel",
+                    "properties": {"name": {"type": "string"}},
+                },
+            }
+        },
+    }
+
+    normalized = normalize_schema_titles(spec)
+    schemas = normalized["components"]["schemas"]
+
+    assert "ExternalFlashCalculationInputModel" not in schemas
+    assert "FlashCalculationInputModel" in schemas
+    assert "ExternalCreateSampleModel" not in schemas
+    assert "CreateSampleModel" in schemas
+    assert (
+        normalized["paths"]["/calculations/flash"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]["$ref"]
+        == "#/components/schemas/FlashCalculationInputModel"
+    )
+    assert (
+        schemas["FlashCalculationInputModel"]["properties"]["sample"]["$ref"]
+        == "#/components/schemas/CreateSampleModel"
+    )
+    assert "ExternalFlashCalculationInputModel" in spec["components"]["schemas"]
+
+
+def test_load_openapi_normalizes_schema_titles(tmp_path):
+    spec = {
+        "openapi": "3.1.0",
+        "info": {"title": "test", "version": "1"},
+        "paths": {},
+        "components": {
+            "schemas": {
+                "ExternalFlashCalculationInputModel": {
+                    "type": "object",
+                    "title": "Flash Calculation Input Model",
+                }
+            }
+        },
+    }
+    openapi_path = tmp_path / "openapi.json"
+    openapi_path.write_text(json.dumps(spec))
+
+    normalized = load_openapi("v2", openapi_path, "http://localhost:4000/external")
+
+    assert "ExternalFlashCalculationInputModel" not in normalized["components"]["schemas"]
+    assert "FlashCalculationInputModel" in normalized["components"]["schemas"]
+
+
+def test_parse_endpoints_uses_normalized_schema_titles():
+    spec = normalize_schema_titles(
+        {
+            "paths": {
+                "/calculations/flash": {
+                    "post": {
+                        "operationId": "run_flash",
+                        "tags": ["calculations"],
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": (
+                                            "#/components/schemas/"
+                                            "ExternalFlashCalculationInputModel"
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {
+                            "200": {
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "$ref": (
+                                                "#/components/schemas/"
+                                                "ExternalFlashCalculationResponseModel"
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "ExternalFlashCalculationInputModel": {
+                        "type": "object",
+                        "title": "Flash Calculation Input Model",
+                    },
+                    "ExternalFlashCalculationResponseModel": {
+                        "type": "object",
+                        "title": "Flash Calculation Response Model",
+                    },
+                }
+            },
+        }
+    )
+
+    endpoints = parse_endpoints("v2", spec)
+
+    assert endpoints[0].request_model == "FlashCalculationInputModel"
+    assert endpoints[0].response_model == "FlashCalculationResponseModel"
 
 
 # ── resource inference ──

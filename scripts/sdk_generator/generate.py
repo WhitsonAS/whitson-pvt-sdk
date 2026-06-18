@@ -70,7 +70,7 @@ def generate_models(
 ) -> None:
     output = GENERATED_DIR / version / "models.py"
     if check:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=output.parent) as tmp:
             target = Path(tmp) / "models.py"
             generate_model_file(
                 version,
@@ -117,9 +117,23 @@ def generate_model_file(
         use_annotated=True,
         field_constraints=True,
         enum_field_as_literal=LiteralType.All,
+        use_title_as_name=True,
         formatters=[Formatter.RUFF_CHECK, Formatter.RUFF_FORMAT],
+        disable_timestamp=True,
     )
-    generate(json.dumps(spec), config=config)
+    generate(json.dumps(strip_schema_titles(spec)), config=config)
+
+
+def strip_schema_titles(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: strip_schema_titles(child)
+            for key, child in value.items()
+            if key != "title"
+        }
+    if isinstance(value, list):
+        return [strip_schema_titles(child) for child in value]
+    return value
 
 
 def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> None:
