@@ -47,6 +47,7 @@ test-cov:
 
 # ── build ─────────────────────────────────────────────────────────
 build:
+    rm -rf dist
     uv build
 
 publish-check: build
