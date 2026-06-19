@@ -52,9 +52,13 @@ build:
 publish-check: build
     uvx twine check dist/*
 
+release-notes version='':
+    uv run python scripts/release_notes.py {{version}}
+
 # Create a GitHub Release; publishing to PyPI is handled by GitHub Actions.
 release version:
-    gh release create v{{version}} --title "v{{version}}" --notes "Release v{{version}}"
+    uv run python scripts/release_notes.py {{version}} > /tmp/whitson-pvt-sdk-release-notes.md
+    gh release create v{{version}} --title "v{{version}}" --notes-file /tmp/whitson-pvt-sdk-release-notes.md
 
 # ── run all ───────────────────────────────────────────────────────
 all: generate-all lint-fix format ty build

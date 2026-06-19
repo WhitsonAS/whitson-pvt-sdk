@@ -1,5 +1,7 @@
 # whitson PVT SDK
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 HTTP client for the whitson PVT external API. Python 3.10+.
 
 ## Install
@@ -165,13 +167,20 @@ just test
 just lint
 just ty
 just publish-check
+just release-notes 0.1.1
 ```
 
-Create the GitHub Release with:
+`just release-notes` generates deterministic Markdown from Conventional Commits
+since the previous Git tag. Create the GitHub Release with:
 
 ```bash
 just release 0.1.1
 ```
+
+The release recipe writes generated notes to a temporary file and passes them to
+`gh release create`. Publishing to PyPI starts when the GitHub Release is
+published. The GitHub CLI must be authenticated with release permissions; use
+`gh auth login` and `gh auth status` to set up and verify access.
 
 ### Code generation
 
@@ -207,3 +216,7 @@ whitson_pvt_sdk/
 ├── v1/                      # public v1 client/resources/model re-exports
 └── v2/                      # public v2 client/resources/model re-exports
 ```
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

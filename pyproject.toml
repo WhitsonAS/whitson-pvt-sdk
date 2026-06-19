@@ -3,6 +3,7 @@ name = "whitson-pvt-sdk"
 version = "0.1.0"
 description = "whitson PVT SDK — HTTP client for the whitson PVT external API"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.28.0", "pydantic>=2.12.0"]
 
