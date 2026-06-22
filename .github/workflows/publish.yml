@@ -41,7 +41,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Validate release request
         run: |
