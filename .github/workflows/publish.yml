@@ -1,20 +1,36 @@
 name: Publish Python Package
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, without a leading v
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
+  id-token: write
 
 jobs:
-  build:
-    name: Build distribution
+  release:
+    name: Release to PyPI
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/whitson-pvt-sdk
+    env:
+      VERSION: ${{ inputs.version }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0
@@ -24,34 +40,47 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Build distributions
-        run: uv build
+      - name: Install just
+        uses: extractions/setup-just@v3
 
-      - name: Check distributions
-        run: uvx twine check dist/*
+      - name: Validate release request
+        run: |
+          test "${GITHUB_REF}" = "refs/heads/main"
+          case "${VERSION}" in
+            v*) echo "Use version without a leading v" >&2; exit 1 ;;
+          esac
+          git fetch --tags --force
+          ! git rev-parse --verify --quiet "refs/tags/v${VERSION}"
 
-      - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: python-package-distributions
-          path: dist/
+      - name: Bump package version
+        run: |
+          uv version "${VERSION}"
+          uv run python scripts/check_version.py "${VERSION}"
 
-  publish-to-pypi:
-    name: Publish to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/whitson-pvt-sdk
-    permissions:
-      id-token: write
+      - name: Run release checks
+        run: just prepare-release
 
-    steps:
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: python-package-distributions
-          path: dist/
+      - name: Commit release version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml uv.lock
+          if git diff --cached --quiet; then
+            echo "Version files already match v${VERSION}"
+          else
+            git commit -m "release: prepare v${VERSION}"
+            git push origin HEAD:main
+          fi
+
+      - name: Create GitHub release
+        run: |
+          uv run python scripts/release_notes.py "${VERSION}" > /tmp/whitson-pvt-sdk-release-notes.md
+          gh release create "v${VERSION}" \
+            --target "$(git rev-parse HEAD)" \
+            --title "v${VERSION}" \
+            --notes-file /tmp/whitson-pvt-sdk-release-notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

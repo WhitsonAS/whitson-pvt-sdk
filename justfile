@@ -53,21 +53,14 @@ build:
 publish-check: build
     uvx twine check dist/*
 
-bump-version version:
-    uv version {{version}}
-
-prepare-release version: (bump-version version) test lint ty publish-check
+prepare-release version='': test lint ty publish-check
 
 release-notes version='':
     uv run python scripts/release_notes.py {{version}}
 
-# Create a GitHub Release from the committed package version; publishing to PyPI is handled by GitHub Actions.
+# Dispatch the GitHub release workflow; CI bumps, validates, tags, releases, and publishes.
 release version:
-    git diff --quiet
-    git diff --cached --quiet
-    uv run python scripts/check_version.py {{version}}
-    uv run python scripts/release_notes.py {{version}} > /tmp/whitson-pvt-sdk-release-notes.md
-    gh release create v{{version}} --title "v{{version}}" --notes-file /tmp/whitson-pvt-sdk-release-notes.md
+    gh workflow run publish.yml --ref main -f version={{version}}
 
 # ── run all ───────────────────────────────────────────────────────
 all: generate-all lint-fix format ty build
