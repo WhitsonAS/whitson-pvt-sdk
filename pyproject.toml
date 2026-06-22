@@ -4,8 +4,15 @@ version = "1.0.1"
 description = "whitson PVT SDK — HTTP client for the whitson PVT external API"
 readme = "README.md"
 license = "Apache-2.0"
+authors = [{ name = "Whitson AS" }]
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.28.0", "pydantic>=2.12.0"]
+
+[project.urls]
+Homepage = "https://github.com/WhitsonAS/whitson-pvt-sdk"
+Repository = "https://github.com/WhitsonAS/whitson-pvt-sdk"
+Examples = "https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/examples"
+License = "https://github.com/WhitsonAS/whitson-pvt-sdk/blob/main/LICENSE"
 
 [build-system]
 requires = ["uv_build>=0.11.9,<0.12"]
