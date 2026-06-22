@@ -2,6 +2,8 @@
 
 Self-contained scripts demonstrating common use of the whitson PVT SDK.
 
+License: [Apache-2.0](https://github.com/WhitsonAS/whitson-pvt-sdk/blob/main/LICENSE)
+
 ## Prerequisites
 
 - Python 3.10+

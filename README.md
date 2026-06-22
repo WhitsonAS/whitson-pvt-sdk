@@ -1,6 +1,6 @@
 # whitson PVT SDK
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/WhitsonAS/whitson-pvt-sdk/blob/main/LICENSE)
 
 HTTP client for the whitson PVT external API. Python 3.10+.
 
@@ -96,6 +96,8 @@ page = client.regions.list(cursor=page.pagination.next_cursor)
 ```
 
 Limit defaults to the API default (usually 20) when omitted.
+
+More runnable examples are available in [examples](https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/examples).
 
 ## Development
 
@@ -220,4 +222,4 @@ whitson_pvt_sdk/
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/WhitsonAS/whitson-pvt-sdk/blob/main/LICENSE).
