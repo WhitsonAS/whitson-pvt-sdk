@@ -56,8 +56,6 @@ class DomainAuthConfig(BaseModel):
     base_url: str
     client_id: str
     client_secret: str
-    auth0_domain: str | None = None
-    audience: str | None = None
     version: str = "v2"
 
 
@@ -73,8 +71,6 @@ class TargetDomainConfig(BaseModel):
     base_url: str
     client_id: str
     client_secret: str
-    auth0_domain: str | None = None
-    audience: str | None = None
     version: str = "v2"
 
 

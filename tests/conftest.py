@@ -13,14 +13,27 @@ def credentials() -> ClientCredentials:
 
 @pytest.fixture
 def base_url() -> str:
-    return "https://pvt.whitson.com"
+    return "https://dev.pvt.whitson.com"
 
 
 @pytest.fixture
 def auth_mock(httpx_mock: Any) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://whitson.eu.auth0.com/oauth/token",
+        url="https://dev.pvt.whitson.com/external/v2/auth/token",
+        json={
+            "access_token": "test-token",
+            "expires_in": 86400,
+            "token_type": "Bearer",
+        },
+    )
+
+
+@pytest.fixture
+def auth_mock_v1(httpx_mock: Any) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://dev.pvt.whitson.com/external/v1/auth/token",
         json={
             "access_token": "test-token",
             "expires_in": 86400,
@@ -41,5 +54,5 @@ def transport(
 def transport_v1(
     credentials: ClientCredentials, base_url: str, request: pytest.FixtureRequest
 ) -> HTTPTransport:
-    request.getfixturevalue("auth_mock")
+    request.getfixturevalue("auth_mock_v1")
     return HTTPTransport(credentials, base_url, version="v1")

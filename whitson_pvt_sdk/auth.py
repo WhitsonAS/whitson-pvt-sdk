@@ -6,15 +6,16 @@ from .errors import AuthError
 from .shared.models import ClientCredentials, TokenData
 
 _MIN_TOKEN_LIFETIME = 300
-_DEFAULT_AUTH0_DOMAIN = "whitson.eu.auth0.com"
-_DEFAULT_AUDIENCE = "https://internal.whitson.com/"
 
 
 class TokenManager:
     """Manages M2M token exchange and in-memory caching.
 
     Usage:
-        manager = TokenManager(ClientCredentials(client_id="...", client_secret="..."))
+        manager = TokenManager(
+            ClientCredentials(client_id="...", client_secret="..."),
+            token_url="https://.../external/v2/auth/token",
+        )
         token = manager.get_token()
     """
 
@@ -22,12 +23,10 @@ class TokenManager:
         self,
         credentials: ClientCredentials,
         *,
-        auth0_domain: str = _DEFAULT_AUTH0_DOMAIN,
-        audience: str = _DEFAULT_AUDIENCE,
+        token_url: str,
     ) -> None:
         self._credentials = credentials
-        self._auth0_domain = auth0_domain
-        self._audience = audience
+        self._token_url = token_url
         self._cached_access_token: str | None = None
         self._cached_expires_at: float = 0.0
 
@@ -42,12 +41,10 @@ class TokenManager:
     def _exchange(self) -> str:
         try:
             resp = httpx.post(
-                f"https://{self._auth0_domain}/oauth/token",
+                self._token_url,
                 json={
                     "client_id": self._credentials.client_id,
                     "client_secret": self._credentials.client_secret,
-                    "audience": self._audience,
-                    "grant_type": "client_credentials",
                 },
                 timeout=10,
             )

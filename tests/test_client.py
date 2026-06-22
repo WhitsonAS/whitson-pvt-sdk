@@ -102,19 +102,13 @@ def test_unknown_version_raises_value_error(credentials, base_url):
             WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v3")
 
 
-def test_passes_auth0_overrides(credentials, base_url):
+def test_passes_api_token_url_by_default(credentials, base_url):
     with patch("whitson_pvt_sdk.http.TokenManager") as mock:
         mock.return_value.get_token.return_value = "fake-token"
-        WhitsonPVTClient(
-            credentials=credentials,
-            base_url=base_url,
-            auth0_domain="custom.auth0.com",
-            audience="https://custom.api",
-        )
+        WhitsonPVTClient(credentials=credentials, base_url=base_url)
     mock.assert_called_once_with(
         credentials,
-        auth0_domain="custom.auth0.com",
-        audience="https://custom.api",
+        token_url="https://dev.pvt.whitson.com/external/v2/auth/token",
     )
 
 

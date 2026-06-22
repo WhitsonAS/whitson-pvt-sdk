@@ -12,7 +12,7 @@ def make_region_json(name="Test Region", **kwargs):
 
 def test_list_regions_returns_paginated_model(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/regions",
+        url="https://dev.pvt.whitson.com/external/v2/regions",
         json={
             "regions": [make_region_json(name="R1")],
             "pagination": {"next_cursor": "nxt", "prev_cursor": None},
@@ -27,7 +27,7 @@ def test_list_regions_returns_paginated_model(transport, httpx_mock):
 
 def test_list_regions_pagination_with_both_cursors(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/regions",
+        url="https://dev.pvt.whitson.com/external/v2/regions",
         json={
             "regions": [],
             "pagination": {"next_cursor": "nxt", "prev_cursor": "prv"},
@@ -40,7 +40,7 @@ def test_list_regions_pagination_with_both_cursors(transport, httpx_mock):
 
 def test_list_regions_passes_cursor(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/regions?cursor=nxt&limit=25",
+        url="https://dev.pvt.whitson.com/external/v2/regions?cursor=nxt&limit=25",
         json={
             "regions": [],
             "pagination": {"next_cursor": None, "prev_cursor": "prv"},
@@ -52,7 +52,7 @@ def test_list_regions_passes_cursor(transport, httpx_mock):
 
 def test_get_region_v2(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/regions/1",
+        url="https://dev.pvt.whitson.com/external/v2/regions/1",
         json=make_region_json(),
     )
     result = Regions(transport).get(1)
@@ -62,7 +62,7 @@ def test_get_region_v2(transport, httpx_mock):
 def test_create_region_v2_excludes_unset(transport, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v2/regions",
+        url="https://dev.pvt.whitson.com/external/v2/regions",
         json=make_region_json(name="New"),
     )
     result = Regions(transport).create(
@@ -78,7 +78,7 @@ def test_create_region_v2_excludes_unset(transport, httpx_mock):
 def test_update_region_v2_excludes_unset(transport, httpx_mock):
     httpx_mock.add_response(
         method="PUT",
-        url="https://pvt.whitson.com/external/v2/regions/1",
+        url="https://dev.pvt.whitson.com/external/v2/regions/1",
         json=make_region_json(id=1, name="Updated"),
     )
     result = Regions(transport).update(1, UpdateRegionModel(name="Updated"))

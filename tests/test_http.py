@@ -24,38 +24,44 @@ def recorded_sleeps(monkeypatch):
 
 @pytest.mark.usefixtures("auth_mock")
 def test_strips_trailing_slash_from_base_url(httpx_mock):
-    httpx_mock.add_response(url="https://pvt.whitson.com/external/v2/test", json={})
+    httpx_mock.add_response(url="https://dev.pvt.whitson.com/external/v2/test", json={})
     t = HTTPTransport(
         ClientCredentials(client_id="id", client_secret="secret"),
-        "https://pvt.whitson.com/",
+        "https://dev.pvt.whitson.com/",
         version="v2",
     )
     t.get("/test")
     req = httpx_mock.get_requests()[-1]
-    assert str(req.url) == "https://pvt.whitson.com/external/v2/test"
+    assert str(req.url) == "https://dev.pvt.whitson.com/external/v2/test"
 
 
-@pytest.mark.usefixtures("auth_mock")
+@pytest.mark.usefixtures("auth_mock_v1")
 def test_includes_version_in_base_url(httpx_mock):
-    httpx_mock.add_response(url="https://pvt.whitson.com/external/v1/test", json={})
+    httpx_mock.add_response(url="https://dev.pvt.whitson.com/external/v1/test", json={})
     t = HTTPTransport(
         ClientCredentials(client_id="id", client_secret="secret"),
-        "https://pvt.whitson.com",
+        "https://dev.pvt.whitson.com",
         version="v1",
     )
     t.get("/test")
     req = httpx_mock.get_requests()[-1]
-    assert str(req.url) == "https://pvt.whitson.com/external/v1/test"
+    assert str(req.url) == "https://dev.pvt.whitson.com/external/v1/test"
 
 
 def test_get_returns_parsed_json(transport, httpx_mock):
-    httpx_mock.add_response(url="https://pvt.whitson.com/external/v2/regions", json={"regions": []})
+    httpx_mock.add_response(
+        url="https://dev.pvt.whitson.com/external/v2/regions",
+        json={"regions": []},
+    )
     result = transport.get("/regions")
     assert result == {"regions": []}
 
 
 def test_get_passes_query_params(transport, httpx_mock):
-    httpx_mock.add_response(url="https://pvt.whitson.com/external/v2/regions?cursor=abc", json={})
+    httpx_mock.add_response(
+        url="https://dev.pvt.whitson.com/external/v2/regions?cursor=abc",
+        json={},
+    )
     transport.get("/regions", params={"cursor": "abc"})
     req = httpx_mock.get_requests()[-1]
     assert req.url.query == b"cursor=abc"
@@ -63,7 +69,7 @@ def test_get_passes_query_params(transport, httpx_mock):
 
 def test_post_sends_json_body(transport, httpx_mock):
     httpx_mock.add_response(
-        method="POST", url="https://pvt.whitson.com/external/v2/regions", json={"id": 1}
+        method="POST", url="https://dev.pvt.whitson.com/external/v2/regions", json={"id": 1}
     )
     result = transport.post("/regions", body={"name": "test"})
     assert result == {"id": 1}
@@ -73,7 +79,7 @@ def test_post_sends_json_body(transport, httpx_mock):
 
 def test_put_sends_json_body(transport, httpx_mock):
     httpx_mock.add_response(
-        method="PUT", url="https://pvt.whitson.com/external/v2/regions/1", json={"id": 1}
+        method="PUT", url="https://dev.pvt.whitson.com/external/v2/regions/1", json={"id": 1}
     )
     result = transport.put("/regions/1", body={"name": "updated"})
     assert result == {"id": 1}
@@ -81,7 +87,7 @@ def test_put_sends_json_body(transport, httpx_mock):
 
 def test_get_bytes_returns_raw_bytes(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/reports/1/export",
+        url="https://dev.pvt.whitson.com/external/v2/reports/1/export",
         content=b"binary-data",
     )
     result = transport.get_bytes("/reports/1/export")
@@ -91,7 +97,7 @@ def test_get_bytes_returns_raw_bytes(transport, httpx_mock):
 def test_post_multipart_sends_files_and_data(transport, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v2/reports/import",
+        url="https://dev.pvt.whitson.com/external/v2/reports/import",
         json={"ok": True},
     )
     result = transport.post_multipart(
@@ -104,7 +110,7 @@ def test_post_multipart_sends_files_and_data(transport, httpx_mock):
 
 def test_401_raises_auth_error(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/test",
+        url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=401,
         json={"message": "Unauthorized"},
     )
@@ -114,7 +120,7 @@ def test_401_raises_auth_error(transport, httpx_mock):
 
 def test_403_raises_auth_error(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/test",
+        url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=403,
         json={"message": "Forbidden"},
     )
@@ -124,7 +130,7 @@ def test_403_raises_auth_error(transport, httpx_mock):
 
 def test_404_raises_not_found_error(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/test",
+        url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=404,
         json={"message": "Not found"},
     )
@@ -134,7 +140,7 @@ def test_404_raises_not_found_error(transport, httpx_mock):
 
 def test_400_raises_validation_error(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/test",
+        url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=400,
         json={"message": "Bad request"},
     )
@@ -144,7 +150,7 @@ def test_400_raises_validation_error(transport, httpx_mock):
 
 def test_422_raises_validation_error(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/test",
+        url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=422,
         json={"message": "Validation failed"},
     )
@@ -156,7 +162,7 @@ def test_422_raises_validation_error(transport, httpx_mock):
 def test_500_raises_api_error_with_status_code(transport, httpx_mock):
     for _ in range(3):
         httpx_mock.add_response(
-            url="https://pvt.whitson.com/external/v2/test",
+            url="https://dev.pvt.whitson.com/external/v2/test",
             status_code=500,
             json={"message": "Internal error"},
         )
@@ -167,7 +173,7 @@ def test_500_raises_api_error_with_status_code(transport, httpx_mock):
 
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_get_retries_500_then_succeeds(transport, httpx_mock):
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(url=url, status_code=500, json={"message": "Try again"})
     httpx_mock.add_response(url=url, json={"ok": True})
 
@@ -176,7 +182,7 @@ def test_get_retries_500_then_succeeds(transport, httpx_mock):
 
 
 def test_get_retries_429_then_succeeds(transport, httpx_mock, recorded_sleeps):
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(
         url=url,
         status_code=429,
@@ -191,7 +197,7 @@ def test_get_retries_429_then_succeeds(transport, httpx_mock, recorded_sleeps):
 
 
 def test_retry_uses_retry_after_ms(transport, httpx_mock, recorded_sleeps):
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(
         url=url,
         status_code=429,
@@ -206,7 +212,7 @@ def test_retry_uses_retry_after_ms(transport, httpx_mock, recorded_sleeps):
 
 def test_retry_uses_http_date_retry_after(transport, httpx_mock, monkeypatch, recorded_sleeps):
     monkeypatch.setattr("whitson_pvt_sdk.http.time.time", lambda: 1_700_000_000)
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(
         url=url,
         status_code=429,
@@ -221,7 +227,7 @@ def test_retry_uses_http_date_retry_after(transport, httpx_mock, monkeypatch, re
 
 def test_retry_uses_rate_limit_reset(transport, httpx_mock, monkeypatch, recorded_sleeps):
     monkeypatch.setattr("whitson_pvt_sdk.http.time.time", lambda: 1_700_000_000)
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(
         url=url,
         status_code=429,
@@ -236,7 +242,7 @@ def test_retry_uses_rate_limit_reset(transport, httpx_mock, monkeypatch, recorde
 
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_get_retries_timeout_then_succeeds(transport, httpx_mock):
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_exception(httpx.TimeoutException("Timed out"), url=url)
     httpx_mock.add_response(url=url, json={"ok": True})
 
@@ -246,7 +252,7 @@ def test_get_retries_timeout_then_succeeds(transport, httpx_mock):
 
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_get_final_retryable_status_raises_api_error(transport, httpx_mock):
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     for _ in range(3):
         httpx_mock.add_response(url=url, status_code=503, json={"message": "Unavailable"})
 
@@ -259,7 +265,7 @@ def test_get_final_retryable_status_raises_api_error(transport, httpx_mock):
 
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_post_does_not_retry_500_by_default(transport, httpx_mock):
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(
         method="POST", url=url, status_code=500, json={"message": "Internal error"}
     )
@@ -273,7 +279,7 @@ def test_post_does_not_retry_500_by_default(transport, httpx_mock):
 
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_get_bytes_retries_502_then_succeeds(transport, httpx_mock):
-    url = "https://pvt.whitson.com/external/v2/reports/1/export"
+    url = "https://dev.pvt.whitson.com/external/v2/reports/1/export"
     httpx_mock.add_response(url=url, status_code=502, text="Bad gateway")
     httpx_mock.add_response(url=url, content=b"binary-data")
 
@@ -292,7 +298,7 @@ def test_retry_config_max_attempts_one_disables_retries(
         version="v2",
         retry_config=RetryConfig(max_attempts=1),
     )
-    url = "https://pvt.whitson.com/external/v2/test"
+    url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(url=url, status_code=503, json={"message": "Unavailable"})
 
     with pytest.raises(APIError, match="Unavailable"):
@@ -311,7 +317,7 @@ def test_timeout_configures_default_http_timeout(credentials, base_url):
 def test_file_timeout_configures_download_timeout(credentials, base_url, httpx_mock):
     transport = HTTPTransport(credentials, base_url, version="v2", file_timeout=19.5)
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/reports/1/export",
+        url="https://dev.pvt.whitson.com/external/v2/reports/1/export",
         content=b"binary-data",
     )
 
@@ -321,7 +327,7 @@ def test_file_timeout_configures_download_timeout(credentials, base_url, httpx_m
 
 def test_uses_response_text_when_no_message_field(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/test",
+        url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=400,
         text="plain text error",
     )
@@ -333,7 +339,7 @@ def test_uses_response_text_when_no_message_field(transport, httpx_mock):
 def test_falls_back_to_http_code_when_body_empty(transport, httpx_mock):
     for _ in range(3):
         httpx_mock.add_response(
-            url="https://pvt.whitson.com/external/v2/test",
+            url="https://dev.pvt.whitson.com/external/v2/test",
             status_code=502,
             content=b"",
         )
@@ -343,6 +349,6 @@ def test_falls_back_to_http_code_when_body_empty(transport, httpx_mock):
 
 
 def test_context_manager_enter_exit(credentials):
-    t = HTTPTransport(credentials, "https://pvt.whitson.com")
+    t = HTTPTransport(credentials, "https://dev.pvt.whitson.com")
     with t as transport:
         assert transport is t

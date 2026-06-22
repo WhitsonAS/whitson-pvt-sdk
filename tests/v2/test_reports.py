@@ -5,7 +5,7 @@ from whitson_pvt_sdk.v2.resources import Reports
 
 def test_export_report_v2(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/reports/1/export",
+        url="https://dev.pvt.whitson.com/external/v2/reports/1/export",
         content=b"data",
     )
     data, filename = Reports(transport).export(1)
@@ -16,7 +16,7 @@ def test_export_report_v2(transport, httpx_mock):
 def test_preflight_import_v2_model(transport, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v2/reports/import/preflight",
+        url="https://dev.pvt.whitson.com/external/v2/reports/import/preflight",
         json={
             "can_commit": True,
             "collisions": [],
@@ -32,7 +32,7 @@ def test_preflight_import_v2_model(transport, httpx_mock):
 def test_preflight_import_v2_sends_meta_data_json(transport, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v2/reports/import/preflight",
+        url="https://dev.pvt.whitson.com/external/v2/reports/import/preflight",
         json={
             "can_commit": True,
             "collisions": [],
@@ -55,7 +55,7 @@ def test_preflight_import_v2_sends_meta_data_json(transport, httpx_mock):
 def test_import_archive_v2(transport, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v2/reports/import",
+        url="https://dev.pvt.whitson.com/external/v2/reports/import",
         json={"created": {"regions": 1}, "id_map": {}, "reused": {}, "skipped": {}},
     )
     result = Reports(transport).import_archive(b"archive")

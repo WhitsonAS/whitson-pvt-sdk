@@ -34,19 +34,13 @@ class HTTPTransport:
         base_url: str,
         *,
         version: str = "v1",
-        auth0_domain: str | None = None,
-        audience: str | None = None,
         retry_config: RetryConfig | None = None,
         timeout: float = 30.0,
         file_timeout: float = 60.0,
     ) -> None:
-        token_kwargs: dict[str, str] = {}
-        if auth0_domain:
-            token_kwargs["auth0_domain"] = auth0_domain
-        if audience:
-            token_kwargs["audience"] = audience
+        token_url = f"{base_url.rstrip('/')}/external/{version}/auth/token"
 
-        self._token_manager = TokenManager(credentials, **token_kwargs)
+        self._token_manager = TokenManager(credentials, token_url=token_url)
         self._retry_config = retry_config or RetryConfig()
         self._file_timeout = file_timeout
         self._http = httpx.Client(

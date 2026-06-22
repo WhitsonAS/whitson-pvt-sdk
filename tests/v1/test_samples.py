@@ -15,7 +15,7 @@ def make_sample_json(**kwargs):
 
 def test_list_samples_returns_sample_list_model(transport_v1, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v1/wells/1",
+        url="https://dev.pvt.whitson.com/external/v1/wells/1",
         json={"samples": [make_sample_json(name="S1"), make_sample_json(id=2, name="S2")]},
     )
     result = Samples(transport_v1).list(1)
@@ -25,7 +25,7 @@ def test_list_samples_returns_sample_list_model(transport_v1, httpx_mock):
 
 def test_get_sample_returns_get_sample_model(transport_v1, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v1/samples/42",
+        url="https://dev.pvt.whitson.com/external/v1/samples/42",
         json=make_sample_json(id=42),
     )
     result = Samples(transport_v1).get(42)
@@ -36,7 +36,7 @@ def test_get_sample_returns_get_sample_model(transport_v1, httpx_mock):
 def test_create_sample_excludes_unset_fields(transport_v1, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v1/samples",
+        url="https://dev.pvt.whitson.com/external/v1/samples",
         json=make_sample_json(name="New Sample"),
     )
     data = CreateSampleModel(name="New Sample", fluid_type="Oil", type="REC", well_id=1)
@@ -47,7 +47,7 @@ def test_create_sample_excludes_unset_fields(transport_v1, httpx_mock):
 def test_create_samples_bulk_serializes_as_list(transport_v1, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v1/samples/bulk",
+        url="https://dev.pvt.whitson.com/external/v1/samples/bulk",
         json={"samples": [make_sample_json(id=1), make_sample_json(id=2)]},
     )
     data = CreateSampleListModel.model_validate(
@@ -68,7 +68,7 @@ def test_create_samples_bulk_serializes_as_list(transport_v1, httpx_mock):
 def test_update_sample_excludes_unset_fields(transport_v1, httpx_mock):
     httpx_mock.add_response(
         method="PUT",
-        url="https://pvt.whitson.com/external/v1/samples/1",
+        url="https://dev.pvt.whitson.com/external/v1/samples/1",
         json=make_sample_json(id=1, name="Updated"),
     )
     data = UpdateSampleModel(name="Updated")
@@ -79,7 +79,7 @@ def test_update_sample_excludes_unset_fields(transport_v1, httpx_mock):
 def test_update_samples_bulk_serializes_as_list(transport_v1, httpx_mock):
     httpx_mock.add_response(
         method="PUT",
-        url="https://pvt.whitson.com/external/v1/samples/bulk",
+        url="https://dev.pvt.whitson.com/external/v1/samples/bulk",
         json={"samples": [make_sample_json(id=1)]},
     )
     data = UpdateSampleListModel.model_validate([{"id": 1, "name": "U1"}])

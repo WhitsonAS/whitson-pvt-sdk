@@ -8,7 +8,7 @@ def make_sample_json(**kwargs):
 
 def test_list_samples_returns_sample_list_model(transport, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v2/wells/1",
+        url="https://dev.pvt.whitson.com/external/v2/wells/1",
         json={"samples": [make_sample_json(name="S1"), make_sample_json(id=2, name="S2")]},
     )
 

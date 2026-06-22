@@ -13,7 +13,7 @@ def make_region_json(name="Test Region", **kwargs):
 
 def test_list_regions_returns_regions_list_model(transport_v1, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v1/regions",
+        url="https://dev.pvt.whitson.com/external/v1/regions",
         json={"regions": [make_region_json(name="R1"), make_region_json(id=2, name="R2")]},
     )
     result = Regions(transport_v1).list()
@@ -25,7 +25,7 @@ def test_list_regions_returns_regions_list_model(transport_v1, httpx_mock):
 
 def test_get_region_returns_get_region_model(transport_v1, httpx_mock):
     httpx_mock.add_response(
-        url="https://pvt.whitson.com/external/v1/regions/42",
+        url="https://dev.pvt.whitson.com/external/v1/regions/42",
         json=make_region_json(id=42, name="My Region"),
     )
     result = Regions(transport_v1).get(42)
@@ -37,7 +37,7 @@ def test_get_region_returns_get_region_model(transport_v1, httpx_mock):
 def test_create_region_excludes_unset_fields(transport_v1, httpx_mock):
     httpx_mock.add_response(
         method="POST",
-        url="https://pvt.whitson.com/external/v1/regions",
+        url="https://dev.pvt.whitson.com/external/v1/regions",
         json=make_region_json(name="New Region"),
     )
     data = CreateRegionModel(
@@ -55,7 +55,7 @@ def test_create_region_excludes_unset_fields(transport_v1, httpx_mock):
 def test_update_region_excludes_unset_fields(transport_v1, httpx_mock):
     httpx_mock.add_response(
         method="PUT",
-        url="https://pvt.whitson.com/external/v1/regions/1",
+        url="https://dev.pvt.whitson.com/external/v1/regions/1",
         json=make_region_json(id=1, name="Renamed"),
     )
     data = UpdateRegionModel(name="Renamed")
