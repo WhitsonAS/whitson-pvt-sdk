@@ -25,14 +25,15 @@ uv run examples/basic_connect.py
 
 ## Examples
 
-| File               | Description                                                                  | Command                               |
-| ------------------ | ---------------------------------------------------------------------------- | ------------------------------------- |
-| `basic_connect.py` | Connect, list regions, iterate pagination, run an optional flash calculation | `uv run examples/basic_connect.py`    |
-| `basic_crud.py`    | Create, read, update a region with Pydantic models                           | `uv run examples/basic_crud.py`       |
-| `basic_reports.py` | Export a report to file, import/preflight                                    | `uv run examples/basic_reports.py`    |
-| `pagination.py`    | Walk all pages of a v2 paginated endpoint                                    | `uv run examples/pagination.py`       |
-| `cli_list.py`      | argparse CLI for listing resources                                           | `uv run examples/cli_list.py regions` |
-| `fastapi_demo.py`  | FastAPI app with SDK-backed routes                                           | `uv run examples/fastapi_demo.py`     |
+| File                   | Description                                        | Command                                  |
+| ---------------------- | -------------------------------------------------- | ---------------------------------------- |
+| `basic_connect.py`     | Connect, list regions, and iterate pagination      | `uv run examples/basic_connect.py`       |
+| `basic_crud.py`        | Create, read, update a region with Pydantic models | `uv run examples/basic_crud.py`          |
+| `flash_calculation.py` | Run a v2 flash calculation                         | `uv run examples/flash_calculation.py`   |
+| `report_import.py`     | Export a report archive and import with preflight  | `uv run examples/report_import.py`       |
+| `pagination.py`        | Walk all pages of a v2 paginated endpoint          | `uv run examples/pagination.py`          |
+| `cli_list.py`          | argparse CLI for listing resources                 | `uv run examples/cli_list.py regions`    |
+| `fastapi_demo.py`      | FastAPI app with SDK-backed routes                 | `uv run examples/fastapi_demo.py`        |
 
 ## Pagination (v2)
 

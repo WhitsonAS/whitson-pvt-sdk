@@ -1,9 +1,9 @@
-"""Export and import reports.
+"""Export a report archive and import it with preflight checks.
 
 Demonstrates:
 - Exporting a report to a local zip file
 - Running an import preflight check with options
-- Importing an archive with resolution options
+- Importing an archive with import options
 """
 
 import os
