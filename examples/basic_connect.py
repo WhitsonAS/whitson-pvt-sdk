@@ -13,8 +13,8 @@ import os
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2.models import (
-    ExternalCalculationCompositionEntryModel,
-    ExternalFlashCalculationInputModel,
+    CalculationCompositionEntryModel,
+    FlashCalculationInputModel,
     FlashCalculationRequestModel,
 )
 
@@ -52,15 +52,15 @@ def main() -> None:
             pressure_unit="bara",
             temperature_unit="C",
             inputs=[
-                ExternalFlashCalculationInputModel(
+                FlashCalculationInputModel(
                     pressure=200.0,
                     temperature=80.0,
                     feed_composition=[
-                        ExternalCalculationCompositionEntryModel(
+                        CalculationCompositionEntryModel(
                             component_name="C1",
                             molar_amount=0.9,
                         ),
-                        ExternalCalculationCompositionEntryModel(
+                        CalculationCompositionEntryModel(
                             component_name="C2",
                             molar_amount=0.1,
                         ),
