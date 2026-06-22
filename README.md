@@ -30,8 +30,9 @@ well = client.wells.get(well_id=123)
 sample = client.samples.get(sample_id=456)
 ```
 
-Authentication is handled automatically. If you need the same bearer token for an
-external integration, use the explicit token helper rather than an auth resource:
+Authentication is handled automatically through the external API token endpoint.
+If you need the same bearer token for an external integration,
+use the explicit token helper rather than an auth resource:
 
 ```python
 token = client.get_access_token()

@@ -38,16 +38,7 @@ client = WhitsonPVTClient(
 
 The SDK defaults to `version="v2"`. Do not pass `version` unless a different API version is explicitly needed. Use `version="v1"` only for legacy compatibility; v1 is deprecated and expected to be removed soon.
 
-Pass `auth0_domain` or `audience` only when the deployment requires non-default Auth0 settings:
-
-```python
-client = WhitsonPVTClient(
-    credentials=ClientCredentials(client_id="...", client_secret="..."),
-    base_url="https://internal.pvt.whitson.com",
-    auth0_domain="...",
-    audience="...",
-)
-```
+Authentication goes through the external API token endpoint by default. Do not pass provider-specific auth settings unless a non-standard deployment explicitly requires them.
 
 Authentication is handled automatically. If a caller needs the same bearer token
 for a non-SDK integration, use the explicit helper:

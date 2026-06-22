@@ -52,8 +52,8 @@ Limit defaults to the API default (usually 20) when omitted. Valid range: 1-250.
 
 ## Authentication Token
 
-The SDK handles bearer auth automatically. For integrations that need the same
-token outside SDK resource methods, use:
+The SDK handles bearer auth automatically through the external API token endpoint.
+For integrations that need the same token outside SDK resource methods, use:
 
 ```python
 token = client.get_access_token()
