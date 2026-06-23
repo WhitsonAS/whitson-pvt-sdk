@@ -16,9 +16,8 @@ def slate_to_slate_converted_feed_compositions(
         if isinstance(result, CalculationErrorResultModel):
             raise ValueError(f"Sample {sample_id} conversion failed: {result.error.message}")
 
-        conversion_result = result.result
-        component_names = conversion_result.component_names
-        mole_fractions = conversion_result.mole_fractions
+        component_names = result.result.component_names
+        mole_fractions = result.result.mole_fractions
 
         feed_compositions.append(
             [

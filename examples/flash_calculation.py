@@ -27,7 +27,7 @@ def main() -> None:
     )
 
     # Replace this with a valid fluid model id from your whitson PVT account.
-    fluid_model_id = int(os.environ.get("WHITSON_FLUID_MODEL_ID", "123"))
+    fluid_model_id = 123
     flash = client.calculations.calculate_flash(
         FlashCalculationRequestModel(
             fluid_model_id=fluid_model_id,
