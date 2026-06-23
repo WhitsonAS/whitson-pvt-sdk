@@ -84,8 +84,7 @@ def render_release_notes(subjects: list[str], *, previous: str | None, version: 
         section, message = parse_commit(subject)
         grouped[section].append(message)
 
-    title = f"# v{version}" if version else "# Release Notes"
-    lines = [title, ""]
+    lines: list[str] = []
     if previous:
         lines.extend([f"Changes since `{previous}`.", ""])
     else:

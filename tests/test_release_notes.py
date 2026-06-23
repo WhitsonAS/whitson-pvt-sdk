@@ -42,9 +42,7 @@ def test_render_release_notes_groups_sections_in_order():
         version="0.1.1",
     )
 
-    assert notes == """# v0.1.1
-
-Changes since `v0.1.0`.
+    assert notes == """Changes since `v0.1.0`.
 
 ## Features
 
@@ -61,9 +59,9 @@ Changes since `v0.1.0`.
 
 
 def test_render_release_notes_handles_empty_release():
-    assert render_release_notes([], previous="v0.1.0", version="0.1.1") == """# v0.1.1
+    notes = render_release_notes([], previous="v0.1.0", version="0.1.1")
 
-Changes since `v0.1.0`.
+    assert notes == """Changes since `v0.1.0`.
 
 No user-facing changes.
 """
