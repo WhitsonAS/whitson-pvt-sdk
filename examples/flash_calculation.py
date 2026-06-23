@@ -52,6 +52,12 @@ def main() -> None:
                     temperature=50.0,
                     feed_composition=feed_composition,
                 )
+                # Multiple inputs can be provided for multiple flash calculations. For example:
+                # FlashCalculationInputModel(
+                #     pressure=50.0,
+                #     temperature=50.0,
+                #     feed_composition=feed_composition[789],
+                # )
             ],
         )
     )

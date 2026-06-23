@@ -51,7 +51,11 @@ def main() -> None:
                 temperature_unit="C",
                 stages=[SurfaceProcessStageModel(pressure=50.0, temperature=50.0)],
             ),
-            inputs=[SeparatorProcessCalculationInputModel(feed_composition=feed_composition)],
+            inputs=[
+                SeparatorProcessCalculationInputModel(feed_composition=feed_composition)
+                # Multiple inputs can be provided for multiple separator process calculations:
+                # SeparatorProcessCalculationInputModel(feed_composition=feed_composition[789])
+            ],
         )
     )
 

@@ -50,6 +50,11 @@ def main() -> None:
                     temperature=50.0,
                     feed_composition=feed_composition,
                 )
+                # Multiple inputs can be provided for multiple saturation pressure calculations:
+                # SaturationPressureCalculationInputModel(
+                #     temperature=50.0,
+                #     feed_composition=feed_composition[789],
+                # )
             ],
         )
     )
