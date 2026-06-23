@@ -11,8 +11,8 @@ from whitson_pvt_sdk.v2.models import (
 def slate_to_slate_converted_feed_compositions(
     response: SampleToEosSlateConversionCalculationResponseModel,
     sample_ids: list[int],
-) -> list[list[CalculationCompositionEntryModel]]:
-    feed_compositions: list[list[CalculationCompositionEntryModel]] = []
+) -> dict[int, list[CalculationCompositionEntryModel]]:
+    feed_compositions: dict[int, list[CalculationCompositionEntryModel]] = {}
     for input_index, (sample_id, result) in enumerate(
         zip(sample_ids, response.results, strict=True)
     ):
@@ -28,15 +28,13 @@ def slate_to_slate_converted_feed_compositions(
         component_names = result.result.component_names
         mole_fractions = result.result.mole_fractions
 
-        feed_compositions.append(
-            [
-                CalculationCompositionEntryModel(
-                    component_name=component_name,
-                    molar_amount=mole_fraction,
-                )
-                for component_name, mole_fraction in zip(component_names, mole_fractions)
-            ]
-        )
+        feed_compositions[sample_id] = [
+            CalculationCompositionEntryModel(
+                component_name=component_name,
+                molar_amount=mole_fraction,
+            )
+            for component_name, mole_fraction in zip(component_names, mole_fractions)
+        ]
 
     return feed_compositions
 
@@ -45,7 +43,7 @@ def adjusted_feed_compositions(
     transport: HTTPTransport,
     fluid_model_id: int,
     sample_ids: list[int],
-) -> list[list[CalculationCompositionEntryModel]]:
+) -> dict[int, list[CalculationCompositionEntryModel]]:
     fluid_model = fluid_models.get_fluid_model(transport, fluid_model_id)
     compositions_by_sample_id = {
         composition.sample_id: composition
@@ -61,8 +59,8 @@ def adjusted_feed_compositions(
             + ", ".join(str(sample_id) for sample_id in missing_sample_ids)
         )
 
-    return [
-        [
+    return {
+        sample_id: [
             CalculationCompositionEntryModel(
                 component_name=component.component_name,
                 molar_amount=component.molar_amount,
@@ -70,4 +68,4 @@ def adjusted_feed_compositions(
             for component in compositions_by_sample_id[sample_id].components
         ]
         for sample_id in sample_ids
-    ]
+    }

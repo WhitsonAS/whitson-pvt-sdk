@@ -1,7 +1,6 @@
 import pytest
 
 from whitson_pvt_sdk.errors import CalculationError
-from whitson_pvt_sdk.shared.models import SampleFlashInput
 from whitson_pvt_sdk.v2.resources import Calculations
 
 
@@ -64,30 +63,6 @@ def make_adjusted_composition(composition_id, sample_id, c1_molar_amount, c2_mol
     }
 
 
-def make_flash_response_json():
-    return {
-        "output_unit_system": "SI",
-        "output_units": {
-            "density": "kg/m3",
-            "gas_formation_volume_factor": "m3/Sm3",
-            "gas_volume": "Sm3",
-            "oil_formation_volume_factor": "m3/Sm3",
-            "oil_volume": "Sm3",
-            "pressure": "bara",
-            "solution_gas_oil_ratio": "Sm3/Sm3",
-            "solution_oil_gas_ratio": "Sm3/Sm3",
-            "temperature": "C",
-            "viscosity": "cP",
-        },
-        "results": [
-            {
-                "status": "error",
-                "error": {"code": "calculation_failed", "message": "not relevant"},
-            }
-        ],
-    }
-
-
 def test_get_sample_feed_compositions_converts_slate_to_slate_response(transport, httpx_mock):
     httpx_mock.add_response(
         method="POST",
@@ -111,11 +86,43 @@ def test_get_sample_feed_compositions_converts_slate_to_slate_response(transport
         sample_ids=[456],
     )
 
-    assert [[entry.model_dump() for entry in composition] for composition in result] == [
-        [
+    assert {
+        sample_id: [entry.model_dump() for entry in composition]
+        for sample_id, composition in result.items()
+    } == {
+        456: [
             {"component_name": "C1", "molar_amount": 0.9},
             {"component_name": "C2", "molar_amount": 0.1},
         ]
+    }
+
+
+def test_get_sample_feed_composition_returns_single_sample_composition(transport, httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://dev.pvt.whitson.com/external/v2/calculations/sample-to-eos-slate-conversion",
+        json={
+            "results": [
+                {
+                    "status": "success",
+                    "result": {
+                        "component_names": ["C1", "C2"],
+                        "mass_fractions": [0.8, 0.2],
+                        "mole_fractions": [0.9, 0.1],
+                    },
+                }
+            ]
+        },
+    )
+
+    result = Calculations(transport).get_sample_feed_composition(
+        fluid_model_id=123,
+        sample_id=456,
+    )
+
+    assert [entry.model_dump() for entry in result] == [
+        {"component_name": "C1", "molar_amount": 0.9},
+        {"component_name": "C2", "molar_amount": 0.1},
     ]
 
 
@@ -163,16 +170,19 @@ def test_get_sample_feed_compositions_converts_adjusted_compositions_in_sample_o
         source="adjusted_compositions",
     )
 
-    assert [[entry.model_dump() for entry in composition] for composition in result] == [
-        [
+    assert {
+        sample_id: [entry.model_dump() for entry in composition]
+        for sample_id, composition in result.items()
+    } == {
+        789: [
             {"component_name": "C1", "molar_amount": 0.7},
             {"component_name": "C2", "molar_amount": 0.3},
         ],
-        [
+        456: [
             {"component_name": "C1", "molar_amount": 0.9},
             {"component_name": "C2", "molar_amount": 0.1},
         ],
-    ]
+    }
 
 
 def test_get_sample_feed_compositions_raises_on_missing_adjusted_composition(
@@ -189,44 +199,3 @@ def test_get_sample_feed_compositions_raises_on_missing_adjusted_composition(
             sample_ids=[456],
             source="adjusted_compositions",
         )
-
-
-def test_calculate_flash_for_samples_builds_flash_request_from_sample_compositions(
-    transport, httpx_mock
-):
-    httpx_mock.add_response(
-        url="https://dev.pvt.whitson.com/external/v2/fluid-models/123",
-        json=make_fluid_model_json(
-            [
-                make_adjusted_composition(1, 456, 0.9, 0.1),
-                make_adjusted_composition(2, 789, 0.7, 0.3),
-            ]
-        ),
-    )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://dev.pvt.whitson.com/external/v2/calculations/flash",
-        json=make_flash_response_json(),
-    )
-
-    result = Calculations(transport).calculate_flash_for_samples(
-        fluid_model_id=123,
-        inputs=[
-            SampleFlashInput(sample_id=789, pressure=200.0, temperature=80.0),
-            SampleFlashInput(sample_id=456, pressure=150.0, temperature=75.0),
-        ],
-        pressure_unit="bara",
-        temperature_unit="C",
-        source="adjusted_compositions",
-    )
-
-    flash_request = httpx_mock.get_requests()[-1]
-    assert result.output_unit_system == "SI"
-    assert flash_request.read() == (
-        b'{"flash_type":"positive","fluid_model_id":123,'
-        b'"inputs":[{"feed_composition":[{"component_name":"C1","molar_amount":0.7},'
-        b'{"component_name":"C2","molar_amount":0.3}],"pressure":200.0,"temperature":80.0},'
-        b'{"feed_composition":[{"component_name":"C1","molar_amount":0.9},'
-        b'{"component_name":"C2","molar_amount":0.1}],"pressure":150.0,"temperature":75.0}],'
-        b'"output_unit_system":"SI","pressure_unit":"bara","temperature_unit":"C"}'
-    )

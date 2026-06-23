@@ -3,16 +3,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 CompositionSource = Literal["slate_to_slate_converted", "adjusted_compositions"]
-FlashType = Literal["positive", "negative"]
-OutputUnitSystem = Literal["SI", "FIELD", "CANADA"]
-PressureUnit = Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"]
-TemperatureUnit = Literal["C", "K", "F", "R"]
-
-
-class SampleFlashInput(BaseModel):
-    sample_id: int
-    pressure: float
-    temperature: float
 
 
 class ClientCredentials(BaseModel):

@@ -1,9 +1,9 @@
-"""Run a v2 flash calculation.
+"""Run a v2 separator process calculation.
 
 Demonstrates:
 - Creating a WhitsonPVTClient
 - Fetching a sample feed composition
-- Running a flash calculation
+- Running a separator process calculation
 """
 
 import os
@@ -11,8 +11,10 @@ import os
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2.models import (
-    FlashCalculationInputModel,
-    FlashCalculationRequestModel,
+    SeparatorProcessCalculationInputModel,
+    SeparatorProcessCalculationRequestModel,
+    SurfaceProcessModel,
+    SurfaceProcessStageModel,
 )
 
 
@@ -41,21 +43,19 @@ def main() -> None:
     # )
     # feed_composition = feed_compositions[456]
 
-    flash = client.calculations.calculate_flash(
-        FlashCalculationRequestModel(
+    separator_process = client.calculations.calculate_separator_process(
+        SeparatorProcessCalculationRequestModel(
             fluid_model_id=fluid_model_id,
-            pressure_unit="bara",
-            temperature_unit="C",
-            inputs=[
-                FlashCalculationInputModel(
-                    pressure=50.0,
-                    temperature=50.0,
-                    feed_composition=feed_composition,
-                )
-            ],
+            surface_process=SurfaceProcessModel(
+                pressure_unit="bara",
+                temperature_unit="C",
+                stages=[SurfaceProcessStageModel(pressure=50.0, temperature=50.0)],
+            ),
+            inputs=[SeparatorProcessCalculationInputModel(feed_composition=feed_composition)],
         )
     )
-    print(flash.model_dump_json())
+
+    print(separator_process.model_dump_json())
 
 
 if __name__ == "__main__":
