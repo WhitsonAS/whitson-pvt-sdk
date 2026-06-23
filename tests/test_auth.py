@@ -87,13 +87,18 @@ def test_raises_auth_error_on_http_error(httpx_mock):
         method="POST",
         url=TOKEN_URL,
         status_code=500,
+        headers={"x-request-id": "req-token"},
+        text="server failed",
     )
     tm = TokenManager(
         ClientCredentials(client_id="id", client_secret="secret"),
         token_url=TOKEN_URL,
     )
-    with pytest.raises(AuthError, match="Authentication service unavailable"):
+    with pytest.raises(AuthError, match="Authentication service unavailable") as exc:
         tm.get_token()
+    assert exc.value.status_code == 500
+    assert exc.value.request_id == "req-token"
+    assert exc.value.response_body == "server failed"
 
 
 def test_raises_auth_error_with_detail_on_status_error(httpx_mock):
@@ -101,6 +106,7 @@ def test_raises_auth_error_with_detail_on_status_error(httpx_mock):
         method="POST",
         url=TOKEN_URL,
         status_code=401,
+        headers={"x-request-id": "req-bad-auth"},
         json={
             "error": "access_denied",
             "error_description": "Invalid client credentials",
@@ -110,8 +116,14 @@ def test_raises_auth_error_with_detail_on_status_error(httpx_mock):
         ClientCredentials(client_id="bad", client_secret="bad"),
         token_url=TOKEN_URL,
     )
-    with pytest.raises(AuthError, match="Authentication failed: Invalid client credentials"):
+    with pytest.raises(AuthError, match="Authentication failed: Invalid client credentials") as exc:
         tm.get_token()
+    assert exc.value.status_code == 401
+    assert exc.value.request_id == "req-bad-auth"
+    assert exc.value.response_body == {
+        "error": "access_denied",
+        "error_description": "Invalid client credentials",
+    }
 
 
 def test_uses_api_token_endpoint(httpx_mock):

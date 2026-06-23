@@ -1,4 +1,5 @@
 from whitson_pvt_sdk._generated.v2 import fluid_models
+from whitson_pvt_sdk.errors import CalculationError
 from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
@@ -12,9 +13,17 @@ def slate_to_slate_converted_feed_compositions(
     sample_ids: list[int],
 ) -> list[list[CalculationCompositionEntryModel]]:
     feed_compositions: list[list[CalculationCompositionEntryModel]] = []
-    for sample_id, result in zip(sample_ids, response.results, strict=True):
+    for input_index, (sample_id, result) in enumerate(
+        zip(sample_ids, response.results, strict=True)
+    ):
         if isinstance(result, CalculationErrorResultModel):
-            raise ValueError(f"Sample {sample_id} conversion failed: {result.error.message}")
+            raise CalculationError(
+                result.error.message,
+                code=result.error.code,
+                sample_id=sample_id,
+                input_index=input_index,
+                error=result.error,
+            )
 
         component_names = result.result.component_names
         mole_fractions = result.result.mole_fractions

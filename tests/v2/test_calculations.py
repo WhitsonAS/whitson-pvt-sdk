@@ -1,5 +1,6 @@
 import pytest
 
+from whitson_pvt_sdk.errors import CalculationError
 from whitson_pvt_sdk.shared.models import SampleFlashInput
 from whitson_pvt_sdk.v2.resources import Calculations
 
@@ -132,11 +133,15 @@ def test_get_sample_feed_compositions_raises_on_conversion_error(transport, http
         },
     )
 
-    with pytest.raises(ValueError, match="Sample 456 conversion failed: bad sample"):
+    with pytest.raises(CalculationError, match="bad sample") as exc:
         Calculations(transport).get_sample_feed_compositions(
             fluid_model_id=123,
             sample_ids=[456],
         )
+    assert exc.value.code == "calculation_failed"
+    assert exc.value.sample_id == 456
+    assert exc.value.input_index == 0
+    assert exc.value.error is not None
 
 
 def test_get_sample_feed_compositions_converts_adjusted_compositions_in_sample_order(

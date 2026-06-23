@@ -11,7 +11,7 @@ from whitson_pvt_sdk.auth import TokenManager
 from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
 from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("whitson_pvt_sdk")
 
 JSONBody: TypeAlias = dict[str, Any] | list[dict[str, Any]] | None
 
@@ -68,25 +68,46 @@ class HTTPTransport:
         return self._token_manager.get_token()
 
     @staticmethod
-    def _error_message(response: httpx.Response) -> str:
+    def _response_body(response: httpx.Response) -> Any:
         try:
-            return response.json().get("message", response.text)
-        except Exception:
-            return response.text or f"HTTP {response.status_code}"
+            return response.json()
+        except ValueError:
+            return response.text
+
+    @classmethod
+    def _error_message(cls, response: httpx.Response) -> str:
+        body = cls._response_body(response)
+        if isinstance(body, dict):
+            message = body.get("message")
+            if isinstance(message, str) and message:
+                return message
+        if isinstance(body, str) and body:
+            return body
+        return f"HTTP {response.status_code}"
 
     @classmethod
     def _raise_for_status(cls, response: httpx.Response) -> None:
         status = response.status_code
         if 200 <= status < 300:
             return
+        body = cls._response_body(response)
         msg = cls._error_message(response)
+        request_id = response.headers.get("x-request-id")
+        logger.warning(
+            "API request failed: status=%s request_id=%s message=%s",
+            status,
+            request_id,
+            msg,
+        )
         if status in (401, 403):
-            raise AuthError(msg)
+            raise AuthError(msg, status_code=status, response_body=body, request_id=request_id)
         if status == 404:
-            raise NotFoundError(msg)
+            raise NotFoundError(msg, status_code=status, response_body=body, request_id=request_id)
         if status in (400, 422):
-            raise ValidationError(msg)
-        raise APIError(msg, status_code=status)
+            raise ValidationError(
+                msg, status_code=status, response_body=body, request_id=request_id
+            )
+        raise APIError(msg, status_code=status, response_body=body, request_id=request_id)
 
     def _json(self, response: httpx.Response) -> dict[str, Any]:
         self._raise_for_status(response)
@@ -110,6 +131,12 @@ class HTTPTransport:
         method = method.upper()
         for attempt in range(1, self._retry_config.max_attempts + 1):
             try:
+                logger.debug(
+                    "Sending API request: method=%s path=%s attempt=%s",
+                    method,
+                    path,
+                    attempt,
+                )
                 response = self._http.request(
                     method,
                     path,
@@ -121,12 +148,18 @@ class HTTPTransport:
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 if self._should_retry_exception(method, attempt):
-                    self._sleep_before_retry(attempt)
+                    self._sleep_before_retry(attempt, method=method, path=path, cause=exc)
                     continue
+                logger.warning(
+                    "API request failed before response: method=%s path=%s error=%s",
+                    method,
+                    path,
+                    exc,
+                )
                 raise APIError(f"Request failed: {exc}") from exc
 
             if self._should_retry_response(method, response, attempt):
-                self._sleep_before_retry(attempt, response)
+                self._sleep_before_retry(attempt, response, method=method, path=path)
                 response.close()
                 continue
 
@@ -150,7 +183,15 @@ class HTTPTransport:
     def _has_attempt_remaining(self, attempt: int) -> bool:
         return attempt < self._retry_config.max_attempts
 
-    def _sleep_before_retry(self, attempt: int, response: httpx.Response | None = None) -> None:
+    def _sleep_before_retry(
+        self,
+        attempt: int,
+        response: httpx.Response | None = None,
+        *,
+        method: str | None = None,
+        path: str | None = None,
+        cause: BaseException | None = None,
+    ) -> None:
         retry_after = self._retry_after(response) if response is not None else None
         if retry_after is None:
             retry_after = min(
@@ -158,6 +199,15 @@ class HTTPTransport:
                 self._retry_config.max_backoff,
             )
             retry_after *= random.uniform(0.8, 1.2)
+        logger.debug(
+            "Retrying API request: method=%s path=%s attempt=%s status=%s delay=%.3f cause=%s",
+            method,
+            path,
+            attempt,
+            response.status_code if response is not None else None,
+            retry_after,
+            cause,
+        )
         time.sleep(retry_after)
 
     @staticmethod

@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 import pytest
 
@@ -112,10 +114,14 @@ def test_401_raises_auth_error(transport, httpx_mock):
     httpx_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=401,
+        headers={"x-request-id": "req-auth"},
         json={"message": "Unauthorized"},
     )
-    with pytest.raises(AuthError, match="Unauthorized"):
+    with pytest.raises(AuthError, match="Unauthorized") as exc:
         transport.get("/test")
+    assert exc.value.status_code == 401
+    assert exc.value.request_id == "req-auth"
+    assert exc.value.response_body == {"message": "Unauthorized"}
 
 
 def test_403_raises_auth_error(transport, httpx_mock):
@@ -132,20 +138,28 @@ def test_404_raises_not_found_error(transport, httpx_mock):
     httpx_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=404,
+        headers={"x-request-id": "req-not-found"},
         json={"message": "Not found"},
     )
-    with pytest.raises(NotFoundError, match="Not found"):
+    with pytest.raises(NotFoundError, match="Not found") as exc:
         transport.get("/test")
+    assert exc.value.status_code == 404
+    assert exc.value.request_id == "req-not-found"
+    assert exc.value.response_body == {"message": "Not found"}
 
 
 def test_400_raises_validation_error(transport, httpx_mock):
     httpx_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=400,
+        headers={"x-request-id": "req-validation"},
         json={"message": "Bad request"},
     )
-    with pytest.raises(ValidationError, match="Bad request"):
+    with pytest.raises(ValidationError, match="Bad request") as exc:
         transport.get("/test")
+    assert exc.value.status_code == 400
+    assert exc.value.request_id == "req-validation"
+    assert exc.value.response_body == {"message": "Bad request"}
 
 
 def test_422_raises_validation_error(transport, httpx_mock):
@@ -164,11 +178,14 @@ def test_500_raises_api_error_with_status_code(transport, httpx_mock):
         httpx_mock.add_response(
             url="https://dev.pvt.whitson.com/external/v2/test",
             status_code=500,
+            headers={"x-request-id": "req-api"},
             json={"message": "Internal error"},
         )
     with pytest.raises(APIError, match="Internal error") as exc:
         transport.get("/test")
     assert exc.value.status_code == 500
+    assert exc.value.request_id == "req-api"
+    assert exc.value.response_body == {"message": "Internal error"}
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
@@ -194,6 +211,24 @@ def test_get_retries_429_then_succeeds(transport, httpx_mock, recorded_sleeps):
     assert transport.get("/test") == {"ok": True}
     assert len(_requests_to(httpx_mock, url)) == 2
     assert recorded_sleeps == [0]
+
+
+def test_retry_logs_debug_message(transport, httpx_mock, recorded_sleeps, caplog):
+    caplog.set_level(logging.DEBUG, logger="whitson_pvt_sdk")
+    url = "https://dev.pvt.whitson.com/external/v2/test"
+    httpx_mock.add_response(
+        url=url,
+        status_code=429,
+        headers={"retry-after": "0"},
+        json={"message": "Too many requests"},
+    )
+    httpx_mock.add_response(url=url, json={"ok": True})
+
+    assert transport.get("/test") == {"ok": True}
+    assert recorded_sleeps == [0]
+    assert "Retrying API request" in caplog.text
+    assert "GET" in caplog.text
+    assert "/test" in caplog.text
 
 
 def test_retry_uses_retry_after_ms(transport, httpx_mock, recorded_sleeps):
