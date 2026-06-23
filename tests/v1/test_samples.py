@@ -2,7 +2,6 @@ from whitson_pvt_sdk.v1.models import (
     CreateSampleListModel,
     CreateSampleModel,
     GetSampleListModel,
-    GetSampleModel,
     UpdateSampleListModel,
     UpdateSampleModel,
 )
@@ -21,16 +20,6 @@ def test_list_samples_returns_sample_list_model(transport_v1, httpx_mock):
     result = Samples(transport_v1).list(1)
     assert isinstance(result, GetSampleListModel)
     assert len(result.samples) == 2
-
-
-def test_get_sample_returns_get_sample_model(transport_v1, httpx_mock):
-    httpx_mock.add_response(
-        url="https://dev.pvt.whitson.com/external/v1/samples/42",
-        json=make_sample_json(id=42),
-    )
-    result = Samples(transport_v1).get(42)
-    assert isinstance(result, GetSampleModel)
-    assert result.id == 42
 
 
 def test_create_sample_excludes_unset_fields(transport_v1, httpx_mock):

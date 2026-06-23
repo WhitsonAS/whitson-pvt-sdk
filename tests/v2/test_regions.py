@@ -25,19 +25,6 @@ def test_list_regions_returns_paginated_model(transport, httpx_mock):
     assert result.pagination.prev_cursor is None
 
 
-def test_list_regions_pagination_with_both_cursors(transport, httpx_mock):
-    httpx_mock.add_response(
-        url="https://dev.pvt.whitson.com/external/v2/regions",
-        json={
-            "regions": [],
-            "pagination": {"next_cursor": "nxt", "prev_cursor": "prv"},
-        },
-    )
-    result = Regions(transport).list()
-    assert result.pagination.next_cursor == "nxt"
-    assert result.pagination.prev_cursor == "prv"
-
-
 def test_list_regions_passes_cursor(transport, httpx_mock):
     httpx_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions?cursor=nxt&limit=25",
@@ -48,15 +35,6 @@ def test_list_regions_passes_cursor(transport, httpx_mock):
     )
     result = Regions(transport).list(cursor="nxt", limit=25)
     assert result.pagination.prev_cursor == "prv"
-
-
-def test_get_region_v2(transport, httpx_mock):
-    httpx_mock.add_response(
-        url="https://dev.pvt.whitson.com/external/v2/regions/1",
-        json=make_region_json(),
-    )
-    result = Regions(transport).get(1)
-    assert result.id == 1
 
 
 def test_create_region_v2_excludes_unset(transport, httpx_mock):

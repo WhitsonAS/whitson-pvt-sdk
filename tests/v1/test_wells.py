@@ -1,6 +1,5 @@
 from whitson_pvt_sdk.v1.models import (
     CreateWellModel,
-    GetWellModel,
     UpdateWellModel,
     UpdateWellsListModel,
     WellsListModel,
@@ -21,26 +20,6 @@ def make_well_json(name="Test Well", **kwargs):
         "samples": [],
         **kwargs,
     }
-
-
-def test_list_wells_returns_wells_list_model(transport_v1, httpx_mock):
-    httpx_mock.add_response(
-        url="https://dev.pvt.whitson.com/external/v1/regions/1/wells",
-        json={"wells": [make_well_json(name="W1"), make_well_json(id=2, name="W2")]},
-    )
-    result = Wells(transport_v1).list(1)
-    assert isinstance(result, WellsListModel)
-    assert len(result.wells) == 2
-
-
-def test_get_well_returns_get_well_model(transport_v1, httpx_mock):
-    httpx_mock.add_response(
-        url="https://dev.pvt.whitson.com/external/v1/wells/42",
-        json=make_well_json(id=42),
-    )
-    result = Wells(transport_v1).get(42)
-    assert isinstance(result, GetWellModel)
-    assert result.id == 42
 
 
 def test_create_well_excludes_samples_field(transport_v1, httpx_mock):

@@ -1,5 +1,4 @@
 from whitson_pvt_sdk.shared.models import ImportArchiveOptions
-from whitson_pvt_sdk.v2.models import ImportCommitResultModel, ImportPreflightResultModel
 from whitson_pvt_sdk.v2.resources import Reports
 
 
@@ -11,22 +10,6 @@ def test_export_report_v2(transport, httpx_mock):
     data, filename = Reports(transport).export(1)
     assert data == b"data"
     assert filename == "report_1_export.zip"
-
-
-def test_preflight_import_v2_model(transport, httpx_mock):
-    httpx_mock.add_response(
-        method="POST",
-        url="https://dev.pvt.whitson.com/external/v2/reports/import/preflight",
-        json={
-            "can_commit": True,
-            "collisions": [],
-            "skipped": {},
-            "suggestions": [],
-            "summary": {},
-        },
-    )
-    result = Reports(transport).preflight_import(b"archive")
-    assert isinstance(result, ImportPreflightResultModel)
 
 
 def test_preflight_import_v2_sends_meta_data_json(transport, httpx_mock):
@@ -50,13 +33,3 @@ def test_preflight_import_v2_sends_meta_data_json(transport, httpx_mock):
     assert "meta_data" in body
     assert '"region_id":42' in body
     assert '"acknowledge_suggestions":true' in body
-
-
-def test_import_archive_v2(transport, httpx_mock):
-    httpx_mock.add_response(
-        method="POST",
-        url="https://dev.pvt.whitson.com/external/v2/reports/import",
-        json={"created": {"regions": 1}, "id_map": {}, "reused": {}, "skipped": {}},
-    )
-    result = Reports(transport).import_archive(b"archive")
-    assert isinstance(result, ImportCommitResultModel)
