@@ -10,6 +10,7 @@ import os
 
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import ClientCredentials
+from whitson_pvt_sdk.utils import print_json
 from whitson_pvt_sdk.v2.models import (
     SaturationPressureCalculationInputModel,
     SaturationPressureCalculationRequestModel,
@@ -59,7 +60,9 @@ def main() -> None:
         )
     )
 
-    print(saturation_pressure.model_dump_json())
+    print_json(saturation_pressure)
+    # from whitson_pvt_sdk.utils import write_json
+    # write_json(saturation_pressure, "saturation_pressure_response.json")
 
 
 if __name__ == "__main__":

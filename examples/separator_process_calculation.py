@@ -10,6 +10,7 @@ import os
 
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import ClientCredentials
+from whitson_pvt_sdk.utils import print_json
 from whitson_pvt_sdk.v2.models import (
     SeparatorProcessCalculationInputModel,
     SeparatorProcessCalculationRequestModel,
@@ -59,7 +60,9 @@ def main() -> None:
         )
     )
 
-    print(separator_process.model_dump_json())
+    print_json(separator_process)
+    # from whitson_pvt_sdk.utils import write_json
+    # write_json(separator_process, "separator_process_response.json")
 
 
 if __name__ == "__main__":

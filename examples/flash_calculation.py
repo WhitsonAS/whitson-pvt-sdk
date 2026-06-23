@@ -10,6 +10,7 @@ import os
 
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import ClientCredentials
+from whitson_pvt_sdk.utils import print_json
 from whitson_pvt_sdk.v2.models import (
     FlashCalculationInputModel,
     FlashCalculationRequestModel,
@@ -61,7 +62,9 @@ def main() -> None:
             ],
         )
     )
-    print(flash.model_dump_json())
+    print_json(flash)
+    # from whitson_pvt_sdk.utils import write_json
+    # write_json(flash, "flash_response.json")
 
 
 if __name__ == "__main__":

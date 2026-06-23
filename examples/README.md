@@ -56,6 +56,85 @@ The `pagination.py` example shows how to collect all pages into a single list.
 
 Limit defaults to the API default (usually 20) when omitted. Valid range: 1-250.
 
+## Calculation Feed Compositions
+
+Calculation inputs such as flash, saturation pressure, and separator process need
+`feed_composition` values. Use the v2 calculation helpers to get them from sample
+ids instead of building component lists by hand:
+
+```python
+feed_composition = client.calculations.get_sample_feed_composition(
+    fluid_model_id=123,
+    sample_id=456,
+    source="slate_to_slate_converted",
+)
+```
+
+For multiple samples, use the dict keyed by sample id:
+
+```python
+feed_compositions = client.calculations.get_sample_feed_compositions(
+    fluid_model_id=123,
+    sample_ids=[456, 789],
+    source="adjusted_compositions",
+)
+feed_composition = feed_compositions[456]
+```
+
+Valid composition sources are `"slate_to_slate_converted"` and
+`"adjusted_compositions"`.
+
+## JSON Output Utilities
+
+Use `print_json` or `write_json` for readable SDK responses:
+
+```python
+from whitson_pvt_sdk.utils import print_json, write_json
+
+print_json(response)
+path = write_json(response, "flash_response.json")
+```
+
+`write_json(response)` writes to `output.json` in the current directory. If the
+target exists, it writes the next available path such as `output_1.json` or
+`flash_response_1.json`. To intentionally replace an existing file, pass
+`overwrite=True`:
+
+```python
+write_json(response, "flash_response.json", overwrite=True)
+```
+
+## Errors And Logging
+
+All SDK exceptions inherit from `SDKError`. HTTP failures include structured
+metadata when available: `status_code`, `response_body`, and `request_id`.
+Calculation result failures raised by SDK helpers use `CalculationError`, which
+includes `code`, `sample_id`, `input_index`, and the original API error model.
+
+```python
+from whitson_pvt_sdk.errors import CalculationError, SDKError
+
+try:
+    feed_composition = client.calculations.get_sample_feed_composition(
+        fluid_model_id=123,
+        sample_id=456,
+    )
+except CalculationError as exc:
+    print(f"Calculation failed for sample {exc.sample_id}: {exc.message}")
+except SDKError as exc:
+    print(f"SDK error: {exc.message}")
+```
+
+The SDK uses the `whitson_pvt_sdk` logger and does not configure global logging.
+Enable debug logs in applications when diagnosing retries or API failures:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("whitson_pvt_sdk").setLevel(logging.DEBUG)
+```
+
 ## Authentication Token
 
 The SDK handles bearer auth automatically through the external API token endpoint.
