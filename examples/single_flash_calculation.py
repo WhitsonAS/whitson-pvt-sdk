@@ -34,13 +34,6 @@ def main() -> None:
         sample_id=sample_id,
         source="slate_to_slate_converted",
     )
-    # For multiple samples, use the dict returned by sample id:
-    # feed_compositions = client.calculations.get_sample_feed_compositions(
-    #     fluid_model_id=fluid_model_id,
-    #     sample_ids=[456, 789],
-    #     source="slate_to_slate_converted",
-    # )
-    # feed_composition = feed_compositions[456]
 
     flash = client.calculations.calculate_flash(
         FlashCalculationRequestModel(
@@ -53,18 +46,10 @@ def main() -> None:
                     temperature=50.0,
                     feed_composition=feed_composition,
                 )
-                # Multiple inputs can be provided for multiple flash calculations. For example:
-                # FlashCalculationInputModel(
-                #     pressure=50.0,
-                #     temperature=50.0,
-                #     feed_composition=feed_composition[789],
-                # )
             ],
         )
     )
     print_json(flash)
-    # from whitson_pvt_sdk.utils import write_json
-    # write_json(flash, "flash_response.json")
 
 
 if __name__ == "__main__":
