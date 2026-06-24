@@ -36,13 +36,6 @@ def main() -> None:
         sample_id=sample_id,
         source="slate_to_slate_converted",
     )
-    # For multiple samples, use the dict returned by sample id:
-    # feed_compositions = client.calculations.get_sample_feed_compositions(
-    #     fluid_model_id=fluid_model_id,
-    #     sample_ids=[456, 789],
-    #     source="slate_to_slate_converted",
-    # )
-    # feed_composition = feed_compositions[456]
 
     separator_process = client.calculations.calculate_separator_process(
         SeparatorProcessCalculationRequestModel(
@@ -52,17 +45,11 @@ def main() -> None:
                 temperature_unit="C",
                 stages=[SurfaceProcessStageModel(pressure=50.0, temperature=50.0)],
             ),
-            inputs=[
-                SeparatorProcessCalculationInputModel(feed_composition=feed_composition)
-                # Multiple inputs can be provided for multiple separator process calculations:
-                # SeparatorProcessCalculationInputModel(feed_composition=feed_composition[789])
-            ],
+            inputs=[SeparatorProcessCalculationInputModel(feed_composition=feed_composition)],
         )
     )
 
     print_json(separator_process)
-    # from whitson_pvt_sdk.utils import write_json
-    # write_json(separator_process, "separator_process_response.json")
 
 
 if __name__ == "__main__":

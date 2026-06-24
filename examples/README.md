@@ -27,18 +27,18 @@ uv run examples/basic_connect.py
 
 ## Examples
 
-| File                                  | Description                                        | Command                                                 |
-| ------------------------------------- | -------------------------------------------------- | ------------------------------------------------------- |
-| `basic_connect.py`                    | Connect, list regions, and iterate pagination      | `uv run examples/basic_connect.py`                      |
-| `basic_crud.py`                       | Create, read, update a region with Pydantic models | `uv run examples/basic_crud.py`                         |
-| `flash_calculation.py`                | Run a v2 flash calculation                         | `uv run examples/flash_calculation.py`                  |
-| `saturation_pressure_calculation.py`  | Run a v2 saturation pressure calculation           | `uv run examples/saturation_pressure_calculation.py`    |
-| `separator_process_calculation.py`    | Run a v2 separator process calculation             | `uv run examples/separator_process_calculation.py`      |
-| `report_import.py`                    | Export a report archive and import with preflight  | `uv run examples/report_import.py`                      |
-| `multi_domain_copy.py`                | Copy reports from multiple source domains          | `uv run examples/multi_domain_copy.py config.json`      |
-| `pagination.py`                       | Walk all pages of a v2 paginated endpoint          | `uv run examples/pagination.py`                         |
-| `cli_list.py`                         | argparse CLI for listing resources                 | `uv run examples/cli_list.py regions`                   |
-| `fastapi_demo.py`                     | FastAPI app with SDK-backed routes                 | `uv run examples/fastapi_demo.py`                       |
+| File                                 | Description                                        | Command                                              |
+| ------------------------------------ | -------------------------------------------------- | ---------------------------------------------------- |
+| `basic_connect.py`                   | Connect, list regions, and iterate pagination      | `uv run examples/basic_connect.py`                   |
+| `basic_crud.py`                      | Create, read, update a region with Pydantic models | `uv run examples/basic_crud.py`                      |
+| `single_flash_calculation.py`        | Run a flash calculation                            | `uv run examples/single_flash_calculation.py`        |
+| `multi_flash_calculation.py`         | Run multi sample flash calculation                 | `uv run examples/multi_flash_calculation.py`         |
+| `saturation_pressure_calculation.py` | Run a v2 saturation pressure calculation           | `uv run examples/saturation_pressure_calculation.py` |
+| `separator_process_calculation.py`   | Run a v2 separator process calculation             | `uv run examples/separator_process_calculation.py`   |
+| `report_import.py`                   | Export a report archive and import with preflight  | `uv run examples/report_import.py`                   |
+| `pagination.py`                      | Walk all pages of a v2 paginated endpoint          | `uv run examples/pagination.py`                      |
+| `cli_list.py`                        | argparse CLI for listing resources                 | `uv run examples/cli_list.py regions`                |
+| `fastapi_demo.py`                    | FastAPI app with SDK-backed routes                 | `uv run examples/fastapi_demo.py`                    |
 
 ## Pagination (v2)
 
