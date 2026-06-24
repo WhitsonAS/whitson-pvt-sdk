@@ -1396,7 +1396,7 @@ class GetFluidModelModel(BaseModel):
     adjusted_compositions: list[MolarCompositionModel]
     creator: str | None = None
     date_updated: AwareDatetime | None = None
-    eos_model: EOSModelModel | None
+    eos_model: EOSModelModel
     gamma_model: GammaModelModel
     id: int
     name: str | None = None
