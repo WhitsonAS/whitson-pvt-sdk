@@ -3,7 +3,7 @@ import logging
 import random
 import time
 from types import TracebackType
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
 import httpx
 
@@ -78,12 +78,39 @@ class HTTPTransport:
     def _error_message(cls, response: httpx.Response) -> str:
         body = cls._response_body(response)
         if isinstance(body, dict):
+            validation_message = cls._validation_errors_message(body.get("errors"))
+            if validation_message is not None:
+                return validation_message
+
             message = body.get("message")
             if isinstance(message, str) and message:
                 return message
         if isinstance(body, str) and body:
             return body
         return f"HTTP {response.status_code}"
+
+    @staticmethod
+    def _validation_errors_message(errors: object) -> str | None:
+        if not isinstance(errors, list) or not errors:
+            return None
+
+        grouped_errors: dict[str, list[str]] = {}
+        for error in errors:
+            if not isinstance(error, dict):
+                return None
+            error_details = cast(dict[str, Any], error)
+
+            message = error_details.get("message")
+            if not isinstance(message, str) or not message:
+                return None
+
+            field = error_details.get("field")
+            if not isinstance(field, str) or not field:
+                field = "__root__"
+
+            grouped_errors.setdefault(field, []).append(message)
+
+        return f"Validation Error: {grouped_errors}"
 
     @classmethod
     def _raise_for_status(cls, response: httpx.Response) -> None:

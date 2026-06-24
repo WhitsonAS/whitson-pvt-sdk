@@ -172,6 +172,49 @@ def test_422_raises_validation_error(transport, httpx_mock):
         transport.get("/test")
 
 
+def test_422_formats_validation_error_details(transport, httpx_mock):
+    body = {
+        "errors": [
+            {"field": "sampling_date", "message": "Not a valid date."},
+        ]
+    }
+    httpx_mock.add_response(
+        url="https://dev.pvt.whitson.com/external/v2/test",
+        status_code=422,
+        json=body,
+    )
+
+    with pytest.raises(ValidationError, match="Validation Error") as exc:
+        transport.get("/test")
+
+    assert str(exc.value) == "Validation Error: {'sampling_date': ['Not a valid date.']}"
+    assert exc.value.response_body == body
+
+
+def test_422_groups_multiple_validation_error_details(transport, httpx_mock):
+    httpx_mock.add_response(
+        url="https://dev.pvt.whitson.com/external/v2/test",
+        status_code=422,
+        json={
+            "errors": [
+                {"field": "sampling_date", "message": "Not a valid date."},
+                {"field": "sampling_date", "message": "Date cannot be in the future."},
+                {"field": "fluid_model_id", "message": "Field required."},
+                {"field": "", "message": "Root error."},
+            ]
+        },
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        transport.get("/test")
+
+    assert str(exc.value) == (
+        "Validation Error: {'sampling_date': ['Not a valid date.', "
+        "'Date cannot be in the future.'], "
+        "'fluid_model_id': ['Field required.'], '__root__': ['Root error.']}"
+    )
+
+
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_500_raises_api_error_with_status_code(transport, httpx_mock):
     for _ in range(3):
