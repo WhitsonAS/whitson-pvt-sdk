@@ -1294,7 +1294,7 @@ class GetSimpleBlackOilTableModel(BaseModel):
 
 class GetSimpleFluidModelModel(BaseModel):
     creator: str | None = None
-    date_updated: date | None = None
+    date_updated: AwareDatetime | None = None
     id: int
     name: str | None = None
     note: str | None = None
@@ -1567,8 +1567,8 @@ class FlashCalculationRequestModel(BaseModel):
 class GetFluidModelModel(BaseModel):
     adjusted_compositions: list[MolarCompositionModel]
     creator: str | None = None
-    date_updated: date | None = None
-    eos_model: EOSModelModel
+    date_updated: AwareDatetime | None = None
+    eos_model: EOSModelModel | None
     gamma_model: GammaModelModel
     id: int
     name: str | None = None
