@@ -45,6 +45,7 @@ dev = [
   "ty>=0.0.34",
   "pytest>=9.0.3",
   "pytest-httpx>=0.30",
+  "python-dotenv>=1.2.0",
 ]
 
 [tool.pytest.ini_options]

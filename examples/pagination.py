@@ -8,6 +8,8 @@ Demonstrates:
 
 import os
 
+from dotenv import load_dotenv
+
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
@@ -40,6 +42,8 @@ def collect_all(list_method, collection_attr: str, limit: int = 100) -> list:
 
 
 def main() -> None:
+    load_dotenv()
+
     client = WhitsonPVTClient(
         credentials=ClientCredentials(
             client_id=os.environ["WHITSON_CLIENT_ID"],

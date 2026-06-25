@@ -18,6 +18,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Annotated
 
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 
 from whitson_pvt_sdk import WhitsonPVTClient
@@ -26,6 +27,8 @@ from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 _client: WhitsonPVTClientV2 | None = None
+
+load_dotenv()
 
 
 def get_client() -> WhitsonPVTClientV2:

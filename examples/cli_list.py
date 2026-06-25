@@ -17,9 +17,13 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
+
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
+
+load_dotenv()
 
 
 def get_client() -> WhitsonPVTClientV2:

@@ -15,13 +15,23 @@ uv sync
 
 ## Configuration
 
-All examples read credentials from environment variables. Start from the example
-env file, edit the values, then source it before running examples:
+All examples load credentials from `.env` with `python-dotenv`, falling back to
+already-exported environment variables. Start from the example env file, edit the
+values, then run an example:
 
 ```bash
 cp .env.example .env
 $EDITOR .env
+uv run examples/basic_connect.py
+```
+
+Unix shell users who prefer exporting variables explicitly can also source `.env`
+before running examples:
+
+```bash
+set -a
 source .env
+set +a
 uv run examples/basic_connect.py
 ```
 
