@@ -1539,7 +1539,7 @@ class SwellTestExperimentModel(BaseModel):
     type: Literal["SwellTest"]
 
 
-class UpdateWellsListModel(BaseModel):
+class UpdateWellsListModel(RootModel[list[UpdateWellItemModel]]):
     root: list[UpdateWellItemModel]
 
 

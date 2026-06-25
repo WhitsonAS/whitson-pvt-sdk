@@ -1423,9 +1423,11 @@ class SaturationPressureCalculationInputModel(BaseModel):
 
 class SaturationPressureCalculationResultModel(BaseModel):
     component_names: list[str]
+    feed_composition: list[CalculationCompositionEntryModel]
     feed_mole_fractions: list[float]
     feed_mole_numbers: list[float]
     k_values: list[float]
+    liquid_composition: list[CalculationCompositionEntryModel]
     liquid_mole_fractions: list[float]
     liquid_mole_numbers: list[float]
     liquid_phase_properties: PhasePropertiesModel
@@ -1434,6 +1436,7 @@ class SaturationPressureCalculationResultModel(BaseModel):
     saturation_point_type: Literal["bubblepoint", "dewpoint", "critical", "none"]
     saturation_pressure: float
     temperature: float
+    vapor_composition: list[CalculationCompositionEntryModel]
     vapor_mole_fractions: list[float]
     vapor_mole_numbers: list[float]
     vapor_phase_properties: PhasePropertiesModel
@@ -1445,9 +1448,11 @@ class SeparatorProcessCalculationInputModel(BaseModel):
 
 class SeparatorProcessCalculationStageModel(BaseModel):
     component_names: list[str] | None = None
+    feed_composition: list[CalculationCompositionEntryModel] | None
     feed_mole_fractions: list[float] | None = None
     feed_mole_numbers: list[float] | None = None
     k_values: list[float] | None = None
+    liquid_composition: list[CalculationCompositionEntryModel] | None
     liquid_mole_fractions: list[float] | None = None
     liquid_mole_numbers: list[float] | None = None
     liquid_phase_properties: PhasePropertiesModel | None = None
@@ -1455,6 +1460,7 @@ class SeparatorProcessCalculationStageModel(BaseModel):
     overall_phase_properties: PhasePropertiesModel | None = None
     pressure: float
     temperature: float
+    vapor_composition: list[CalculationCompositionEntryModel] | None
     vapor_mole_fractions: list[float] | None = None
     vapor_mole_numbers: list[float] | None = None
     vapor_phase_properties: PhasePropertiesModel | None = None
@@ -1485,7 +1491,9 @@ class SeparatorProcessCalculationSurfaceOilPropertiesModel(BaseModel):
 class SeparatorProcessCalculationSurfacePropertiesModel(BaseModel):
     component_names: list[str]
     gas: SeparatorProcessCalculationSurfaceGasPropertiesModel | None
+    gas_composition: list[CalculationCompositionEntryModel] | None
     oil: SeparatorProcessCalculationSurfaceOilPropertiesModel | None
+    oil_composition: list[CalculationCompositionEntryModel] | None
 
 
 class SurfaceProcessStageModel(BaseModel):
@@ -1751,7 +1759,7 @@ class SwellTestExperimentModel(BaseModel):
     type: Literal["SwellTest"]
 
 
-class UpdateWellsListModel(BaseModel):
+class UpdateWellsListModel(RootModel[list[UpdateWellItemModel]]):
     root: list[UpdateWellItemModel]
 
 
@@ -1774,9 +1782,11 @@ class WellsListModel(BaseModel):
 
 class FlashCalculationResultModel(BaseModel):
     component_names: list[str]
+    feed_composition: list[CalculationCompositionEntryModel]
     feed_mole_fractions: list[float]
     feed_mole_numbers: list[float]
     k_values: list[float]
+    liquid_composition: list[CalculationCompositionEntryModel]
     liquid_mole_fractions: list[float]
     liquid_mole_numbers: list[float]
     liquid_phase_properties: PhasePropertiesModel
@@ -1784,6 +1794,7 @@ class FlashCalculationResultModel(BaseModel):
     overall_phase_properties: PhasePropertiesModel
     pressure: float
     temperature: float
+    vapor_composition: list[CalculationCompositionEntryModel]
     vapor_mole_fractions: list[float]
     vapor_mole_numbers: list[float]
     vapor_phase_properties: PhasePropertiesModel
