@@ -7,11 +7,31 @@ License: [Apache-2.0](https://github.com/WhitsonAS/whitson-pvt-sdk/blob/main/LIC
 ## Prerequisites
 
 - Python 3.10+
-- [uv](https://docs.astral.sh/uv/)
+- The whitson PVT SDK
+- Optional: `python-dotenv` for loading local `.env` files
+
+Install the SDK in your project:
 
 ```bash
-uv sync
+uv add whitson-pvt-sdk
 ```
+
+Or with pip:
+
+```bash
+pip install whitson-pvt-sdk
+```
+
+The examples use `python-dotenv` as a local-development convenience. Install it
+if you want the scripts to read credentials from `.env` automatically:
+
+```bash
+uv add python-dotenv
+# or: pip install python-dotenv
+```
+
+If you cloned this repository instead of copying examples into another project,
+`uv sync` installs all example dependencies.
 
 ## Configuration
 
@@ -24,6 +44,11 @@ cp .env.example .env
 $EDITOR .env
 uv run examples/basic_connect.py
 ```
+
+You can also provide credentials any other way that sets process environment
+variables, such as your shell, CI/CD environment configuration, container
+runtime, or a secret manager. For production use, prefer managed environment
+configuration or a secret vault over storing credentials in local `.env` files.
 
 Unix shell users who prefer exporting variables explicitly can also source `.env`
 before running examples:
