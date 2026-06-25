@@ -42,6 +42,9 @@ check: lint format ty
 test:
     uv run pytest tests/ -v
 
+integration:
+    uv run pytest tests/integration/ -v -m integration -o addopts=''
+
 test-cov:
     uv run pytest tests/ -v --cov=whitson_pvt_sdk --cov-report=term-missing
 

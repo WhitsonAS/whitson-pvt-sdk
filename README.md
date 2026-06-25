@@ -149,12 +149,32 @@ just lint                        # ruff check
 just format                      # ruff format
 just ty                          # ty check
 just test                        # pytest
+just integration                 # opt-in tests against a real API
 just build                       # uv build
 just generate v1                 # regenerate v1 models and endpoint wrappers
 just generate v2                 # regenerate v2 models and endpoint wrappers
 just generate-all                # regenerate both v1 and v2
 just all                         # generate-all + lint/format + build
 ```
+
+Integration tests are skipped by default. They create an isolated region, well,
+sample, and simple experiment for each run so existing staging data is not modified.
+The external API does not currently expose delete endpoints for these resources,
+so test data is left behind with unique `sdk-it-*` names.
+Run them against a real API by setting credentials:
+
+```bash
+export WHITSON_INTEGRATION_BASE_URL=https://internal.pvt.whitson.com
+export WHITSON_INTEGRATION_CLIENT_ID=...
+export WHITSON_INTEGRATION_CLIENT_SECRET=...
+
+just integration
+```
+
+Optional IDs enable project, fluid-model, calculation, black-oil-table, and report
+checks that cannot be backed by created fixtures: `WHITSON_INTEGRATION_PROJECT_ID`,
+`WHITSON_INTEGRATION_FLUID_MODEL_ID`, `WHITSON_INTEGRATION_BLACK_OIL_TABLE_ID`,
+and `WHITSON_INTEGRATION_REPORT_ID`.
 
 ### Publishing
 

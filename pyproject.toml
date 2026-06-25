@@ -49,3 +49,7 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["scripts"]
+addopts = ["-m", "not integration"]
+markers = [
+  "integration: tests that call a real whitson PVT API",
+]

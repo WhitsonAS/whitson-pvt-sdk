@@ -187,8 +187,36 @@ def test_422_formats_validation_error_details(transport, httpx_mock):
     with pytest.raises(ValidationError, match="Validation Error") as exc:
         transport.get("/test")
 
-    assert str(exc.value) == "Validation Error: {'sampling_date': ['Not a valid date.']}"
+    assert (
+        str(exc.value)
+        == "Validation Error: [{'field': 'sampling_date', 'message': 'Not a valid date.'}]"
+    )
     assert exc.value.response_body == body
+
+
+def test_422_formats_validation_error_detail_values(transport, httpx_mock, caplog):
+    body = {
+        "errors": [
+            {
+                "field": "MSS -> gor_unit",
+                "message": "Input should be a canonical stock-tank GOR unit",
+                "value": "sm3/sm3",
+            },
+        ]
+    }
+    httpx_mock.add_response(
+        url="https://dev.pvt.whitson.com/external/v2/test",
+        status_code=422,
+        json=body,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="whitson_pvt_sdk"):
+        with pytest.raises(ValidationError) as exc:
+            transport.get("/test")
+
+    expected = f"Validation Error: {body['errors']}"
+    assert str(exc.value) == expected
+    assert expected in caplog.text
 
 
 def test_422_groups_multiple_validation_error_details(transport, httpx_mock):
@@ -209,9 +237,10 @@ def test_422_groups_multiple_validation_error_details(transport, httpx_mock):
         transport.get("/test")
 
     assert str(exc.value) == (
-        "Validation Error: {'sampling_date': ['Not a valid date.', "
-        "'Date cannot be in the future.'], "
-        "'fluid_model_id': ['Field required.'], '__root__': ['Root error.']}"
+        "Validation Error: [{'field': 'sampling_date', 'message': 'Not a valid date.'}, "
+        "{'field': 'sampling_date', 'message': 'Date cannot be in the future.'}, "
+        "{'field': 'fluid_model_id', 'message': 'Field required.'}, "
+        "{'field': '', 'message': 'Root error.'}]"
     )
 
 
@@ -367,9 +396,7 @@ def test_get_bytes_retries_502_then_succeeds(transport, httpx_mock):
 
 @pytest.mark.usefixtures("no_retry_sleep")
 @pytest.mark.usefixtures("auth_mock")
-def test_retry_config_max_attempts_one_disables_retries(
-    credentials, base_url, httpx_mock
-):
+def test_retry_config_max_attempts_one_disables_retries(credentials, base_url, httpx_mock):
     transport = HTTPTransport(
         credentials,
         base_url,

@@ -94,7 +94,6 @@ class HTTPTransport:
         if not isinstance(errors, list) or not errors:
             return None
 
-        grouped_errors: dict[str, list[str]] = {}
         for error in errors:
             if not isinstance(error, dict):
                 return None
@@ -104,13 +103,7 @@ class HTTPTransport:
             if not isinstance(message, str) or not message:
                 return None
 
-            field = error_details.get("field")
-            if not isinstance(field, str) or not field:
-                field = "__root__"
-
-            grouped_errors.setdefault(field, []).append(message)
-
-        return f"Validation Error: {grouped_errors}"
+        return f"Validation Error: {errors}"
 
     @classmethod
     def _raise_for_status(cls, response: httpx.Response) -> None:
