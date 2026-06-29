@@ -1,9 +1,9 @@
-"""Walk all pages of a v2 paginated endpoint.
+"""Walk all pages of v2 paginated endpoints.
 
 Demonstrates:
-- Generic cursor-based pagination for any paginated resource
+- Using iterate() for lazy cursor-based pagination
+- Using list_all() for eager collection across pages
 - Fetching all regions, wells, and projects across pages
-- Practical pattern for building a full local copy
 """
 
 import os
@@ -15,30 +15,26 @@ from whitson_pvt_sdk.shared.models import ClientCredentials
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 
-def collect_all_regions(client: WhitsonPVTClientV2, limit: int = 100) -> list:
-    all_regions = []
-    page = client.regions.list(limit=limit)
-
-    while True:
-        all_regions.extend(page.regions)
-        if not page.pagination.next_cursor:
+def print_region_summary(client: WhitsonPVTClientV2, limit: int = 100) -> None:
+    """Stream regions lazily, fetching one page at a time."""
+    print("First regions:")
+    for index, region in enumerate(client.regions.iterate(limit=limit), start=1):
+        print(f"  - {region.name} (id={region.id})")
+        if index == 5:
             break
-        page = client.regions.list(cursor=page.pagination.next_cursor, limit=limit)
-
-    return all_regions
 
 
-def collect_all(list_method, collection_attr: str, limit: int = 100) -> list:
-    all_items = []
-    page = list_method(None, limit)
+def print_region_inventory(client: WhitsonPVTClientV2, limit: int = 100) -> None:
+    """Collect regions eagerly, then collect related wells/projects per region."""
+    regions = client.regions.list_all(limit=limit)
+    print(f"Collected {len(regions)} regions total")
 
-    while True:
-        all_items.extend(getattr(page, collection_attr))
-        if not page.pagination.next_cursor:
-            break
-        page = list_method(page.pagination.next_cursor, limit)
-
-    return all_items
+    for region in regions[:5]:
+        wells = client.wells.list_all(region_id=region.id, limit=limit)
+        projects = client.projects.list_all(region_id=region.id, limit=limit)
+        print(f"  - {region.name} (id={region.id})")
+        print(f"    {len(wells)} wells")
+        print(f"    {len(projects)} projects")
 
 
 def main() -> None:
@@ -51,23 +47,9 @@ def main() -> None:
         ),
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
     )
-    regions = collect_all_regions(client)
-    print(f"Collected {len(regions)} regions total")
 
-    for region in regions[:5]:
-        print(f"  - {region.name} (id={region.id})")
-        wells = collect_all(
-            lambda cursor, limit, rid=region.id: client.wells.list(rid, cursor=cursor, limit=limit),
-            "wells",
-        )
-        print(f"    {len(wells)} wells")
-        projects = collect_all(
-            lambda cursor, limit, rid=region.id: client.projects.list(
-                rid, cursor=cursor, limit=limit
-            ),
-            "projects",
-        )
-        print(f"    {len(projects)} projects")
+    print_region_summary(client)
+    print_region_inventory(client)
 
 
 if __name__ == "__main__":

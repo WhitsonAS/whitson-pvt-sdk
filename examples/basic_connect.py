@@ -4,7 +4,7 @@ Demonstrates:
 - Loading credentials from environment variables
 - Creating a WhitsonPVTClient
 - Listing regions
-- Iterating v2 pagination
+- Iterating v2 pagination with the lazy iterate() helper
 """
 
 import os
@@ -30,17 +30,9 @@ def main() -> None:
         base_url=base_url,
     )
 
-    page = client.regions.list(limit=50)
-    print(f"Regions (page 1): {len(page.regions)}")
-
-    for region in page.regions:
+    print("Regions:")
+    for region in client.regions.iterate(limit=50):
         print(f"  - {region.name} (id={region.id})")
-
-    while page.pagination.next_cursor:
-        page = client.regions.list(cursor=page.pagination.next_cursor, limit=50)
-        print(f"Regions (next page): {len(page.regions)}")
-        for region in page.regions:
-            print(f"  - {region.name} (id={region.id})")
 
 
 if __name__ == "__main__":

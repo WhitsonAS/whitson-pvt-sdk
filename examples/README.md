@@ -64,32 +64,42 @@ uv run examples/basic_connect.py
 
 | File                                 | Description                                        | Command                                              |
 | ------------------------------------ | -------------------------------------------------- | ---------------------------------------------------- |
-| `basic_connect.py`                   | Connect, list regions, and iterate pagination      | `uv run examples/basic_connect.py`                   |
+| `basic_connect.py`                   | Connect and lazily iterate all regions             | `uv run examples/basic_connect.py`                   |
 | `basic_crud.py`                      | Create, read, update a region with Pydantic models | `uv run examples/basic_crud.py`                      |
 | `single_flash_calculation.py`        | Run a flash calculation                            | `uv run examples/single_flash_calculation.py`        |
 | `multi_flash_calculation.py`         | Run multi sample flash calculation                 | `uv run examples/multi_flash_calculation.py`         |
 | `saturation_pressure_calculation.py` | Run a v2 saturation pressure calculation           | `uv run examples/saturation_pressure_calculation.py` |
 | `separator_process_calculation.py`   | Run a v2 separator process calculation             | `uv run examples/separator_process_calculation.py`   |
 | `report_import.py`                   | Export a report archive and import with preflight  | `uv run examples/report_import.py`                   |
-| `pagination.py`                      | Walk all pages of a v2 paginated endpoint          | `uv run examples/pagination.py`                      |
+| `pagination.py`                      | Use `iterate()` and `list_all()` pagination helpers | `uv run examples/pagination.py`                      |
 | `cli_list.py`                        | argparse CLI for listing resources                 | `uv run examples/cli_list.py regions`                |
 | `fastapi_demo.py`                    | FastAPI app with SDK-backed routes                 | `uv run examples/fastapi_demo.py`                    |
 
 ## Pagination (v2)
 
-v2 list endpoints return a `PaginationMeta` field (`next_cursor`, `prev_cursor`).
-Pass `cursor` and `limit` to `list()` methods:
+v2 cursor-paginated resources expose `iterate()` for lazy traversal and
+`list_all()` for eager collection:
+
+```python
+for region in client.regions.iterate(limit=50):
+    print(region.name)
+
+all_wells = client.wells.list_all(region_id=1, limit=50)
+```
+
+These helpers are available on `regions`, `wells`, `projects`, `fluid_models`,
+and `black_oil_tables`. `limit` controls the per-page size; it defaults to the
+API default (usually 20) when omitted. Valid range: 1-250.
+
+When you need manual cursor control, `list()` responses still include a
+`PaginationMeta` field (`next_cursor`, `prev_cursor`):
 
 ```python
 page = client.regions.list(limit=50)
 print(page.pagination.next_cursor)  # "abc123" or None
 
-page2 = client.regions.list(cursor=page.pagination.next_cursor)
+page2 = client.regions.list(cursor=page.pagination.next_cursor, limit=50)
 ```
-
-The `pagination.py` example shows how to collect all pages into a single list.
-
-Limit defaults to the API default (usually 20) when omitted. Valid range: 1-250.
 
 ## Calculation Feed Compositions
 
@@ -184,9 +194,11 @@ transport concern.
 
 ## Retries And Timeouts
 
-The SDK retries transient read failures by default. Retries apply to `GET`
-requests and downloads only, not writes or multipart uploads. Retry timing honors
-`Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset` headers when present.
+The SDK retries transient read failures by default. `GET` requests and downloads
+retry transient failures. HTTP `429` rate-limit responses retry for every method;
+other write and multipart failures are not retried by default. Token exchange
+uses the same retry timing and attempt policy. Retry timing honors `Retry-After`,
+`retry-after-ms`, and `X-RateLimit-Reset` headers when present.
 
 Configure retry attempts and timeouts on the client:
 
