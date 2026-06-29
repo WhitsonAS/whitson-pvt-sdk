@@ -108,8 +108,7 @@ def test_normalize_schema_titles_renames_components_and_refs():
                             "application/json": {
                                 "schema": {
                                     "$ref": (
-                                        "#/components/schemas/"
-                                        "ExternalFlashCalculationInputModel"
+                                        "#/components/schemas/ExternalFlashCalculationInputModel"
                                     )
                                 }
                             }
@@ -309,8 +308,7 @@ def test_infer_function_name_fallback_put_bulk():
 def test_infer_public_method_name_standard():
     assert infer_public_method_name("list_regions", "regions", "get", "/regions", "none") == "list"
     assert (
-        infer_public_method_name("get_region", "regions", "get", "/regions/{id}", "none")
-        == "get"
+        infer_public_method_name("get_region", "regions", "get", "/regions/{id}", "none") == "get"
     )
     assert (
         infer_public_method_name("create_region", "regions", "post", "/regions", "model")
@@ -672,6 +670,52 @@ def test_render_resources_output():
     assert "def list(self" in rendered
 
 
+def test_render_resources_adds_pagination_helpers():
+    ep = Endpoint(
+        version="v2",
+        resource="wells",
+        function_name="list_wells_info",
+        public_method_name="list",
+        http_method="get",
+        path="/regions/{region_id}/wells",
+        path_params=[
+            EndpointParam(
+                name="region_id",
+                location="path",
+                python_name="region_id",
+                python_type="int",
+            )
+        ],
+        query_params=[
+            EndpointParam(
+                name="cursor",
+                location="query",
+                python_name="cursor",
+                python_type="str",
+                required=False,
+            ),
+            EndpointParam(
+                name="limit",
+                location="query",
+                python_name="limit",
+                python_type="int",
+                required=False,
+            ),
+        ],
+        response_model="PaginatedWellsModel",
+        pagination_items_field="wells",
+        pagination_item_model="GetWellSimpleModel",
+    )
+
+    rendered = render_resources("v2", {"wells": [ep]})
+
+    assert "from collections.abc import Iterator" in rendered
+    assert "GetWellSimpleModel" in rendered
+    assert "def iterate(" in rendered
+    assert "yield from page.wells" in rendered
+    assert "def list_all(" in rendered
+
+
 # ── full parse ──
 
 
@@ -698,6 +742,50 @@ def test_parse_endpoints_basic():
     endpoints = parse_endpoints("v1", spec)
     assert len(endpoints) == 1
     assert endpoints[0].function_name == "list_regions"
+
+
+def test_parse_endpoints_infers_pagination_item_field_and_model():
+    spec = {
+        "components": {
+            "schemas": {
+                "PaginatedRegionsModel": {
+                    "properties": {
+                        "pagination": {"$ref": "#/components/schemas/PaginationMeta"},
+                        "regions": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/GetRegionModel"},
+                        },
+                    }
+                }
+            }
+        },
+        "paths": {
+            "/regions": {
+                "get": {
+                    "operationId": "list_regions",
+                    "tags": ["regions"],
+                    "parameters": [
+                        {"name": "cursor", "in": "query", "schema": {"type": "string"}},
+                        {"name": "limit", "in": "query", "schema": {"type": "integer"}},
+                    ],
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/PaginatedRegionsModel"}
+                                }
+                            }
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    endpoints = parse_endpoints("v2", spec)
+
+    assert endpoints[0].pagination_items_field == "regions"
+    assert endpoints[0].pagination_item_model == "GetRegionModel"
 
 
 def test_parse_endpoints_applies_overrides():

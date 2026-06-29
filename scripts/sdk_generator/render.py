@@ -170,11 +170,23 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
             model
             for endpoints in by_resource.values()
             for endpoint in endpoints
-            for model in (endpoint.request_model, endpoint.response_model)
+            for model in (
+                endpoint.request_model,
+                endpoint.response_model,
+                endpoint.pagination_item_model,
+            )
             if model
         }
     )
-    lines = ["from __future__ import annotations\n\n", "from typing import TYPE_CHECKING\n\n"]
+    has_paginated_endpoint = any(
+        endpoint.pagination_items_field is not None
+        for endpoints in by_resource.values()
+        for endpoint in endpoints
+    )
+    lines = ["from __future__ import annotations\n\n"]
+    if has_paginated_endpoint:
+        lines.append("from collections.abc import Iterator\n")
+    lines.append("from typing import TYPE_CHECKING\n\n")
     lines.append(f"from whitson_pvt_sdk._generated.{version} import (\n")
     lines.extend(f"    {resource},\n" for resource in resources)
     lines.append(")\n\n")
@@ -191,6 +203,8 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         lines.extend(f"        {model},\n" for model in generated_models)
         lines.append("    )\n")
     lines.append("\n")
+    if has_paginated_endpoint:
+        lines.append("ListType = list\n\n")
     for resource in resources:
         lines.append(render_resource_class(resource, by_resource[resource]))
     return "".join(lines).rstrip() + "\n"
@@ -205,7 +219,31 @@ def render_resource_class(resource: str, endpoints: list[Endpoint]) -> str:
     ]
     for endpoint in endpoints:
         lines.append(render_resource_method(resource, endpoint))
+        if endpoint.pagination_items_field and endpoint.pagination_item_model:
+            lines.append(render_resource_pagination_methods(endpoint))
     return "".join(lines)
+
+
+def render_resource_pagination_methods(endpoint: Endpoint) -> str:
+    args = [f"{param.python_name}: {param.python_type}" for param in endpoint.path_params]
+    args.extend(render_query_param(param) for param in endpoint.query_params)
+    call_args = [f"{param.python_name}={param.python_name}" for param in endpoint.path_params]
+    call_args.extend(f"{param.python_name}={param.python_name}" for param in endpoint.query_params)
+    signature_args = f", {', '.join(args)}" if args else ""
+    iterate_call_args = ", ".join(call_args)
+    if iterate_call_args:
+        iterate_call_args = f"{iterate_call_args}"
+    return (
+        f"    def iterate(self{signature_args}) -> Iterator[{endpoint.pagination_item_model}]:\n"
+        "        while True:\n"
+        f"            page = self.{endpoint.public_method_name}({iterate_call_args})\n"
+        f"            yield from page.{endpoint.pagination_items_field}\n"
+        "            cursor = page.pagination.next_cursor\n"
+        "            if cursor is None:\n"
+        "                return\n\n"
+        f"    def list_all(self{signature_args}) -> ListType[{endpoint.pagination_item_model}]:\n"
+        f"        return list(self.iterate({iterate_call_args}))\n\n"
+    )
 
 
 def render_resource_method(resource: str, endpoint: Endpoint) -> str:

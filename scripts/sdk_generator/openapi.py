@@ -99,7 +99,9 @@ def parse_endpoints(version: str, spec: dict[str, Any]) -> list[Endpoint]:
                 continue
             _validate_operation(method, raw_path, operation)
             params = [*path_params, *parse_params(operation.get("parameters", []))]
-            endpoint = apply_override(infer_endpoint(version, method, raw_path, operation, params))
+            endpoint = apply_override(
+                infer_endpoint(version, method, raw_path, operation, params, spec)
+            )
             if endpoint.resource in EXCLUDED_RESOURCES:
                 continue
             _validate_endpoint(endpoint)
@@ -124,6 +126,7 @@ def infer_endpoint(
     path: str,
     operation: dict[str, Any],
     params: list[EndpointParam],
+    spec: dict[str, Any] | None = None,
 ) -> Endpoint:
     request_model = schema_ref_name(request_schema(operation))
     response_model = schema_ref_name(response_schema(operation))
@@ -136,6 +139,7 @@ def infer_endpoint(
     resource = infer_resource(path, operation)
     function_name = infer_function_name(method, path, resource, operation)
 
+    pagination = infer_pagination(response_model, params, spec)
     return Endpoint(
         version=cast(Version, version),
         resource=resource,
@@ -150,7 +154,40 @@ def infer_endpoint(
         request_model=request_model,
         response_model=response_model,
         body_kind=body_kind,
+        pagination_items_field=pagination[0] if pagination else None,
+        pagination_item_model=pagination[1] if pagination else None,
     )
+
+
+def infer_pagination(
+    response_model: str | None,
+    params: list[EndpointParam],
+    spec: dict[str, Any] | None,
+) -> tuple[str, str] | None:
+    if response_model is None or spec is None:
+        return None
+    if not {"cursor", "limit"}.issubset({param.python_name for param in params}):
+        return None
+
+    schemas = spec.get("components", {}).get("schemas", {})
+    response_schema = schemas.get(response_model)
+    if not isinstance(response_schema, dict):
+        return None
+    properties = response_schema.get("properties")
+    if not isinstance(properties, dict) or "pagination" not in properties:
+        return None
+
+    list_fields: list[tuple[str, str]] = []
+    for name, schema in properties.items():
+        if not isinstance(schema, dict) or schema.get("type") != "array":
+            continue
+        item_model = schema_ref_name(schema.get("items"))
+        if item_model is not None:
+            list_fields.append((to_snake(name), item_model))
+
+    if len(list_fields) != 1:
+        return None
+    return list_fields[0]
 
 
 def parse_params(raw_params: list[dict[str, Any]]) -> list[EndpointParam]:

@@ -48,3 +48,5 @@ class Endpoint(BaseModel):
     return_kind: ReturnKind = "model"
     model_dump_expr: str | None = None
     filename_expr: str | None = None
+    pagination_items_field: str | None = None
+    pagination_item_model: str | None = None

@@ -77,15 +77,22 @@ client = WhitsonPVTClient(
 ### Pagination (v2)
 
 v2 list endpoints (regions, projects, fluid models, black oil tables, wells) are
-cursor-paginated. Each response includes a `pagination` field:
+cursor-paginated. Use `iterate()` for lazy traversal or `list_all()` for an eager
+list:
+
+```python
+for region in client.regions.iterate(limit=50):
+    print(region.name)
+
+regions = client.regions.list_all(limit=50)
+```
+
+Each response still includes a `pagination` field when you need manual cursor
+control:
 
 ```python
 page = client.regions.list()
-for region in page.regions:
-    print(region.name)
-
-while page.pagination.next_cursor:
-    page = client.regions.list(cursor=page.pagination.next_cursor)
+print(page.pagination.next_cursor)
 ```
 
 Pass `cursor` and `limit` to control pagination:
@@ -95,7 +102,9 @@ page = client.regions.list(limit=50)
 page = client.regions.list(cursor=page.pagination.next_cursor)
 ```
 
-Limit defaults to the API default (usually 20) when omitted.
+Limit defaults to the API default (usually 20) when omitted. `iterate()` and
+`list_all()` are available on all cursor-paginated v2 resources: `regions`,
+`wells`, `projects`, `fluid_models`, and `black_oil_tables`.
 
 More runnable examples are available in [examples](https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/examples).
 
