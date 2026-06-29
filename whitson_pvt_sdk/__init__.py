@@ -1,4 +1,5 @@
 import warnings
+from importlib import metadata
 from typing import Literal, overload
 
 from .http import HTTPTransport
@@ -6,7 +7,10 @@ from .shared.models import ClientCredentials, RetryConfig
 from .v1 import WhitsonPVTClientV1
 from .v2 import WhitsonPVTClientV2
 
-__version__ = "0.1.0"
+try:
+    __version__ = metadata.version("whitson-pvt-sdk")
+except metadata.PackageNotFoundError:  # pragma: no cover - source tree without package metadata
+    __version__ = "0.0.0+unknown"
 
 _DEPRECATED: dict[str, str] = {"v1": "v2"}
 """Map of deprecated versions to their replacements.
@@ -107,4 +111,4 @@ def WhitsonPVTClient(
             )
 
 
-__all__ = ["WhitsonPVTClient"]
+__all__ = ["WhitsonPVTClient", "__version__"]
