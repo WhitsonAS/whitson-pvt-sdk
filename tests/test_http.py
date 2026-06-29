@@ -3,7 +3,13 @@ import logging
 import httpx
 import pytest
 
-from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
+from whitson_pvt_sdk.errors import (
+    APIError,
+    AuthError,
+    NotFoundError,
+    RateLimitError,
+    ValidationError,
+)
 from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
 
@@ -383,6 +389,25 @@ def test_get_final_retryable_status_raises_api_error(transport, httpx_mock):
         transport.get("/test")
 
     assert exc.value.status_code == 503
+    assert len(_requests_to(httpx_mock, url)) == 3
+
+
+@pytest.mark.usefixtures("no_retry_sleep")
+def test_final_429_raises_rate_limit_error(transport, httpx_mock):
+    url = "https://dev.pvt.whitson.com/external/v2/test"
+    for _ in range(3):
+        httpx_mock.add_response(
+            url=url,
+            status_code=429,
+            headers={"retry-after": "2"},
+            json={"message": "Too many requests"},
+        )
+
+    with pytest.raises(RateLimitError, match="Too many requests") as exc:
+        transport.get("/test")
+
+    assert exc.value.status_code == 429
+    assert exc.value.retry_after_seconds == 2
     assert len(_requests_to(httpx_mock, url)) == 3
 
 

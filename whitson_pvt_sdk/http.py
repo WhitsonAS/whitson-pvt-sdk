@@ -7,7 +7,13 @@ import httpx
 
 from whitson_pvt_sdk._retry import rate_limit_reset_after, response_retry_after, retry_delay
 from whitson_pvt_sdk.auth import TokenManager
-from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
+from whitson_pvt_sdk.errors import (
+    APIError,
+    AuthError,
+    NotFoundError,
+    RateLimitError,
+    ValidationError,
+)
 from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
 
 logger = logging.getLogger("whitson_pvt_sdk")
@@ -127,6 +133,14 @@ class HTTPTransport:
         if status in (400, 422):
             raise ValidationError(
                 msg, status_code=status, response_body=body, request_id=request_id
+            )
+        if status == 429:
+            raise RateLimitError(
+                msg,
+                status_code=status,
+                response_body=body,
+                request_id=request_id,
+                retry_after_seconds=response_retry_after(response),
             )
         raise APIError(msg, status_code=status, response_body=body, request_id=request_id)
 

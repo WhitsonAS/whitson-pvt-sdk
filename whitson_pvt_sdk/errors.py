@@ -37,6 +37,27 @@ class APIError(HTTPStatusError):
     """The upstream API returned an error."""
 
 
+class RateLimitError(HTTPStatusError):
+    """The upstream API rejected the request due to rate limiting."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = 429,
+        *,
+        response_body: object | None = None,
+        request_id: str | None = None,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            message,
+            status_code=status_code,
+            response_body=response_body,
+            request_id=request_id,
+        )
+
+
 class CalculationError(SDKError):
     """A calculation endpoint returned a failed calculation result."""
 

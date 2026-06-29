@@ -50,6 +50,12 @@ Retry delays honor `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
 headers when present. `X-RateLimit-Limit` and `X-RateLimit-Remaining` are left
 available on the raw HTTP response internally, but do not affect retry timing.
 
+If retries are exhausted on HTTP `429`, the SDK raises `RateLimitError` with
+`retry_after_seconds` when retry timing headers are present. `max_attempts`
+includes the first request; use `RetryConfig(max_attempts=1)` to disable
+retries. `RetryConfig.methods` controls non-429 retries only; remove `429` from
+`RetryConfig.statuses` to disable all-method rate-limit retries.
+
 Configure retries on the client:
 
 ```python

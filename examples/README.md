@@ -215,7 +215,11 @@ client = WhitsonPVTClient(
 )
 ```
 
-Use `RetryConfig(max_attempts=1)` to disable retries.
+Use `RetryConfig(max_attempts=1)` to disable retries. `max_attempts` includes
+the first request. `RetryConfig.methods` controls non-429 retries only; remove
+`429` from `RetryConfig.statuses` to disable all-method rate-limit retries. If
+all retries are exhausted on HTTP `429`, the SDK raises `RateLimitError` with
+`retry_after_seconds` when retry timing headers are present.
 
 For the FastAPI example, install the extra dependency first:
 
