@@ -51,9 +51,11 @@ Do not use `client.authentication`; auth is not exposed as a resource.
 
 ## Retries And Timeouts
 
-The SDK retries transient read failures by default. Retries apply to `GET` requests
-and downloads only, not `POST`, `PUT`, or multipart uploads. Retryable statuses
-are `408`, `429`, `500`, `502`, `503`, and `504`.
+The SDK retries transient read failures by default. `GET` requests and downloads
+retry `408`, `429`, `500`, `502`, `503`, and `504`. Mutating requests (`POST`,
+`PUT`, and multipart uploads) are not retried by default, except for HTTP `429`
+rate-limit responses. Token exchange follows the same retry timing and attempt
+policy.
 
 Retry timing honors `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
 headers when present.
@@ -99,24 +101,28 @@ black_oil_tables = client.black_oil_tables.list(fluid_model_id=654, limit=100)
 black_oil_table = client.black_oil_tables.get(black_oil_table_id=987)
 ```
 
-For paginated v2 list endpoints, pass `cursor=page.pagination.next_cursor` to fetch the next page and `limit=<int>` to control page size.
+For paginated v2 list endpoints, use `iterate()` for lazy traversal or
+`list_all()` for eager collection. Pass `limit=<int>` to control page size.
 
 ## Pagination
 
-v2 list endpoints (regions, wells, projects, fluid models, black oil tables) return a
-`pagination: PaginationMeta` field with `next_cursor` and `prev_cursor`.
-Iterate pages by following `next_cursor`:
+v2 list endpoints (regions, wells, projects, fluid models, black oil tables)
+return a `pagination: PaginationMeta` field with `next_cursor` and `prev_cursor`.
+Use the generated helpers for most callers:
+
+```python
+for region in client.regions.iterate(limit=50):
+    print(region.name)
+
+all_wells = client.wells.list_all(region_id=123, limit=50)
+```
+
+When manual cursor control is needed, call `list()` directly and follow
+`next_cursor`:
 
 ```python
 page = client.regions.list(limit=50)
-
-for region in page.regions:
-    print(region.name)
-
-while page.pagination.next_cursor:
-    page = client.regions.list(cursor=page.pagination.next_cursor)
-    for region in page.regions:
-        print(region.name)
+page2 = client.regions.list(cursor=page.pagination.next_cursor, limit=50)
 ```
 
 Passing `limit` sets the page size (1–250). When omitted, the API default applies (usually 20).
