@@ -40,8 +40,10 @@ class HTTPTransport:
     ) -> None:
         token_url = f"{base_url.rstrip('/')}/external/{version}/auth/token"
 
-        self._token_manager = TokenManager(credentials, token_url=token_url)
         self._retry_config = retry_config or RetryConfig()
+        self._token_manager = TokenManager(
+            credentials, token_url=token_url, retry_config=self._retry_config
+        )
         self._file_timeout = file_timeout
         self._http = httpx.Client(
             auth=_BearerAuth(self._token_manager),

@@ -106,10 +106,11 @@ def test_passes_api_token_url_by_default(credentials, base_url):
     with patch("whitson_pvt_sdk.http.TokenManager") as mock:
         mock.return_value.get_token.return_value = "fake-token"
         WhitsonPVTClient(credentials=credentials, base_url=base_url)
-    mock.assert_called_once_with(
-        credentials,
-        token_url="https://dev.pvt.whitson.com/external/v2/auth/token",
-    )
+    mock.assert_called_once()
+    args, kwargs = mock.call_args
+    assert args == (credentials,)
+    assert kwargs["token_url"] == "https://dev.pvt.whitson.com/external/v2/auth/token"
+    assert kwargs["retry_config"].max_attempts == RetryConfig().max_attempts
 
 
 def test_client_exposes_access_token(credentials, base_url):
