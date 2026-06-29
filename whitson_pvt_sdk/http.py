@@ -1,12 +1,11 @@
-import email.utils
 import logging
-import random
 import time
 from types import TracebackType
 from typing import Any, TypeAlias, cast
 
 import httpx
 
+from whitson_pvt_sdk._retry import rate_limit_reset_after, response_retry_after, retry_delay
 from whitson_pvt_sdk.auth import TokenManager
 from whitson_pvt_sdk.errors import APIError, AuthError, NotFoundError, ValidationError
 from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
@@ -193,11 +192,11 @@ class HTTPTransport:
         return self._is_retryable_method(method) and self._has_attempt_remaining(attempt)
 
     def _should_retry_response(self, method: str, response: httpx.Response, attempt: int) -> bool:
-        return (
-            self._is_retryable_method(method)
-            and self._has_attempt_remaining(attempt)
-            and response.status_code in self._retry_config.statuses
-        )
+        if not self._has_attempt_remaining(attempt):
+            return False
+        if response.status_code not in self._retry_config.statuses:
+            return False
+        return response.status_code == 429 or self._is_retryable_method(method)
 
     def _is_retryable_method(self, method: str) -> bool:
         return method in self._retry_config.methods
@@ -214,13 +213,7 @@ class HTTPTransport:
         path: str | None = None,
         cause: BaseException | None = None,
     ) -> None:
-        retry_after = self._retry_after(response) if response is not None else None
-        if retry_after is None:
-            retry_after = min(
-                self._retry_config.backoff_factor * (2 ** (attempt - 1)),
-                self._retry_config.max_backoff,
-            )
-            retry_after *= random.uniform(0.8, 1.2)
+        retry_after = retry_delay(response, self._retry_config, attempt)
         logger.debug(
             "Retrying API request: method=%s path=%s attempt=%s status=%s delay=%.3f cause=%s",
             method,
@@ -234,36 +227,11 @@ class HTTPTransport:
 
     @staticmethod
     def _retry_after(response: httpx.Response) -> float | None:
-        value = response.headers.get("retry-after-ms")
-        if value is not None:
-            try:
-                return max(float(value) / 1000, 0)
-            except ValueError:
-                pass
-
-        value = response.headers.get("retry-after")
-        if value is None:
-            return HTTPTransport._rate_limit_reset_after(response)
-        try:
-            return max(float(value), 0)
-        except ValueError:
-            try:
-                retry_date = email.utils.parsedate_to_datetime(value)
-            except (TypeError, ValueError):
-                return HTTPTransport._rate_limit_reset_after(response)
-            if retry_date is None:
-                return HTTPTransport._rate_limit_reset_after(response)
-            return max(retry_date.timestamp() - time.time(), 0)
+        return response_retry_after(response)
 
     @staticmethod
     def _rate_limit_reset_after(response: httpx.Response) -> float | None:
-        value = response.headers.get("x-ratelimit-reset")
-        if value is None:
-            return None
-        try:
-            return max(float(value) - time.time(), 0)
-        except ValueError:
-            return None
+        return rate_limit_reset_after(response)
 
     def get(self, path: str, *, params: Params = None) -> dict[str, Any]:
         return self._json(self._request("GET", path, params=params))

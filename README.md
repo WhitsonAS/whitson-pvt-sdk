@@ -43,7 +43,8 @@ token = client.get_access_token()
 The SDK retries transient read failures by default. `GET` requests are attempted up
 to 3 times for network timeouts/transport errors and HTTP `408`, `429`, `500`,
 `502`, `503`, and `504` responses. Mutating requests (`POST`, `PUT`, and
-multipart uploads) are not retried by default.
+multipart uploads) are not retried by default, except on HTTP `429` (rate
+limiting). Token exchange follows the same retry timing and attempt policy.
 
 Retry delays honor `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
 headers when present. `X-RateLimit-Limit` and `X-RateLimit-Remaining` are left

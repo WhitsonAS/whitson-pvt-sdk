@@ -285,6 +285,22 @@ def test_get_retries_429_then_succeeds(transport, httpx_mock, recorded_sleeps):
     assert recorded_sleeps == [0]
 
 
+def test_post_retries_429_then_succeeds(transport, httpx_mock, recorded_sleeps):
+    url = "https://dev.pvt.whitson.com/external/v2/test"
+    httpx_mock.add_response(
+        method="POST",
+        url=url,
+        status_code=429,
+        headers={"retry-after": "0"},
+        json={"message": "Too many requests"},
+    )
+    httpx_mock.add_response(method="POST", url=url, json={"ok": True})
+
+    assert transport.post("/test", body={"name": "test"}) == {"ok": True}
+    assert len(_requests_to(httpx_mock, url)) == 2
+    assert recorded_sleeps == [0]
+
+
 def test_retry_logs_debug_message(transport, httpx_mock, recorded_sleeps, caplog):
     caplog.set_level(logging.DEBUG, logger="whitson_pvt_sdk")
     url = "https://dev.pvt.whitson.com/external/v2/test"
@@ -318,7 +334,7 @@ def test_retry_uses_retry_after_ms(transport, httpx_mock, recorded_sleeps):
 
 
 def test_retry_uses_http_date_retry_after(transport, httpx_mock, monkeypatch, recorded_sleeps):
-    monkeypatch.setattr("whitson_pvt_sdk.http.time.time", lambda: 1_700_000_000)
+    monkeypatch.setattr("whitson_pvt_sdk._retry.time.time", lambda: 1_700_000_000)
     url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(
         url=url,
@@ -333,7 +349,7 @@ def test_retry_uses_http_date_retry_after(transport, httpx_mock, monkeypatch, re
 
 
 def test_retry_uses_rate_limit_reset(transport, httpx_mock, monkeypatch, recorded_sleeps):
-    monkeypatch.setattr("whitson_pvt_sdk.http.time.time", lambda: 1_700_000_000)
+    monkeypatch.setattr("whitson_pvt_sdk._retry.time.time", lambda: 1_700_000_000)
     url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(
         url=url,
