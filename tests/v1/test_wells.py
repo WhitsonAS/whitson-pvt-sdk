@@ -54,9 +54,10 @@ def test_update_wells_bulk_serializes_as_list(transport_v1, httpx_mock):
         url="https://dev.pvt.whitson.com/external/v1/wells/bulk",
         json={"wells": [make_well_json(id=1), make_well_json(id=2)]},
     )
-    data = UpdateWellsListModel.model_validate(
-        {"root": [{"id": 1, "name": "W1"}, {"id": 2, "name": "W2"}]}
-    )
+    data = UpdateWellsListModel.model_validate([
+        {"id": 1, "name": "W1"},
+        {"id": 2, "name": "W2"},
+    ])
     result = Wells(transport_v1).update_bulk(data)
     assert isinstance(result, WellsListModel)
     assert len(result.wells) == 2
