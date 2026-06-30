@@ -1,12 +1,13 @@
 from typing import TYPE_CHECKING
 
+from whitson_pvt_sdk._client import _BaseClient
 from whitson_pvt_sdk.v1 import resources
 
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
 
 
-class WhitsonPVTClientV1:
+class WhitsonPVTClientV1(_BaseClient):
     regions: resources.Regions
     wells: resources.Wells
     samples: resources.Samples
@@ -16,17 +17,7 @@ class WhitsonPVTClientV1:
     reports: resources.Reports
 
     def __init__(self, transport: "HTTPTransport") -> None:
-        self._transport = transport
-        self.regions = resources.Regions(transport)
-        self.wells = resources.Wells(transport)
-        self.samples = resources.Samples(transport)
-        self.projects = resources.Projects(transport)
-        self.fluid_models = resources.FluidModels(transport)
-        self.black_oil_tables = resources.BlackOilTables(transport)
-        self.reports = resources.Reports(transport)
-
-    def get_access_token(self) -> str:
-        return self._transport.get_access_token()
+        super().__init__(transport, resources)
 
 
 __all__ = ["WhitsonPVTClientV1"]
