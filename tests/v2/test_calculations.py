@@ -73,6 +73,10 @@ def test_get_sample_feed_compositions_converts_slate_to_slate_response(transport
                     "status": "success",
                     "result": {
                         "component_names": ["C1", "C2"],
+                        "composition": [
+                            {"component_name": "C1", "molar_amount": 0.9},
+                            {"component_name": "C2", "molar_amount": 0.1},
+                        ],
                         "mass_fractions": [0.8, 0.2],
                         "mole_fractions": [0.9, 0.1],
                     },
@@ -107,6 +111,10 @@ def test_get_sample_feed_composition_returns_single_sample_composition(transport
                     "status": "success",
                     "result": {
                         "component_names": ["C1", "C2"],
+                        "composition": [
+                            {"component_name": "C1", "molar_amount": 0.9},
+                            {"component_name": "C2", "molar_amount": 0.1},
+                        ],
                         "mass_fractions": [0.8, 0.2],
                         "mole_fractions": [0.9, 0.1],
                     },

@@ -1331,6 +1331,7 @@ class GorRecombinationCalculationInputModel(BaseModel):
 
 class GorRecombinationCalculationResultModel(BaseModel):
     component_names: list[str]
+    composition: list[CalculationCompositionEntryModel]
     mass_fractions: list[float]
     mole_fractions: list[float]
 
@@ -1411,6 +1412,7 @@ class ProjectSampleModel(BaseModel):
 
 class SampleToEosSlateConversionCalculationResultModel(BaseModel):
     component_names: list[str]
+    composition: list[CalculationCompositionEntryModel]
     mass_fractions: list[float]
     mole_fractions: list[float]
 
@@ -1569,6 +1571,7 @@ class FlashCalculationRequestModel(BaseModel):
     inputs: Annotated[list[FlashCalculationInputModel], Field(max_length=10000, min_length=1)]
     output_unit_system: Literal["SI", "FIELD", "CANADA"] | None = "SI"
     pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"]
+    remove_mud_components: bool | None = False
     temperature_unit: Literal["C", "K", "F", "R"]
 
 
@@ -1684,6 +1687,7 @@ class PhaseEnvelopeCalculationRequestModel(BaseModel):
     fluid_model_id: int
     inputs: Annotated[list[PhaseEnvelopeCalculationInputModel], Field(max_length=200, min_length=1)]
     output_unit_system: Literal["SI", "FIELD", "CANADA"] | None = "SI"
+    remove_mud_components: bool | None = False
 
 
 class SaturationPressureCalculationRequestModel(BaseModel):
@@ -1696,6 +1700,7 @@ class SaturationPressureCalculationRequestModel(BaseModel):
     pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None = (
         None
     )
+    remove_mud_components: bool | None = False
     temperature_unit: Literal["C", "K", "F", "R"]
 
 
@@ -2152,6 +2157,7 @@ class GorRecombinationCalculationRequestModel(BaseModel):
         list[GorRecombinationCalculationInputModel], Field(max_length=10000, min_length=1)
     ]
     recombination_type: Literal["total_gor", "first_stage_separator_gor"]
+    remove_mud_components: bool | None = False
     surface_process: SurfaceProcessModel
 
 

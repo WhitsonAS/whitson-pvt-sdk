@@ -25,16 +25,7 @@ def slate_to_slate_converted_feed_compositions(
                 error=result.error,
             )
 
-        component_names = result.result.component_names
-        mole_fractions = result.result.mole_fractions
-
-        feed_compositions[sample_id] = [
-            CalculationCompositionEntryModel(
-                component_name=component_name,
-                molar_amount=mole_fraction,
-            )
-            for component_name, mole_fraction in zip(component_names, mole_fractions)
-        ]
+        feed_compositions[sample_id] = result.result.composition
 
     return feed_compositions
 
