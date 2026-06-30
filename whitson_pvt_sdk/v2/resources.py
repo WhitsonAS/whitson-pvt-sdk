@@ -27,6 +27,13 @@ class Calculations(generated_resources.Calculations):
         sample_ids: list[int],
         source: CompositionSource = "slate_to_slate_converted",
     ) -> dict[int, list[CalculationCompositionEntryModel]]:
+        """Return feed compositions for the given samples keyed by sample id.
+
+        *source* controls where compositions are drawn from:
+        ``"slate_to_slate_converted"`` runs a conversion calculation;
+        ``"adjusted_compositions"`` reads from the fluid model's
+        adjusted compositions.
+        """
         if source == "slate_to_slate_converted":
             response = self.calculate_sample_to_eos_slate_conversion(
                 SampleToEosSlateConversionCalculationRequestModel(
@@ -48,6 +55,9 @@ class Calculations(generated_resources.Calculations):
         sample_id: int,
         source: CompositionSource = "slate_to_slate_converted",
     ) -> list[CalculationCompositionEntryModel]:
+        """Return feed composition for a single sample. See
+        :meth:`get_sample_feed_compositions`.
+        """
         return self.get_sample_feed_compositions(
             fluid_model_id=fluid_model_id,
             sample_ids=[sample_id],

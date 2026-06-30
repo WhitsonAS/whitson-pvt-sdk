@@ -5,6 +5,14 @@ _T = TypeVar("_T")
 
 
 class Paginator:
+    """Cursor-paginated traversal over API list endpoints.
+
+    *page_fn* must accept ``cursor`` and ``limit`` keyword arguments and
+    return an object whose ``pagination`` field has a ``next_cursor``.
+    *items_field* is the attribute name on each page holding the item list.
+    Additional ``**kwargs`` are forwarded to *page_fn* on every call.
+    """
+
     @staticmethod
     def iterate(
         page_fn: Callable[..., Any],
