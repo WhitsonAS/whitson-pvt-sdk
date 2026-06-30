@@ -711,8 +711,9 @@ def test_render_resources_adds_pagination_helpers():
 
     assert "from collections.abc import Iterator" in rendered
     assert "GetWellSimpleModel" in rendered
+    assert "from whitson_pvt_sdk.shared.pagination import Paginator" in rendered
     assert "def iterate(" in rendered
-    assert "yield from page.wells" in rendered
+    assert 'Paginator.iterate(self.list, "wells"' in rendered
     assert "def list_all(" in rendered
 
 

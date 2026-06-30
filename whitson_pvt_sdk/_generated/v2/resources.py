@@ -13,6 +13,7 @@ from whitson_pvt_sdk._generated.v2 import (
     samples,
     wells,
 )
+from whitson_pvt_sdk.shared.pagination import Paginator
 
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
@@ -75,17 +76,12 @@ class Regions:
     def iterate(
         self, cursor: str | None = None, limit: int | None = None
     ) -> Iterator[GetRegionModel]:
-        while True:
-            page = self.list(cursor=cursor, limit=limit)
-            yield from page.regions
-            cursor = page.pagination.next_cursor
-            if cursor is None:
-                return
+        return Paginator.iterate(self.list, "regions", cursor=cursor, limit=limit)
 
     def list_all(
         self, cursor: str | None = None, limit: int | None = None
     ) -> ListType[GetRegionModel]:
-        return list(self.iterate(cursor=cursor, limit=limit))
+        return Paginator.list_all(self.list, "regions", cursor=cursor, limit=limit)
 
     def create(self, data: CreateRegionModel) -> GetRegionModel:
         return regions.create_region(self._transport, data)
@@ -109,17 +105,16 @@ class Wells:
     def iterate(
         self, region_id: int, cursor: str | None = None, limit: int | None = None
     ) -> Iterator[GetWellSimpleModel]:
-        while True:
-            page = self.list(region_id=region_id, cursor=cursor, limit=limit)
-            yield from page.wells
-            cursor = page.pagination.next_cursor
-            if cursor is None:
-                return
+        return Paginator.iterate(
+            self.list, "wells", region_id=region_id, cursor=cursor, limit=limit
+        )
 
     def list_all(
         self, region_id: int, cursor: str | None = None, limit: int | None = None
     ) -> ListType[GetWellSimpleModel]:
-        return list(self.iterate(region_id=region_id, cursor=cursor, limit=limit))
+        return Paginator.list_all(
+            self.list, "wells", region_id=region_id, cursor=cursor, limit=limit
+        )
 
     def create(self, data: CreateWellModel) -> GetWellModel:
         return wells.create_well(self._transport, data)
@@ -169,17 +164,16 @@ class Projects:
     def iterate(
         self, region_id: int, cursor: str | None = None, limit: int | None = None
     ) -> Iterator[GetProjectModel]:
-        while True:
-            page = self.list(region_id=region_id, cursor=cursor, limit=limit)
-            yield from page.projects
-            cursor = page.pagination.next_cursor
-            if cursor is None:
-                return
+        return Paginator.iterate(
+            self.list, "projects", region_id=region_id, cursor=cursor, limit=limit
+        )
 
     def list_all(
         self, region_id: int, cursor: str | None = None, limit: int | None = None
     ) -> ListType[GetProjectModel]:
-        return list(self.iterate(region_id=region_id, cursor=cursor, limit=limit))
+        return Paginator.list_all(
+            self.list, "projects", region_id=region_id, cursor=cursor, limit=limit
+        )
 
 
 class FluidModels:
@@ -197,17 +191,16 @@ class FluidModels:
     def iterate(
         self, project_id: int, cursor: str | None = None, limit: int | None = None
     ) -> Iterator[GetSimpleFluidModelModel]:
-        while True:
-            page = self.list(project_id=project_id, cursor=cursor, limit=limit)
-            yield from page.fluid_models
-            cursor = page.pagination.next_cursor
-            if cursor is None:
-                return
+        return Paginator.iterate(
+            self.list, "fluid_models", project_id=project_id, cursor=cursor, limit=limit
+        )
 
     def list_all(
         self, project_id: int, cursor: str | None = None, limit: int | None = None
     ) -> ListType[GetSimpleFluidModelModel]:
-        return list(self.iterate(project_id=project_id, cursor=cursor, limit=limit))
+        return Paginator.list_all(
+            self.list, "fluid_models", project_id=project_id, cursor=cursor, limit=limit
+        )
 
 
 class BlackOilTables:
@@ -227,17 +220,24 @@ class BlackOilTables:
     def iterate(
         self, fluid_model_id: int, cursor: str | None = None, limit: int | None = None
     ) -> Iterator[GetSimpleBlackOilTableModel]:
-        while True:
-            page = self.list(fluid_model_id=fluid_model_id, cursor=cursor, limit=limit)
-            yield from page.black_oil_tables
-            cursor = page.pagination.next_cursor
-            if cursor is None:
-                return
+        return Paginator.iterate(
+            self.list,
+            "black_oil_tables",
+            fluid_model_id=fluid_model_id,
+            cursor=cursor,
+            limit=limit,
+        )
 
     def list_all(
         self, fluid_model_id: int, cursor: str | None = None, limit: int | None = None
     ) -> ListType[GetSimpleBlackOilTableModel]:
-        return list(self.iterate(fluid_model_id=fluid_model_id, cursor=cursor, limit=limit))
+        return Paginator.list_all(
+            self.list,
+            "black_oil_tables",
+            fluid_model_id=fluid_model_id,
+            cursor=cursor,
+            limit=limit,
+        )
 
 
 class Reports:

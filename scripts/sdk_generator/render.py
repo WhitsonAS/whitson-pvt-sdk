@@ -257,7 +257,8 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         lines.append("    )\n")
     lines.append("\n")
     if has_paginated_endpoint:
-        lines.append("ListType = list\n\n")
+        lines.append("ListType = list\n")
+        lines.append("from whitson_pvt_sdk.shared.pagination import Paginator\n\n")
     for resource in resources:
         lines.append(render_resource_class(resource, by_resource[resource]))
     return "".join(lines).rstrip() + "\n"
@@ -280,22 +281,25 @@ def render_resource_class(resource: str, endpoints: list[Endpoint]) -> str:
 def render_resource_pagination_methods(endpoint: Endpoint) -> str:
     args = [f"{param.python_name}: {param.python_type}" for param in endpoint.path_params]
     args.extend(render_query_param(param) for param in endpoint.query_params)
-    call_args = [f"{param.python_name}={param.python_name}" for param in endpoint.path_params]
-    call_args.extend(f"{param.python_name}={param.python_name}" for param in endpoint.query_params)
     signature_args = f", {', '.join(args)}" if args else ""
-    iterate_call_args = ", ".join(call_args)
-    if iterate_call_args:
-        iterate_call_args = f"{iterate_call_args}"
+
+    call_parts = [f"{param.python_name}={param.python_name}" for param in endpoint.path_params]
+    call_parts.extend(
+        f"{param.python_name}={param.python_name}" for param in endpoint.query_params
+    )
+    paginator_call = ", ".join(call_parts)
+    if paginator_call:
+        paginator_call = f", {paginator_call}"
+
     return (
         f"    def iterate(self{signature_args}) -> Iterator[{endpoint.pagination_item_model}]:\n"
-        "        while True:\n"
-        f"            page = self.{endpoint.public_method_name}({iterate_call_args})\n"
-        f"            yield from page.{endpoint.pagination_items_field}\n"
-        "            cursor = page.pagination.next_cursor\n"
-        "            if cursor is None:\n"
-        "                return\n\n"
+        f"        return Paginator.iterate("
+        f'self.{endpoint.public_method_name}, "{endpoint.pagination_items_field}"'
+        f"{paginator_call})\n\n"
         f"    def list_all(self{signature_args}) -> ListType[{endpoint.pagination_item_model}]:\n"
-        f"        return list(self.iterate({iterate_call_args}))\n\n"
+        f"        return Paginator.list_all("
+        f'self.{endpoint.public_method_name}, "{endpoint.pagination_items_field}"'
+        f"{paginator_call})\n\n"
     )
 
 
