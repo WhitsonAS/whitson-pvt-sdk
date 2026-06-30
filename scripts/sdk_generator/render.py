@@ -71,20 +71,22 @@ def _render_shared_endpoint_module(
     """Render a thin adapter that delegates to _generated/shared/{resource}.py."""
     lines: list[str] = []
 
-    for ep in sorted(endpoints, key=lambda e: e.function_name):
-        if ep.body_kind == "multipart":
-            lines.append(
-                f"from ..shared.{resource} import _{ep.function_name}"
-                f" as _shared_{ep.function_name}\n"
-            )
-        else:
-            lines.append(f"from ..shared.{resource} import {ep.function_name}\n")
+    multipart_endpoints = [ep for ep in endpoints if ep.body_kind == "multipart"]
+    other_endpoints = [ep for ep in endpoints if ep.body_kind != "multipart"]
+
+    for ep in multipart_endpoints:
+        lines.append(
+            f"from ..shared.{resource} import _{ep.function_name}"
+            f" as _shared_{ep.function_name}\n"
+        )
+    for ep in other_endpoints:
+        lines.append(f"from ..shared.{resource} import {ep.function_name}  # noqa: F401\n")
 
     lines.append("\nfrom ...http import HTTPTransport\n")
     lines.append("from ...shared.models import ImportArchiveOptions\n")
 
     response_models = sorted(
-        {ep.response_model for ep in endpoints if ep.body_kind == "multipart" and ep.response_model}
+        {ep.response_model for ep in multipart_endpoints if ep.response_model}
     )
     if response_models:
         lines.append(f"from ...{version}.models import (\n")
@@ -93,9 +95,8 @@ def _render_shared_endpoint_module(
         lines.append(")\n")
     lines.append("\n")
 
-    for ep in endpoints:
-        if ep.body_kind == "multipart":
-            lines.append(_render_multipart_adapter(ep))
+    for ep in multipart_endpoints:
+        lines.append(_render_multipart_adapter(ep))
 
     return "".join(lines).rstrip() + "\n"
 
@@ -236,29 +237,36 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         for endpoints in by_resource.values()
         for endpoint in endpoints
     )
+    shared_resources = [r for r in resources if r in SHARED_MODULES]
+
     lines = ["from __future__ import annotations\n\n"]
     if has_paginated_endpoint:
         lines.append("from collections.abc import Iterator\n")
     lines.append("from typing import TYPE_CHECKING\n\n")
-    lines.append(f"from whitson_pvt_sdk._generated.{version} import (\n")
-    lines.extend(f"    {resource},\n" for resource in resources)
-    lines.append(")\n\n")
-    lines.append("if TYPE_CHECKING:\n")
-    lines.append("    from whitson_pvt_sdk.http import HTTPTransport\n")
-    manual_models = [model for model in model_imports if model == "ImportArchiveOptions"]
-    generated_models = [model for model in model_imports if model != "ImportArchiveOptions"]
-    if manual_models:
-        lines.append("    from whitson_pvt_sdk.shared.models import (\n")
-        lines.extend(f"        {model},\n" for model in manual_models)
-        lines.append("    )\n")
-    if generated_models:
-        lines.append(f"    from whitson_pvt_sdk.{version}.models import (\n")
-        lines.extend(f"        {model},\n" for model in generated_models)
-        lines.append("    )\n")
-    lines.append("\n")
+
+    if shared_resources:
+        lines.append(f"from whitson_pvt_sdk._generated.{version} import (\n")
+        lines.extend(f"    {r},\n" for r in shared_resources)
+        lines.append(")\n")
+
     if has_paginated_endpoint:
-        lines.append("ListType = list\n")
-        lines.append("from whitson_pvt_sdk.shared.pagination import Paginator\n\n")
+        lines.append("from whitson_pvt_sdk.shared.models import PaginationParams\n")
+
+    lines.append("\nif TYPE_CHECKING:\n")
+    lines.append("    from whitson_pvt_sdk.http import HTTPTransport\n")
+    if "ImportArchiveOptions" in model_imports:
+        lines.append("    from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n")
+    lines.append("\n")
+
+    # Runtime model imports -- needed by inline model_validate() calls
+    generated_models = [model for model in model_imports if model != "ImportArchiveOptions"]
+    if generated_models:
+        lines.append(f"from whitson_pvt_sdk.{version}.models import (\n")
+        lines.extend(f"    {model},\n" for model in generated_models)
+        lines.append(")\n")
+    if has_paginated_endpoint:
+        lines.append("from whitson_pvt_sdk.shared.pagination import Paginator\n")
+        lines.append("ListType = list\n\n")
     for resource in resources:
         lines.append(render_resource_class(resource, by_resource[resource]))
     return "".join(lines).rstrip() + "\n"
@@ -304,8 +312,15 @@ def render_resource_pagination_methods(endpoint: Endpoint) -> str:
 
 
 def render_resource_method(resource: str, endpoint: Endpoint) -> str:
-    args = []
-    call_args = ["self._transport"]
+    if resource in SHARED_MODULES:
+        return _render_shared_resource_method(resource, endpoint)
+    return _render_inline_resource_method(endpoint)
+
+
+def _render_shared_resource_method(resource: str, endpoint: Endpoint) -> str:
+    """Shared resources delegate to their per-version endpoint adapter module."""
+    args: list[str] = []
+    call_args: list[str] = ["self._transport"]
     if endpoint.body_kind == "multipart":
         args = ["archive_data: bytes", "options: ImportArchiveOptions | None = None"]
         call_args.extend(["archive_data", "options"])
@@ -313,21 +328,47 @@ def render_resource_method(resource: str, endpoint: Endpoint) -> str:
         for param in endpoint.path_params:
             args.append(f"{param.python_name}: {param.python_type}")
             call_args.append(param.python_name)
-        if endpoint.request_model and endpoint.body_kind in {"model", "root_list"}:
-            args.append(f"data: {endpoint.request_model}")
-            call_args.append("data")
         for param in endpoint.query_params:
             args.append(render_query_param(param))
             call_args.append(param.python_name)
 
-    if endpoint.return_kind == "tuple_bytes_filename":
-        return_type = "tuple[bytes, str]"
-    else:
-        return_type = endpoint.response_model
+    return_type = (
+        "tuple[bytes, str]" if endpoint.return_kind == "tuple_bytes_filename"
+        else endpoint.response_model
+    )
     return (
         f"    def {endpoint.public_method_name}(self"
         f"{', ' if args else ''}{', '.join(args)}) -> {return_type}:\n"
         f"        return {resource}.{endpoint.function_name}({', '.join(call_args)})\n\n"
+    )
+
+
+def _render_inline_resource_method(endpoint: Endpoint) -> str:
+    """Non-shared resources call _transport directly and validate the response."""
+    args: list[str] = []
+    for param in endpoint.path_params:
+        args.append(f"{param.python_name}: {param.python_type}")
+    if endpoint.request_model and endpoint.body_kind in {"model", "root_list"}:
+        args.append(f"data: {endpoint.request_model}")
+    for param in endpoint.query_params:
+        args.append(render_query_param(param))
+
+    return_type = endpoint.response_model
+
+    path_expr = render_path(endpoint.path)
+    call_parts = [path_expr]
+    if endpoint.query_params:
+        call_parts.append(f"params={render_params_expr(endpoint)}")
+    if endpoint.body_kind in {"model", "root_list"}:
+        call_parts.append(f"body={render_body_expr(endpoint)}")
+
+    transport_call = f"self._transport.{endpoint.http_method}({', '.join(call_parts)})"
+
+    return (
+        f"    def {endpoint.public_method_name}(self"
+        f"{', ' if args else ''}{', '.join(args)}) -> {return_type}:\n"
+        f"        body = {transport_call}\n"
+        f"        return {endpoint.response_model}.model_validate(body)\n\n"
     )
 
 

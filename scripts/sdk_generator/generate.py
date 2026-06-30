@@ -12,7 +12,7 @@ from datamodel_code_generator.enums import DataModelType
 from datamodel_code_generator.format import Formatter
 from datamodel_code_generator.parser import LiteralType
 
-from sdk_generator.config import GENERATED_DIR, SUPPORTED_VERSIONS
+from sdk_generator.config import GENERATED_DIR, SHARED_MODULES, SUPPORTED_VERSIONS
 from sdk_generator.models import Endpoint
 from sdk_generator.openapi import load_openapi, parse_endpoints
 from sdk_generator.render import format_python, render_module, render_resources
@@ -151,9 +151,10 @@ def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> No
         version_dir.mkdir(parents=True, exist_ok=True)
     generated: dict[Path, str] = {}
     for resource, resource_endpoints in by_resource.items():
-        generated[version_dir / f"{resource}.py"] = render_module(
-            version, resource, resource_endpoints
-        )
+        if resource in SHARED_MODULES:
+            generated[version_dir / f"{resource}.py"] = render_module(
+                version, resource, resource_endpoints
+            )
     generated[version_dir / "resources.py"] = render_resources(version, by_resource)
 
     # Format all files in one batch
