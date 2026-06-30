@@ -38,9 +38,6 @@ OVERRIDES: dict[tuple[str, str, str], EndpointOverride] = {
     ),
 }
 
-SHARED_MODULES = frozenset({"reports"})
-"""Resources whose endpoint modules delegate to _generated/shared/."""
-
 RESOURCE_CLASS_NAMES = {
     "black_oil_tables": "BlackOilTables",
     "fluid_models": "FluidModels",
