@@ -1,9 +1,9 @@
-from whitson_pvt_sdk._generated.v2 import fluid_models
 from whitson_pvt_sdk.errors import CalculationError
 from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
     CalculationErrorResultModel,
+    GetFluidModelModel,
     SampleToEosSlateConversionCalculationResponseModel,
 )
 
@@ -44,7 +44,8 @@ def adjusted_feed_compositions(
     fluid_model_id: int,
     sample_ids: list[int],
 ) -> dict[int, list[CalculationCompositionEntryModel]]:
-    fluid_model = fluid_models.get_fluid_model(transport, fluid_model_id)
+    body = transport.get(f"/fluid-models/{fluid_model_id}")
+    fluid_model = GetFluidModelModel.model_validate(body)
     compositions_by_sample_id = {
         composition.sample_id: composition
         for composition in fluid_model.adjusted_compositions

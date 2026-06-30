@@ -3,45 +3,38 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from whitson_pvt_sdk._generated.v1 import (
-    black_oil_tables,
-    fluid_models,
-    projects,
-    regions,
     reports,
-    samples,
-    wells,
 )
 
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
-    from whitson_pvt_sdk.shared.models import (
-        ImportArchiveOptions,
-    )
-    from whitson_pvt_sdk.v1.models import (
-        BlackOilTablesListModel,
-        CreateRegionModel,
-        CreateSampleListModel,
-        CreateSampleModel,
-        CreateWellModel,
-        FluidModelsListModel,
-        GetBlackOilTableModel,
-        GetFluidModelModel,
-        GetProjectWithFluidModelsModel,
-        GetRegionModel,
-        GetSampleListModel,
-        GetSampleModel,
-        GetWellModel,
-        ImportCommitResultModel,
-        ImportPreflightResultModel,
-        ProjectsListModel,
-        RegionsListModel,
-        UpdateRegionModel,
-        UpdateSampleListModel,
-        UpdateSampleModel,
-        UpdateWellModel,
-        UpdateWellsListModel,
-        WellsListModel,
-    )
+    from whitson_pvt_sdk.shared.models import ImportArchiveOptions
+
+from whitson_pvt_sdk.v1.models import (
+    BlackOilTablesListModel,
+    CreateRegionModel,
+    CreateSampleListModel,
+    CreateSampleModel,
+    CreateWellModel,
+    FluidModelsListModel,
+    GetBlackOilTableModel,
+    GetFluidModelModel,
+    GetProjectWithFluidModelsModel,
+    GetRegionModel,
+    GetSampleListModel,
+    GetSampleModel,
+    GetWellModel,
+    ImportCommitResultModel,
+    ImportPreflightResultModel,
+    ProjectsListModel,
+    RegionsListModel,
+    UpdateRegionModel,
+    UpdateSampleListModel,
+    UpdateSampleModel,
+    UpdateWellModel,
+    UpdateWellsListModel,
+    WellsListModel,
+)
 
 
 class Regions:
@@ -49,16 +42,22 @@ class Regions:
         self._transport = transport
 
     def list(self) -> RegionsListModel:
-        return regions.list_regions(self._transport)
+        body = self._transport.get("/regions")
+        return RegionsListModel.model_validate(body)
 
     def create(self, data: CreateRegionModel) -> GetRegionModel:
-        return regions.create_region(self._transport, data)
+        body = self._transport.post("/regions", body=data.model_dump(exclude_unset=True))
+        return GetRegionModel.model_validate(body)
 
     def get(self, region_id: int) -> GetRegionModel:
-        return regions.get_region(self._transport, region_id)
+        body = self._transport.get(f"/regions/{region_id}")
+        return GetRegionModel.model_validate(body)
 
     def update(self, region_id: int, data: UpdateRegionModel) -> GetRegionModel:
-        return regions.update_region(self._transport, region_id, data)
+        body = self._transport.put(
+            f"/regions/{region_id}", body=data.model_dump(exclude_unset=True)
+        )
+        return GetRegionModel.model_validate(body)
 
 
 class Wells:
@@ -66,22 +65,34 @@ class Wells:
         self._transport = transport
 
     def list(self, region_id: int) -> WellsListModel:
-        return wells.list_wells_info(self._transport, region_id)
+        body = self._transport.get(f"/regions/{region_id}/wells")
+        return WellsListModel.model_validate(body)
 
     def create(self, data: CreateWellModel) -> GetWellModel:
-        return wells.create_well(self._transport, data)
+        body = self._transport.post(
+            "/wells", body=data.model_dump(exclude={"samples"}, exclude_unset=True)
+        )
+        return GetWellModel.model_validate(body)
 
     def update_bulk(self, data: UpdateWellsListModel) -> WellsListModel:
-        return wells.update_wells(self._transport, data)
+        body = self._transport.put(
+            "/wells/bulk", body=[model.model_dump(exclude_unset=True) for model in data.root]
+        )
+        return WellsListModel.model_validate(body)
 
     def create_well_deprecated(self, data: CreateWellModel) -> GetWellModel:
-        return wells.create_well_deprecated(self._transport, data)
+        body = self._transport.post(
+            "/wells/create", body=data.model_dump(exclude={"samples"}, exclude_unset=True)
+        )
+        return GetWellModel.model_validate(body)
 
     def get(self, well_id: int) -> GetWellModel:
-        return wells.get_well(self._transport, well_id)
+        body = self._transport.get(f"/wells/{well_id}")
+        return GetWellModel.model_validate(body)
 
     def update(self, well_id: int, data: UpdateWellModel) -> GetWellModel:
-        return wells.update_well(self._transport, well_id, data)
+        body = self._transport.put(f"/wells/{well_id}", body=data.model_dump(exclude_unset=True))
+        return GetWellModel.model_validate(body)
 
 
 class Samples:
@@ -89,25 +100,41 @@ class Samples:
         self._transport = transport
 
     def create(self, data: CreateSampleModel) -> GetSampleModel:
-        return samples.create_sample(self._transport, data)
+        body = self._transport.post("/samples", body=data.model_dump(exclude_unset=True))
+        return GetSampleModel.model_validate(body)
 
     def create_bulk(self, data: CreateSampleListModel) -> GetSampleListModel:
-        return samples.create_samples(self._transport, data)
+        body = self._transport.post(
+            "/samples/bulk", body=[model.model_dump(exclude_unset=True) for model in data.root]
+        )
+        return GetSampleListModel.model_validate(body)
 
     def update_bulk(self, data: UpdateSampleListModel) -> GetSampleListModel:
-        return samples.update_samples(self._transport, data)
+        body = self._transport.put(
+            "/samples/bulk", body=[model.model_dump(exclude_unset=True) for model in data.root]
+        )
+        return GetSampleListModel.model_validate(body)
 
     def create_sample_deprecated(self, data: CreateSampleModel) -> GetSampleModel:
-        return samples.create_sample_deprecated(self._transport, data)
+        body = self._transport.post("/samples/create", body=data.model_dump(exclude_unset=True))
+        return GetSampleModel.model_validate(body)
 
     def create_samples_deprecated(self, data: CreateSampleListModel) -> GetSampleListModel:
-        return samples.create_samples_deprecated(self._transport, data)
+        body = self._transport.post(
+            "/samples/create/bulk",
+            body=[model.model_dump(exclude_unset=True) for model in data.root],
+        )
+        return GetSampleListModel.model_validate(body)
 
     def get(self, sample_id: int) -> GetSampleModel:
-        return samples.get_sample(self._transport, sample_id)
+        body = self._transport.get(f"/samples/{sample_id}")
+        return GetSampleModel.model_validate(body)
 
     def update(self, sample_id: int, data: UpdateSampleModel) -> GetSampleModel:
-        return samples.update_sample(self._transport, sample_id, data)
+        body = self._transport.put(
+            f"/samples/{sample_id}", body=data.model_dump(exclude_unset=True)
+        )
+        return GetSampleModel.model_validate(body)
 
 
 class Projects:
@@ -115,10 +142,12 @@ class Projects:
         self._transport = transport
 
     def get(self, project_id: int) -> GetProjectWithFluidModelsModel:
-        return projects.get_project(self._transport, project_id)
+        body = self._transport.get(f"/projects/{project_id}")
+        return GetProjectWithFluidModelsModel.model_validate(body)
 
     def list(self, region_id: int) -> ProjectsListModel:
-        return projects.list_projects(self._transport, region_id)
+        body = self._transport.get(f"/regions/{region_id}/projects")
+        return ProjectsListModel.model_validate(body)
 
 
 class FluidModels:
@@ -126,10 +155,12 @@ class FluidModels:
         self._transport = transport
 
     def get(self, fluid_model_id: int) -> GetFluidModelModel:
-        return fluid_models.get_fluid_model(self._transport, fluid_model_id)
+        body = self._transport.get(f"/fluid-models/{fluid_model_id}")
+        return GetFluidModelModel.model_validate(body)
 
     def list(self, project_id: int) -> FluidModelsListModel:
-        return fluid_models.list_fluid_models(self._transport, project_id)
+        body = self._transport.get(f"/projects/{project_id}/fluid-models")
+        return FluidModelsListModel.model_validate(body)
 
 
 class BlackOilTables:
@@ -137,10 +168,12 @@ class BlackOilTables:
         self._transport = transport
 
     def get(self, black_oil_table_id: int) -> GetBlackOilTableModel:
-        return black_oil_tables.get_black_oil_table(self._transport, black_oil_table_id)
+        body = self._transport.get(f"/black-oil-tables/{black_oil_table_id}")
+        return GetBlackOilTableModel.model_validate(body)
 
     def list(self, fluid_model_id: int) -> BlackOilTablesListModel:
-        return black_oil_tables.list_black_oil_tables(self._transport, fluid_model_id)
+        body = self._transport.get(f"/fluid-models/{fluid_model_id}/black-oil-tables")
+        return BlackOilTablesListModel.model_validate(body)
 
 
 class Reports:
