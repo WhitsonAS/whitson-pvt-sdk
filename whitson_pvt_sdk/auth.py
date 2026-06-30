@@ -105,9 +105,7 @@ class TokenManager:
     def _has_attempt_remaining(self, attempt: int) -> bool:
         return attempt < self._retry_config.max_attempts
 
-    def _sleep_before_retry(
-        self, attempt: int, response: httpx.Response | None = None
-    ) -> None:
+    def _sleep_before_retry(self, attempt: int, response: httpx.Response | None = None) -> None:
         delay = retry_delay(response, self._retry_config, attempt)
         logger.debug(
             "Retrying authentication request: attempt=%s status=%s delay=%.3f",
