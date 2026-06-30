@@ -230,28 +230,29 @@ This fetches `/external/{version}/docs/openapi.json` from the configured `BASE_U
 Generated outputs live under:
 
 - `whitson_pvt_sdk/_generated/{version}/models.py`
-- `whitson_pvt_sdk/_generated/{version}/{resource}.py`
 - `whitson_pvt_sdk/_generated/{version}/resources.py`
+- `whitson_pvt_sdk/_generated/shared/reports.py`
 - `whitson_pvt_sdk/{version}/models/__init__.py` re-exports generated models
 - `whitson_pvt_sdk/{version}/resources.py` re-exports public resource classes
 
-Resource classes expose SDK-shaped method names such as `list`, `get`, `create`,
-`update`, `create_bulk`, and `update_bulk`. Lower-level generated module
-functions keep OpenAPI operation IDs for traceability.
+Resource classes call `HTTPTransport` directly and expose SDK-shaped method
+names such as `list`, `get`, `create`, `update`, `create_bulk`, and
+`update_bulk`. Shared endpoint modules in `_generated/shared/` centralize
+implementation that spans versions (report import/export).
 
 Authentication endpoints are intentionally excluded from generated resources;
-auth is infrastructure owned by `HTTPTransport` and `TokenManager`.
+auth is infrastructure owned by `HTTPTransport`.
 
 ### Package structure
 
 ```
 whitson_pvt_sdk/
 ├── __init__.py              # WhitsonPVTClient
-├── http.py                  # HTTPTransport (httpx)
-├── auth.py                  # TokenManager
+├── http.py                  # HTTPTransport (httpx, auth, retries)
 ├── errors.py                # SDKError, NotFoundError, ...
 ├── shared/models.py         # hand-maintained shared models
-├── _generated/              # generated models, endpoint functions, resource facades
+├── shared/pagination.py     # Paginator utility
+├── _generated/              # generated models, resource facades, shared adapters
 ├── v1/                      # public v1 client/resources/model re-exports
 └── v2/                      # public v2 client/resources/model re-exports
 ```
