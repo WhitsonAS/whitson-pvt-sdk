@@ -1,10 +1,15 @@
+from typing import Any
+
 from whitson_pvt_sdk._generated.v2 import resources as generated_resources
 from whitson_pvt_sdk.shared.models import CompositionSource
 from whitson_pvt_sdk.v2._helpers import calculations as calculation_helpers
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
     GetSampleListModel,
+    GorRecombinationCalculationInputModel,
+    GorRecombinationCalculationRequestModel,
     SampleToEosSlateConversionCalculationRequestModel,
+    SurfaceProcessModel,
 )
 
 BlackOilTables = generated_resources.BlackOilTables
@@ -47,6 +52,65 @@ class Calculations(generated_resources.Calculations):
             fluid_model_id=fluid_model_id,
             sample_ids=[sample_id],
             source=source,
+        )[sample_id]
+
+    def get_gor_recombination_feed_compositions(
+        self,
+        fluid_model_id: int,
+        gor_values: dict[int, float],
+        gor_unit: Any,
+        recombination_type: Any,
+        surface_process: SurfaceProcessModel,
+        *,
+        source: CompositionSource = "slate_to_slate_converted",
+        remove_mud_components: bool = False,
+    ) -> dict[int, list[CalculationCompositionEntryModel]]:
+        feed_compositions = self.get_sample_feed_compositions(
+            fluid_model_id=fluid_model_id,
+            sample_ids=list(gor_values.keys()),
+            source=source,
+        )
+        inputs = [
+            GorRecombinationCalculationInputModel(
+                feed_composition=feed_compositions[sample_id],
+                recombination_gor=gor_value,
+            )
+            for sample_id, gor_value in gor_values.items()
+        ]
+        response = self.calculate_gor_recombination(
+            GorRecombinationCalculationRequestModel(
+                fluid_model_id=fluid_model_id,
+                gor_unit=gor_unit,
+                inputs=inputs,
+                recombination_type=recombination_type,
+                remove_mud_components=remove_mud_components,
+                surface_process=surface_process,
+            )
+        )
+        return calculation_helpers.gor_recombination_feed_compositions(
+            response, list(gor_values.keys())
+        )
+
+    def get_gor_recombination_feed_composition(
+        self,
+        fluid_model_id: int,
+        sample_id: int,
+        recombination_gor: float,
+        gor_unit: Any,
+        recombination_type: Any,
+        surface_process: SurfaceProcessModel,
+        *,
+        source: CompositionSource = "slate_to_slate_converted",
+        remove_mud_components: bool = False,
+    ) -> list[CalculationCompositionEntryModel]:
+        return self.get_gor_recombination_feed_compositions(
+            fluid_model_id=fluid_model_id,
+            gor_values={sample_id: recombination_gor},
+            gor_unit=gor_unit,
+            recombination_type=recombination_type,
+            surface_process=surface_process,
+            source=source,
+            remove_mud_components=remove_mud_components,
         )[sample_id]
 
 

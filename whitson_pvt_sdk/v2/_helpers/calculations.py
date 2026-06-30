@@ -4,6 +4,7 @@ from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
     CalculationErrorResultModel,
     GetFluidModelModel,
+    GorRecombinationCalculationResponseModel,
     SampleToEosSlateConversionCalculationResponseModel,
 )
 
@@ -61,3 +62,25 @@ def adjusted_feed_compositions(
         ]
         for sample_id in sample_ids
     }
+
+
+def gor_recombination_feed_compositions(
+    response: GorRecombinationCalculationResponseModel,
+    sample_ids: list[int],
+) -> dict[int, list[CalculationCompositionEntryModel]]:
+    feed_compositions: dict[int, list[CalculationCompositionEntryModel]] = {}
+    for input_index, (sample_id, result) in enumerate(
+        zip(sample_ids, response.results, strict=True)
+    ):
+        if isinstance(result, CalculationErrorResultModel):
+            raise CalculationError(
+                result.error.message,
+                code=result.error.code,
+                sample_id=sample_id,
+                input_index=input_index,
+                error=result.error,
+            )
+
+        feed_compositions[sample_id] = result.result.composition
+
+    return feed_compositions
