@@ -6,6 +6,7 @@ from pathlib import Path
 from sdk_generator.config import (
     RESOURCE_CLASS_NAMES,
     ROOT,
+    SHARED_MODULES,
 )
 from sdk_generator.models import Endpoint, EndpointParam
 from sdk_generator.naming import sort_resources, to_pascal, to_snake
@@ -35,6 +36,9 @@ def format_python(content: str | list[str]) -> str | list[str]:
 
 
 def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str:
+    if resource in SHARED_MODULES:
+        return _render_shared_endpoint_module(version, resource, endpoints)
+
     has_multipart = any(endpoint.body_kind == "multipart" for endpoint in endpoints)
     model_imports = sorted(
         {
@@ -59,6 +63,55 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
     if has_multipart:
         lines.append(render_meta_data_helper())
     return "".join(lines).rstrip() + "\n"
+
+
+def _render_shared_endpoint_module(
+    version: str, resource: str, endpoints: list[Endpoint]
+) -> str:
+    """Render a thin adapter that delegates to _generated/shared/{resource}.py."""
+    lines: list[str] = []
+
+    for ep in sorted(endpoints, key=lambda e: e.function_name):
+        if ep.body_kind == "multipart":
+            lines.append(
+                f"from ..shared.{resource} import _{ep.function_name}"
+                f" as _shared_{ep.function_name}\n"
+            )
+        else:
+            lines.append(f"from ..shared.{resource} import {ep.function_name}\n")
+
+    lines.append("\nfrom ...http import HTTPTransport\n")
+    lines.append("from ...shared.models import ImportArchiveOptions\n")
+
+    response_models = sorted(
+        {ep.response_model for ep in endpoints if ep.body_kind == "multipart" and ep.response_model}
+    )
+    if response_models:
+        lines.append(f"from ...{version}.models import (\n")
+        for model in response_models:
+            lines.append(f"    {model},\n")
+        lines.append(")\n")
+    lines.append("\n")
+
+    for ep in endpoints:
+        if ep.body_kind == "multipart":
+            lines.append(_render_multipart_adapter(ep))
+
+    return "".join(lines).rstrip() + "\n"
+
+
+def _render_multipart_adapter(endpoint: Endpoint) -> str:
+    return_model = endpoint.response_model or "dict"
+    return (
+        f"def {endpoint.function_name}(\n"
+        "    transport: HTTPTransport,\n"
+        "    archive_data: bytes,\n"
+        "    options: ImportArchiveOptions | None = None,\n"
+        f") -> {return_model}:\n"
+        f"    return _shared_{endpoint.function_name}("
+        f"transport, archive_data, options, {return_model}"
+        ")\n\n"
+    )
 
 
 def render_endpoint(endpoint: Endpoint) -> str:
