@@ -66,6 +66,11 @@ class Calculations(generated_resources.Calculations):
         feed_compositions: dict[int, list[CalculationCompositionEntryModel]] | None = None,
         source: CompositionSource = "slate_to_slate_converted",
     ) -> dict[int, list[CalculationCompositionEntryModel]]:
+        """Run GOR recombination and return feed compositions keyed by sample id.
+
+        When *feed_compositions* is provided the internal conversion is
+        skipped and *source* is ignored.
+        """
         if feed_compositions is None:
             feed_compositions = self.get_sample_feed_compositions(
                 fluid_model_id=fluid_model_id,
@@ -106,6 +111,11 @@ class Calculations(generated_resources.Calculations):
         feed_composition: list[CalculationCompositionEntryModel] | None = None,
         source: CompositionSource = "slate_to_slate_converted",
     ) -> list[CalculationCompositionEntryModel]:
+        """Run GOR recombination for a single sample and return its feed composition.
+
+        When *feed_composition* is provided the internal conversion is
+        skipped and *source* is ignored.
+        """
         feed_compositions: dict[int, list[CalculationCompositionEntryModel]] | None = None
         if feed_composition is not None:
             feed_compositions = {sample_id: feed_composition}
