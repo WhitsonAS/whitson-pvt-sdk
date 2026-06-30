@@ -1,5 +1,4 @@
 import warnings
-from unittest.mock import patch
 
 import pytest
 
@@ -54,14 +53,8 @@ from whitson_pvt_sdk.v2.resources import (
 )
 
 
-def _create_client(credentials, base_url, **kwargs):
-    with patch("whitson_pvt_sdk.http.TokenManager") as mock:
-        mock.return_value.get_token.return_value = "fake-token"
-        return WhitsonPVTClient(credentials=credentials, base_url=base_url, **kwargs)
-
-
 def test_defaults_to_v2(credentials, base_url):
-    client = _create_client(credentials, base_url)
+    client = WhitsonPVTClient(credentials=credentials, base_url=base_url)
     assert isinstance(client, WhitsonPVTClientV2)
     assert isinstance(client.regions, V2Regions)
     assert isinstance(client.wells, V2Wells)
@@ -75,7 +68,7 @@ def test_defaults_to_v2(credentials, base_url):
 def test_v1_loads_v1_resources(credentials, base_url):
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
-        client = _create_client(credentials, base_url, version="v1")
+        client = WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v1")
     assert isinstance(client, WhitsonPVTClientV1)
     assert isinstance(client.regions, V1Regions)
     assert isinstance(client.wells, V1Wells)
@@ -90,45 +83,44 @@ def test_v1_loads_v1_resources(credentials, base_url):
 def test_v1_emits_deprecation_warning(credentials, base_url):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        _create_client(credentials, base_url, version="v1")
+        WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v1")
     deprecations = [x for x in w if issubclass(x.category, DeprecationWarning)]
     assert len(deprecations) == 1
     assert "deprecated" in str(deprecations[0].message)
 
 
 def test_unknown_version_raises_value_error(credentials, base_url):
-    with patch("whitson_pvt_sdk.http.TokenManager"):
-        with pytest.raises(ValueError, match="Unknown version"):
-            WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v3")
+    with pytest.raises(ValueError, match="Unknown version"):
+        WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v3")
 
 
 def test_passes_api_token_url_by_default(credentials, base_url):
-    with patch("whitson_pvt_sdk.http.TokenManager") as mock:
-        mock.return_value.get_token.return_value = "fake-token"
-        WhitsonPVTClient(credentials=credentials, base_url=base_url)
-    mock.assert_called_once()
-    args, kwargs = mock.call_args
-    assert args == (credentials,)
-    assert kwargs["token_url"] == "https://dev.pvt.whitson.com/external/v2/auth/token"
-    assert kwargs["retry_config"].max_attempts == RetryConfig().max_attempts
+    client = WhitsonPVTClient(credentials=credentials, base_url=base_url)
+    transport = client._transport
+    assert transport._token_url == "https://dev.pvt.whitson.com/external/v2/auth/token"
+    assert transport._credentials == credentials
+    assert transport._retry_config.max_attempts == RetryConfig().max_attempts
 
 
-def test_client_exposes_access_token(credentials, base_url):
-    client = _create_client(credentials, base_url)
-
+def test_client_exposes_access_token(credentials, base_url, httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/external/v2/auth/token",
+        json={"access_token": "fake-token", "expires_in": 86400, "token_type": "Bearer"},
+    )
+    client = WhitsonPVTClient(credentials=credentials, base_url=base_url)
     assert client.get_access_token() == "fake-token"
 
 
 def test_passes_retry_config(credentials, base_url):
     retry_config = RetryConfig(max_attempts=1)
-
-    client = _create_client(credentials, base_url, retry_config=retry_config)
-
+    client = WhitsonPVTClient(credentials=credentials, base_url=base_url, retry_config=retry_config)
     assert client._transport._retry_config is retry_config
 
 
 def test_passes_timeout_config(credentials, base_url):
-    client = _create_client(credentials, base_url, timeout=12.5, file_timeout=19.5)
-
+    client = WhitsonPVTClient(
+        credentials=credentials, base_url=base_url, timeout=12.5, file_timeout=19.5
+    )
     assert client._transport._http.timeout.read == 12.5
     assert client._transport._file_timeout == 19.5
