@@ -1,15 +1,12 @@
 from __future__ import annotations
 
+from io import BytesIO
 from typing import TYPE_CHECKING
-
-from whitson_pvt_sdk._generated.v1 import (
-    reports,
-)
 
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
-    from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 
+from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 from whitson_pvt_sdk.v1.models import (
     BlackOilTablesListModel,
     CreateRegionModel,
@@ -181,12 +178,37 @@ class Reports:
     def import_archive(
         self, archive_data: bytes, options: ImportArchiveOptions | None = None
     ) -> ImportCommitResultModel:
-        return reports.import_report(self._transport, archive_data, options)
+        if options is None:
+            options = ImportArchiveOptions()
+
+        body = self._transport.post_multipart(
+            "/reports/import",
+            files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
+            data=_meta_data(options),
+        )
+        return ImportCommitResultModel.model_validate(body)
 
     def preflight_import(
         self, archive_data: bytes, options: ImportArchiveOptions | None = None
     ) -> ImportPreflightResultModel:
-        return reports.preflight_import(self._transport, archive_data, options)
+        if options is None:
+            options = ImportArchiveOptions()
+
+        body = self._transport.post_multipart(
+            "/reports/import/preflight",
+            files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
+            data=_meta_data(options),
+        )
+        return ImportPreflightResultModel.model_validate(body)
 
     def export(self, report_id: int) -> tuple[bytes, str]:
-        return reports.export_report(self._transport, report_id)
+        data = self._transport.get_bytes(f"/reports/{report_id}/export")
+        filename = f"report_{report_id}_export.zip"
+        return data, filename
+
+
+def _meta_data(options: ImportArchiveOptions) -> dict | None:
+    dumped = options.model_dump(exclude_unset=True, exclude_defaults=True)
+    if not dumped:
+        return None
+    return {"meta_data": options.model_dump_json(exclude_unset=True, exclude_defaults=True)}

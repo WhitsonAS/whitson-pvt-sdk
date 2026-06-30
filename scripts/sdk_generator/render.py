@@ -6,7 +6,6 @@ from pathlib import Path
 from sdk_generator.config import (
     RESOURCE_CLASS_NAMES,
     ROOT,
-    SHARED_MODULES,
 )
 from sdk_generator.models import Endpoint, EndpointParam
 from sdk_generator.naming import sort_resources, to_pascal, to_snake
@@ -36,9 +35,6 @@ def format_python(content: str | list[str]) -> str | list[str]:
 
 
 def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str:
-    if resource in SHARED_MODULES:
-        return _render_shared_endpoint_module(version, resource, endpoints)
-
     has_multipart = any(endpoint.body_kind == "multipart" for endpoint in endpoints)
     model_imports = sorted(
         {
@@ -63,56 +59,6 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
     if has_multipart:
         lines.append(render_meta_data_helper())
     return "".join(lines).rstrip() + "\n"
-
-
-def _render_shared_endpoint_module(
-    version: str, resource: str, endpoints: list[Endpoint]
-) -> str:
-    """Render a thin adapter that delegates to _generated/shared/{resource}.py."""
-    lines: list[str] = []
-
-    multipart_endpoints = [ep for ep in endpoints if ep.body_kind == "multipart"]
-    other_endpoints = [ep for ep in endpoints if ep.body_kind != "multipart"]
-
-    for ep in multipart_endpoints:
-        lines.append(
-            f"from ..shared.{resource} import _{ep.function_name}"
-            f" as _shared_{ep.function_name}\n"
-        )
-    for ep in other_endpoints:
-        lines.append(f"from ..shared.{resource} import {ep.function_name}  # noqa: F401\n")
-
-    lines.append("\nfrom ...http import HTTPTransport\n")
-    lines.append("from ...shared.models import ImportArchiveOptions\n")
-
-    response_models = sorted(
-        {ep.response_model for ep in multipart_endpoints if ep.response_model}
-    )
-    if response_models:
-        lines.append(f"from ...{version}.models import (\n")
-        for model in response_models:
-            lines.append(f"    {model},\n")
-        lines.append(")\n")
-    lines.append("\n")
-
-    for ep in multipart_endpoints:
-        lines.append(_render_multipart_adapter(ep))
-
-    return "".join(lines).rstrip() + "\n"
-
-
-def _render_multipart_adapter(endpoint: Endpoint) -> str:
-    return_model = endpoint.response_model or "dict"
-    return (
-        f"def {endpoint.function_name}(\n"
-        "    transport: HTTPTransport,\n"
-        "    archive_data: bytes,\n"
-        "    options: ImportArchiveOptions | None = None,\n"
-        f") -> {return_model}:\n"
-        f"    return _shared_{endpoint.function_name}("
-        f"transport, archive_data, options, {return_model}"
-        ")\n\n"
-    )
 
 
 def render_endpoint(endpoint: Endpoint) -> str:
@@ -237,26 +183,30 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         for endpoints in by_resource.values()
         for endpoint in endpoints
     )
-    shared_resources = [r for r in resources if r in SHARED_MODULES]
+    has_multipart = any(
+        endpoint.body_kind == "multipart"
+        for endpoints in by_resource.values()
+        for endpoint in endpoints
+    )
 
     lines = ["from __future__ import annotations\n\n"]
+    if has_multipart:
+        lines.append("from io import BytesIO\n")
     if has_paginated_endpoint:
         lines.append("from collections.abc import Iterator\n")
     lines.append("from typing import TYPE_CHECKING\n\n")
-
-    if shared_resources:
-        lines.append(f"from whitson_pvt_sdk._generated.{version} import (\n")
-        lines.extend(f"    {r},\n" for r in shared_resources)
-        lines.append(")\n")
 
     if has_paginated_endpoint:
         lines.append("from whitson_pvt_sdk.shared.models import PaginationParams\n")
 
     lines.append("\nif TYPE_CHECKING:\n")
     lines.append("    from whitson_pvt_sdk.http import HTTPTransport\n")
-    if "ImportArchiveOptions" in model_imports:
+    if "ImportArchiveOptions" in model_imports and not has_multipart:
         lines.append("    from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n")
     lines.append("\n")
+
+    if has_multipart:
+        lines.append("from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n\n")
 
     # Runtime model imports -- needed by inline model_validate() calls
     generated_models = [model for model in model_imports if model != "ImportArchiveOptions"]
@@ -269,6 +219,8 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         lines.append("ListType = list\n\n")
     for resource in resources:
         lines.append(render_resource_class(resource, by_resource[resource]))
+    if has_multipart:
+        lines.append(render_meta_data_helper())
     return "".join(lines).rstrip() + "\n"
 
 
@@ -312,39 +264,45 @@ def render_resource_pagination_methods(endpoint: Endpoint) -> str:
 
 
 def render_resource_method(resource: str, endpoint: Endpoint) -> str:
-    if resource in SHARED_MODULES:
-        return _render_shared_resource_method(resource, endpoint)
+    if endpoint.return_kind == "tuple_bytes_filename":
+        return _render_bytes_resource_method(endpoint)
+    if endpoint.body_kind == "multipart":
+        return _render_multipart_resource_method(endpoint)
     return _render_inline_resource_method(endpoint)
 
 
-def _render_shared_resource_method(resource: str, endpoint: Endpoint) -> str:
-    """Shared resources delegate to their per-version endpoint adapter module."""
-    args: list[str] = []
-    call_args: list[str] = ["self._transport"]
-    if endpoint.body_kind == "multipart":
-        args = ["archive_data: bytes", "options: ImportArchiveOptions | None = None"]
-        call_args.extend(["archive_data", "options"])
-    else:
-        for param in endpoint.path_params:
-            args.append(f"{param.python_name}: {param.python_type}")
-            call_args.append(param.python_name)
-        for param in endpoint.query_params:
-            args.append(render_query_param(param))
-            call_args.append(param.python_name)
-
-    return_type = (
-        "tuple[bytes, str]" if endpoint.return_kind == "tuple_bytes_filename"
-        else endpoint.response_model
-    )
+def _render_bytes_resource_method(endpoint: Endpoint) -> str:
+    args = [f"{param.python_name}: {param.python_type}" for param in endpoint.path_params]
+    path_expr = render_path(endpoint.path)
+    filename = endpoint.filename_expr or '"download.bin"'
     return (
         f"    def {endpoint.public_method_name}(self"
-        f"{', ' if args else ''}{', '.join(args)}) -> {return_type}:\n"
-        f"        return {resource}.{endpoint.function_name}({', '.join(call_args)})\n\n"
+        f"{', ' if args else ''}{', '.join(args)}) -> tuple[bytes, str]:\n"
+        f"        data = self._transport.get_bytes({path_expr})\n"
+        f"        filename = {filename}\n"
+        "        return data, filename\n\n"
+    )
+
+
+def _render_multipart_resource_method(endpoint: Endpoint) -> str:
+    return_model = endpoint.response_model or "dict"
+    return (
+        f"    def {endpoint.public_method_name}(\n"
+        "        self, archive_data: bytes, options: ImportArchiveOptions | None = None\n"
+        f"    ) -> {return_model}:\n"
+        "        if options is None:\n"
+        "            options = ImportArchiveOptions()\n\n"
+        "        body = self._transport.post_multipart(\n"
+        f"            {render_path(endpoint.path)},\n"
+        '            files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},\n'
+        "            data=_meta_data(options),\n"
+        "        )\n"
+        f"        return {return_model}.model_validate(body)\n\n"
     )
 
 
 def _render_inline_resource_method(endpoint: Endpoint) -> str:
-    """Non-shared resources call _transport directly and validate the response."""
+    """Call _transport directly and validate the response."""
     args: list[str] = []
     for param in endpoint.path_params:
         args.append(f"{param.python_name}: {param.python_type}")
