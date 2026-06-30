@@ -81,9 +81,7 @@ class Wells:
         return WellsListModel.model_validate(body)
 
     def create_well_deprecated(self, data: CreateWellModel) -> GetWellModel:
-        body = self._transport.post(
-            "/wells/create", body=data.model_dump(exclude={"samples"}, exclude_unset=True)
-        )
+        body = self._transport.post("/wells/create", body=data.model_dump(exclude_unset=True))
         return GetWellModel.model_validate(body)
 
     def get(self, well_id: int) -> GetWellModel:
@@ -121,7 +119,7 @@ class Samples:
 
     def create_samples_deprecated(self, data: CreateSampleListModel) -> GetSampleListModel:
         body = self._transport.post(
-            "/samples/create/bulk",
+            "/samples/create-many",
             body=[model.model_dump(exclude_unset=True) for model in data.root],
         )
         return GetSampleListModel.model_validate(body)
