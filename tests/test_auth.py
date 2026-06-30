@@ -5,6 +5,7 @@ import time
 import httpx
 import pytest
 
+from whitson_pvt_sdk.auth import TokenManager
 from whitson_pvt_sdk.errors import AuthError
 from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
@@ -30,6 +31,27 @@ def _make_transport(retry_config=None):
         version="v2",
         retry_config=retry_config,
     )
+
+
+def test_deprecated_token_manager_remains_import_compatible(httpx_mock):
+    httpx_mock.add_response(
+        method="POST", url=_TOKEN_URL, json=_token_response(),
+    )
+
+    with pytest.warns(DeprecationWarning, match="TokenManager is deprecated") as warnings:
+        manager = TokenManager(
+            ClientCredentials(client_id="id", client_secret="secret"),
+            token_url=_TOKEN_URL,
+        )
+
+    assert "will be removed in a future release" in str(warnings[0].message)
+    assert "WhitsonPVTClient.get_access_token()" in str(warnings[0].message)
+    assert manager.get_token() == "tok-1"
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 1
+    body = json.loads(requests[0].read().decode())
+    assert body == {"client_id": "id", "client_secret": "secret"}
 
 
 def test_exchanges_token_on_first_call(httpx_mock):
