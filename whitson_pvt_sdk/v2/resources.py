@@ -62,14 +62,16 @@ class Calculations(generated_resources.Calculations):
         recombination_type: Any,
         surface_process: SurfaceProcessModel,
         *,
-        source: CompositionSource = "slate_to_slate_converted",
         remove_mud_components: bool = False,
+        feed_compositions: dict[int, list[CalculationCompositionEntryModel]] | None = None,
+        source: CompositionSource = "slate_to_slate_converted",
     ) -> dict[int, list[CalculationCompositionEntryModel]]:
-        feed_compositions = self.get_sample_feed_compositions(
-            fluid_model_id=fluid_model_id,
-            sample_ids=list(gor_values.keys()),
-            source=source,
-        )
+        if feed_compositions is None:
+            feed_compositions = self.get_sample_feed_compositions(
+                fluid_model_id=fluid_model_id,
+                sample_ids=list(gor_values.keys()),
+                source=source,
+            )
         inputs = [
             GorRecombinationCalculationInputModel(
                 feed_composition=feed_compositions[sample_id],
@@ -100,17 +102,22 @@ class Calculations(generated_resources.Calculations):
         recombination_type: Any,
         surface_process: SurfaceProcessModel,
         *,
-        source: CompositionSource = "slate_to_slate_converted",
         remove_mud_components: bool = False,
+        feed_composition: list[CalculationCompositionEntryModel] | None = None,
+        source: CompositionSource = "slate_to_slate_converted",
     ) -> list[CalculationCompositionEntryModel]:
+        feed_compositions: dict[int, list[CalculationCompositionEntryModel]] | None = None
+        if feed_composition is not None:
+            feed_compositions = {sample_id: feed_composition}
         return self.get_gor_recombination_feed_compositions(
             fluid_model_id=fluid_model_id,
             gor_values={sample_id: recombination_gor},
             gor_unit=gor_unit,
             recombination_type=recombination_type,
             surface_process=surface_process,
-            source=source,
             remove_mud_components=remove_mud_components,
+            feed_compositions=feed_compositions,
+            source=source,
         )[sample_id]
 
 
