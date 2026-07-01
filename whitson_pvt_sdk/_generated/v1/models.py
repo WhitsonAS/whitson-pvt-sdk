@@ -7,6 +7,9 @@ from datetime import date
 from typing import Annotated, Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
+from typing_extensions import TypeAliasType
+
+AmountUnit = TypeAliasType("AmountUnit", Literal["%", "frac."])
 
 
 class ApiErrorResponse(BaseModel):
@@ -18,1144 +21,12 @@ class ApiErrorResponse(BaseModel):
     status_code: int
 
 
-class CCEStageModel(BaseModel):
-    is_saturation_pressure: bool
-    pressure: float
-    relative_oil_volume: float | None = None
-    relative_total_volume: float | None = None
-    single_phase_density: float | None = None
-    z_factor: float | None = None
+ArchiveEntity = TypeAliasType("ArchiveEntity", Literal["report", "well", "sample", "experiment"])
 
 
-class CVDStageModel(BaseModel):
-    cumulative_moles_removed: float | None = None
-    gas_density: float | None = None
-    gas_plus_fraction_mw: float | None = None
-    gas_specific_gravity: float | None = None
-    gas_viscosity: float | None = None
-    gas_z_factor: float | None = None
-    incremental_moles_removed: float | None = None
-    is_saturation_pressure: bool
-    oil_density: float | None = None
-    pressure: float
-    relative_oil_volume: float | None = None
-
-
-class MassAmount(RootModel[float]):
-    root: Annotated[float, Field(ge=0.0)]
-
-
-class MolarAmount(RootModel[float]):
-    root: Annotated[float, Field(ge=0.0)]
-
-
-class Mw(RootModel[float]):
-    root: Annotated[float, Field(gt=0.0)]
-
-
-class CompositionComponentModel(BaseModel):
-    input_name: str
-    mass_amount: MassAmount | None = None
-    molar_amount: MolarAmount | None = None
-    mw: Mw | None = None
-    name: Literal[
-        "Neon",
-        "Argon",
-        "Krypton",
-        "Xeon",
-        "Radon",
-        "He",
-        "H2",
-        "N2",
-        "O2",
-        "CO",
-        "NO",
-        "N2O",
-        "CO2",
-        "H2S",
-        "NH3",
-        "SO2",
-        "NO2",
-        "N2O4",
-        "H2O",
-        "C1",
-        "C2",
-        "C3",
-        "C-C3",
-        "i-C4",
-        "n-C4",
-        "C4",
-        "Neo-C5",
-        "C-C4",
-        "i-C5",
-        "n-C5",
-        "C5",
-        "C-C5",
-        "22DM-C4",
-        "23DM-C4",
-        "2M-C5",
-        "3M-C5",
-        "n-C6",
-        "C6",
-        "MC-C5",
-        "22DM-C5",
-        "Benzene",
-        "24DM-C5",
-        "C-C6",
-        "223TM-C4",
-        "33DM-C5",
-        "23DM-C5",
-        "2M-C6",
-        "3M-C6",
-        "3E-C5",
-        "n-C7",
-        "C7",
-        "MC-C6",
-        "EC-C5",
-        "Toluene",
-        "C-C7",
-        "n-C8",
-        "C8",
-        "E-Benzene",
-        "P-Xylene",
-        "M-Xylene",
-        "O-Xylene",
-        "n-C9",
-        "C9",
-        "C-C8",
-        "Cumene",
-        "P-Benzene",
-        "1E4M-Benzene",
-        "135TM-Benzene",
-        "124TM-Benzene",
-        "n-C10",
-        "C10",
-        "123TM-Benzene",
-        "n-C11",
-        "C11",
-        "n-C12",
-        "C12",
-        "Napthalen",
-        "n-C13",
-        "C13",
-        "2M-Napthalene",
-        "1M-Napthalene",
-        "n-C14",
-        "C14",
-        "DPh-C1",
-        "n-C15",
-        "C15",
-        "n-C16",
-        "C16",
-        "n-C17",
-        "C17",
-        "n-C18",
-        "C18",
-        "n-C19",
-        "C19",
-        "12DPh-Benzene",
-        "Phenanthrene",
-        "Anthracene",
-        "n-C20",
-        "C20",
-        "n-C21",
-        "C21",
-        "13DPh-Benzene",
-        "n-C22",
-        "C22",
-        "14DPh-Benzene",
-        "n-C23",
-        "C23",
-        "n-C24",
-        "C24",
-        "n-C25",
-        "C25",
-        "n-C26",
-        "C26",
-        "n-C27",
-        "C27",
-        "n-C28",
-        "C28",
-        "n-C29",
-        "C29",
-        "n-C30",
-        "C30",
-        "n-C31",
-        "C31",
-        "n-C32",
-        "C32",
-        "n-C33",
-        "C33",
-        "n-C34",
-        "C34",
-        "n-C35",
-        "C35",
-        "n-C36",
-        "C36",
-        "C37",
-        "C38",
-        "C39",
-        "C40",
-        "C41",
-        "C42",
-        "C43",
-        "C44",
-        "C45",
-        "C46",
-        "C47",
-        "C48",
-        "C49",
-        "C50",
-        "C51",
-        "C52",
-        "C53",
-        "C54",
-        "C55",
-        "C56",
-        "C57",
-        "C58",
-        "C59",
-        "C60",
-        "C61",
-        "C62",
-        "C63",
-        "C64",
-        "C65",
-        "C66",
-        "C67",
-        "C68",
-        "C69",
-        "C70",
-        "C71",
-        "C72",
-        "C73",
-        "C74",
-        "C75",
-        "C76",
-        "C77",
-        "C78",
-        "C79",
-        "C80",
-        "C7M",
-        "C8M",
-        "C9M",
-        "C10M",
-        "C11M",
-        "C12M",
-        "C13M",
-        "C14M",
-        "C15M",
-        "C16M",
-        "C17M",
-        "C18M",
-        "C19M",
-        "C20M",
-        "C21M",
-        "C22M",
-        "C23M",
-        "C24M",
-        "C25M",
-        "C26M",
-        "C27M",
-        "C28M",
-        "C29M",
-        "C30M",
-        "C31M",
-        "C32M",
-        "C33M",
-        "C34M",
-        "C35M",
-        "C36M",
-        "C7+",
-        "C8+",
-        "C9+",
-        "C10+",
-        "C11+",
-        "C12+",
-        "C13+",
-        "C14+",
-        "C15+",
-        "C16+",
-        "C17+",
-        "C18+",
-        "C19+",
-        "C20+",
-        "C21+",
-        "C22+",
-        "C23+",
-        "C24+",
-        "C25+",
-        "C26+",
-        "C27+",
-        "C28+",
-        "C29+",
-        "C30+",
-        "C31+",
-        "C32+",
-        "C33+",
-        "C34+",
-        "C35+",
-        "C36+",
-        "C37+",
-        "C38+",
-        "C39+",
-        "C40+",
-        "C41+",
-        "C42+",
-        "C43+",
-        "C44+",
-        "C45+",
-        "C46+",
-        "C47+",
-        "C48+",
-        "C49+",
-        "C50+",
-        "C51+",
-        "C52+",
-        "C53+",
-        "C54+",
-        "C55+",
-        "C56+",
-        "C57+",
-        "C58+",
-        "C59+",
-        "C60+",
-        "C61+",
-        "C62+",
-        "C63+",
-        "C64+",
-        "C65+",
-        "C66+",
-        "C67+",
-        "C68+",
-        "C69+",
-        "C70+",
-        "C71+",
-        "C72+",
-        "C73+",
-        "C74+",
-        "C75+",
-        "C76+",
-        "C77+",
-        "C78+",
-        "C79+",
-        "C80+",
-    ]
-
-
-class CompositionModel(BaseModel):
-    components: list[CompositionComponentModel]
-
-
-class CreateRegionModel(BaseModel):
-    id: int | None = None
-    name: str
-    note: str | None = None
-    public: bool | None = None
-    region_type: Literal[
-        "single_field",
-        "multi_field",
-        "greater_area",
-        "basin",
-        "reservoir_management_unit",
-        "asset",
-        "country",
-    ]
-    reservoir_type: Literal["Conventional", "Unconventional"]
-
-
-class DLEStageModel(BaseModel):
-    gas_density: float | None = None
-    gas_specific_gravity: float | None = None
-    gas_viscosity: float | None = None
-    gas_z_factor: float | None = None
-    gor: float | None = None
-    is_saturation_pressure: bool
-    liberated_gas: float | None = None
-    oil_density: float | None = None
-    oil_fvf: float | None = None
-    pressure: float
-
-
-class GetRegionModel(BaseModel):
-    id: int
-    name: str | None = None
-    note: str | None = None
-    public: bool | None = None
-    region_type: (
-        Literal[
-            "single_field",
-            "multi_field",
-            "greater_area",
-            "basin",
-            "reservoir_management_unit",
-            "asset",
-            "country",
-        ]
-        | None
-    ) = None
-    reservoir_type: Literal["Conventional", "Unconventional"] | None = None
-
-
-class ImportCommitResultModel(BaseModel):
-    created: dict[str, int]
-    id_map: dict[str, dict[str, int]]
-    reused: dict[str, int]
-    skipped: dict[str, int]
-
-
-class LiberatedGasComponentModel(BaseModel):
-    input_name: str
-    mw: Mw | None = None
-    name: Literal[
-        "Neon",
-        "Argon",
-        "Krypton",
-        "Xeon",
-        "Radon",
-        "He",
-        "H2",
-        "N2",
-        "O2",
-        "CO",
-        "NO",
-        "N2O",
-        "CO2",
-        "H2S",
-        "NH3",
-        "SO2",
-        "NO2",
-        "N2O4",
-        "H2O",
-        "C1",
-        "C2",
-        "C3",
-        "C-C3",
-        "i-C4",
-        "n-C4",
-        "C4",
-        "Neo-C5",
-        "C-C4",
-        "i-C5",
-        "n-C5",
-        "C5",
-        "C-C5",
-        "22DM-C4",
-        "23DM-C4",
-        "2M-C5",
-        "3M-C5",
-        "n-C6",
-        "C6",
-        "MC-C5",
-        "22DM-C5",
-        "Benzene",
-        "24DM-C5",
-        "C-C6",
-        "223TM-C4",
-        "33DM-C5",
-        "23DM-C5",
-        "2M-C6",
-        "3M-C6",
-        "3E-C5",
-        "n-C7",
-        "C7",
-        "MC-C6",
-        "EC-C5",
-        "Toluene",
-        "C-C7",
-        "n-C8",
-        "C8",
-        "E-Benzene",
-        "P-Xylene",
-        "M-Xylene",
-        "O-Xylene",
-        "n-C9",
-        "C9",
-        "C-C8",
-        "Cumene",
-        "P-Benzene",
-        "1E4M-Benzene",
-        "135TM-Benzene",
-        "124TM-Benzene",
-        "n-C10",
-        "C10",
-        "123TM-Benzene",
-        "n-C11",
-        "C11",
-        "n-C12",
-        "C12",
-        "Napthalen",
-        "n-C13",
-        "C13",
-        "2M-Napthalene",
-        "1M-Napthalene",
-        "n-C14",
-        "C14",
-        "DPh-C1",
-        "n-C15",
-        "C15",
-        "n-C16",
-        "C16",
-        "n-C17",
-        "C17",
-        "n-C18",
-        "C18",
-        "n-C19",
-        "C19",
-        "12DPh-Benzene",
-        "Phenanthrene",
-        "Anthracene",
-        "n-C20",
-        "C20",
-        "n-C21",
-        "C21",
-        "13DPh-Benzene",
-        "n-C22",
-        "C22",
-        "14DPh-Benzene",
-        "n-C23",
-        "C23",
-        "n-C24",
-        "C24",
-        "n-C25",
-        "C25",
-        "n-C26",
-        "C26",
-        "n-C27",
-        "C27",
-        "n-C28",
-        "C28",
-        "n-C29",
-        "C29",
-        "n-C30",
-        "C30",
-        "n-C31",
-        "C31",
-        "n-C32",
-        "C32",
-        "n-C33",
-        "C33",
-        "n-C34",
-        "C34",
-        "n-C35",
-        "C35",
-        "n-C36",
-        "C36",
-        "C37",
-        "C38",
-        "C39",
-        "C40",
-        "C41",
-        "C42",
-        "C43",
-        "C44",
-        "C45",
-        "C46",
-        "C47",
-        "C48",
-        "C49",
-        "C50",
-        "C51",
-        "C52",
-        "C53",
-        "C54",
-        "C55",
-        "C56",
-        "C57",
-        "C58",
-        "C59",
-        "C60",
-        "C61",
-        "C62",
-        "C63",
-        "C64",
-        "C65",
-        "C66",
-        "C67",
-        "C68",
-        "C69",
-        "C70",
-        "C71",
-        "C72",
-        "C73",
-        "C74",
-        "C75",
-        "C76",
-        "C77",
-        "C78",
-        "C79",
-        "C80",
-        "C7M",
-        "C8M",
-        "C9M",
-        "C10M",
-        "C11M",
-        "C12M",
-        "C13M",
-        "C14M",
-        "C15M",
-        "C16M",
-        "C17M",
-        "C18M",
-        "C19M",
-        "C20M",
-        "C21M",
-        "C22M",
-        "C23M",
-        "C24M",
-        "C25M",
-        "C26M",
-        "C27M",
-        "C28M",
-        "C29M",
-        "C30M",
-        "C31M",
-        "C32M",
-        "C33M",
-        "C34M",
-        "C35M",
-        "C36M",
-        "C7+",
-        "C8+",
-        "C9+",
-        "C10+",
-        "C11+",
-        "C12+",
-        "C13+",
-        "C14+",
-        "C15+",
-        "C16+",
-        "C17+",
-        "C18+",
-        "C19+",
-        "C20+",
-        "C21+",
-        "C22+",
-        "C23+",
-        "C24+",
-        "C25+",
-        "C26+",
-        "C27+",
-        "C28+",
-        "C29+",
-        "C30+",
-        "C31+",
-        "C32+",
-        "C33+",
-        "C34+",
-        "C35+",
-        "C36+",
-        "C37+",
-        "C38+",
-        "C39+",
-        "C40+",
-        "C41+",
-        "C42+",
-        "C43+",
-        "C44+",
-        "C45+",
-        "C46+",
-        "C47+",
-        "C48+",
-        "C49+",
-        "C50+",
-        "C51+",
-        "C52+",
-        "C53+",
-        "C54+",
-        "C55+",
-        "C56+",
-        "C57+",
-        "C58+",
-        "C59+",
-        "C60+",
-        "C61+",
-        "C62+",
-        "C63+",
-        "C64+",
-        "C65+",
-        "C66+",
-        "C67+",
-        "C68+",
-        "C69+",
-        "C70+",
-        "C71+",
-        "C72+",
-        "C73+",
-        "C74+",
-        "C75+",
-        "C76+",
-        "C77+",
-        "C78+",
-        "C79+",
-        "C80+",
-    ]
-
-
-class LiberatedGasComponentMolarAmountModel(BaseModel):
-    component_name: Literal[
-        "Neon",
-        "Argon",
-        "Krypton",
-        "Xeon",
-        "Radon",
-        "He",
-        "H2",
-        "N2",
-        "O2",
-        "CO",
-        "NO",
-        "N2O",
-        "CO2",
-        "H2S",
-        "NH3",
-        "SO2",
-        "NO2",
-        "N2O4",
-        "H2O",
-        "C1",
-        "C2",
-        "C3",
-        "C-C3",
-        "i-C4",
-        "n-C4",
-        "C4",
-        "Neo-C5",
-        "C-C4",
-        "i-C5",
-        "n-C5",
-        "C5",
-        "C-C5",
-        "22DM-C4",
-        "23DM-C4",
-        "2M-C5",
-        "3M-C5",
-        "n-C6",
-        "C6",
-        "MC-C5",
-        "22DM-C5",
-        "Benzene",
-        "24DM-C5",
-        "C-C6",
-        "223TM-C4",
-        "33DM-C5",
-        "23DM-C5",
-        "2M-C6",
-        "3M-C6",
-        "3E-C5",
-        "n-C7",
-        "C7",
-        "MC-C6",
-        "EC-C5",
-        "Toluene",
-        "C-C7",
-        "n-C8",
-        "C8",
-        "E-Benzene",
-        "P-Xylene",
-        "M-Xylene",
-        "O-Xylene",
-        "n-C9",
-        "C9",
-        "C-C8",
-        "Cumene",
-        "P-Benzene",
-        "1E4M-Benzene",
-        "135TM-Benzene",
-        "124TM-Benzene",
-        "n-C10",
-        "C10",
-        "123TM-Benzene",
-        "n-C11",
-        "C11",
-        "n-C12",
-        "C12",
-        "Napthalen",
-        "n-C13",
-        "C13",
-        "2M-Napthalene",
-        "1M-Napthalene",
-        "n-C14",
-        "C14",
-        "DPh-C1",
-        "n-C15",
-        "C15",
-        "n-C16",
-        "C16",
-        "n-C17",
-        "C17",
-        "n-C18",
-        "C18",
-        "n-C19",
-        "C19",
-        "12DPh-Benzene",
-        "Phenanthrene",
-        "Anthracene",
-        "n-C20",
-        "C20",
-        "n-C21",
-        "C21",
-        "13DPh-Benzene",
-        "n-C22",
-        "C22",
-        "14DPh-Benzene",
-        "n-C23",
-        "C23",
-        "n-C24",
-        "C24",
-        "n-C25",
-        "C25",
-        "n-C26",
-        "C26",
-        "n-C27",
-        "C27",
-        "n-C28",
-        "C28",
-        "n-C29",
-        "C29",
-        "n-C30",
-        "C30",
-        "n-C31",
-        "C31",
-        "n-C32",
-        "C32",
-        "n-C33",
-        "C33",
-        "n-C34",
-        "C34",
-        "n-C35",
-        "C35",
-        "n-C36",
-        "C36",
-        "C37",
-        "C38",
-        "C39",
-        "C40",
-        "C41",
-        "C42",
-        "C43",
-        "C44",
-        "C45",
-        "C46",
-        "C47",
-        "C48",
-        "C49",
-        "C50",
-        "C51",
-        "C52",
-        "C53",
-        "C54",
-        "C55",
-        "C56",
-        "C57",
-        "C58",
-        "C59",
-        "C60",
-        "C61",
-        "C62",
-        "C63",
-        "C64",
-        "C65",
-        "C66",
-        "C67",
-        "C68",
-        "C69",
-        "C70",
-        "C71",
-        "C72",
-        "C73",
-        "C74",
-        "C75",
-        "C76",
-        "C77",
-        "C78",
-        "C79",
-        "C80",
-        "C7M",
-        "C8M",
-        "C9M",
-        "C10M",
-        "C11M",
-        "C12M",
-        "C13M",
-        "C14M",
-        "C15M",
-        "C16M",
-        "C17M",
-        "C18M",
-        "C19M",
-        "C20M",
-        "C21M",
-        "C22M",
-        "C23M",
-        "C24M",
-        "C25M",
-        "C26M",
-        "C27M",
-        "C28M",
-        "C29M",
-        "C30M",
-        "C31M",
-        "C32M",
-        "C33M",
-        "C34M",
-        "C35M",
-        "C36M",
-        "C7+",
-        "C8+",
-        "C9+",
-        "C10+",
-        "C11+",
-        "C12+",
-        "C13+",
-        "C14+",
-        "C15+",
-        "C16+",
-        "C17+",
-        "C18+",
-        "C19+",
-        "C20+",
-        "C21+",
-        "C22+",
-        "C23+",
-        "C24+",
-        "C25+",
-        "C26+",
-        "C27+",
-        "C28+",
-        "C29+",
-        "C30+",
-        "C31+",
-        "C32+",
-        "C33+",
-        "C34+",
-        "C35+",
-        "C36+",
-        "C37+",
-        "C38+",
-        "C39+",
-        "C40+",
-        "C41+",
-        "C42+",
-        "C43+",
-        "C44+",
-        "C45+",
-        "C46+",
-        "C47+",
-        "C48+",
-        "C49+",
-        "C50+",
-        "C51+",
-        "C52+",
-        "C53+",
-        "C54+",
-        "C55+",
-        "C56+",
-        "C57+",
-        "C58+",
-        "C59+",
-        "C60+",
-        "C61+",
-        "C62+",
-        "C63+",
-        "C64+",
-        "C65+",
-        "C66+",
-        "C67+",
-        "C68+",
-        "C69+",
-        "C70+",
-        "C71+",
-        "C72+",
-        "C73+",
-        "C74+",
-        "C75+",
-        "C76+",
-        "C77+",
-        "C78+",
-        "C79+",
-        "C80+",
-    ]
-    molar_amount: MolarAmount | None = None
-    stage_number: int
-
-
-class LiberatedGasStageModel(BaseModel):
-    composition: list[LiberatedGasComponentMolarAmountModel]
-    stage_number: int
-
-
-class MSSStageModel(BaseModel):
-    gas_density: float | None = None
-    gas_specific_gravity: float | None = None
-    gas_viscosity: float | None = None
-    gas_z_factor: float | None = None
-    gor: float | None = None
-    is_saturation_pressure: bool
-    liberated_gas: float | None = None
-    oil_density: float | None = None
-    oil_fvf: float | None = None
-    pressure: float
-    temperature: float
-
-
-class RateLimitErrorResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    message: str | None = "Rate limit exceeded"
-    retry_after_seconds: int | None = None
-    status: str | None = "too_many_requests"
-    status_code: int | None = 429
-
-
-class RegionsListModel(BaseModel):
-    regions: list[GetRegionModel]
-
-
-class SlimtubeRecoveryStageDataModel(BaseModel):
-    fluid_transparency: float | None = None
-    gas_recovery: float | None = None
-    gas_volume: float | None = None
-    injection_pressure: float | None = None
-    oil_recovery: float | None = None
-    oil_volume: float | None = None
-    pore_volume_injected: float | None = None
-    pressure_difference: float | None = None
-    time_elapsed: float | None = None
-
-
-class SlimtubeStageModel(BaseModel):
-    average_pressure: float | None = None
-    final_recovery: float | None = None
-    fluid_transparency_unit: Literal["%", "frac."] | None = "%"
-    gas_recovery_unit: Literal["%", "frac."] | None = "%"
-    gas_volume_unit: Literal["L", "mL", "cm3", "m3"] | None = "L"
-    injection_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = "bara"
-    is_miscible: bool | None = None
-    oil_recovery_unit: Literal["%", "frac."] | None = "%"
-    oil_volume_unit: Literal["L", "mL", "cm3", "m3"] | None = "L"
-    pressure_difference_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = "bara"
-    recovery_at_1_2_pore_volumes_injected: float
-    recovery_at_1_pore_volumes_injected: float | None = None
-    recovery_stage_data: list[SlimtubeRecoveryStageDataModel]
-    stock_tank_oil_density: float | None = None
-    target_injection_pressure: float
-    temperature: float | None = None
-    time_elapsed_unit: Literal["sec.", "min."] | None = "sec."
-
-
-class SwellTestStageCCEDataModel(BaseModel):
-    pressure: float
-    relative_oil_volume: float | None = None
-    relative_total_volume: float | None = None
-    single_phase_density: float | None = None
-
-
-class SwellTestStageModel(BaseModel):
-    cce_data: list[SwellTestStageCCEDataModel]
-    density_at_saturation_pressure: float | None = None
-    gas_oil_ratio: float | None = None
-    moles_injected: float
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None = (
-        "bara"
-    )
-    recombined_fluid_composition: CompositionModel | None = None
-    relative_oil_volume_unit: Literal["Vo/Vsat (%)", "Vo/Vtot (%)", "Vo/Vsat", "Vo/Vtot"] | None = (
-        "Vo/Vsat (%)"
-    )
-    relative_volume_at_saturation_pressure: float | None = None
-    saturation_pressure: float
-    saturation_pressure_type: Literal["Dewpoint", "Bubblepoint"]
-    single_phase_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-
-
-class TBPCutModel(BaseModel):
-    cumulative_mass_amount: float | None = None
-    cumulative_volume_amount: float | None = None
-    density: float | None = None
-    lower_temperature: float | None = None
-    mass_amount: float | None = None
-    mw: float | None = None
-    upper_temperature: float | None = None
-    volume_amount: float | None = None
-
-
-class TBPExperimentModel(BaseModel):
-    cumulative_mass_amount_unit: Literal["%", "frac."] | None = "%"
-    cumulative_volume_amount_unit: Literal["%", "frac."] | None = "%"
-    cuts: list[TBPCutModel]
-    density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    lower_temperature_unit: Literal["C", "K", "F", "R"] | None = "C"
-    mass_amount_unit: Literal["%", "frac."] | None = "%"
-    name: str
-    type: Literal["TBP"]
-    upper_temperature_unit: Literal["C", "K", "F", "R"] | None = "C"
-    volume_amount_unit: Literal["%", "frac."] | None = "%"
-
-
-class TokenData(BaseModel):
-    access_token: str
-    expires_at: float | None = 0
-    expires_in: int
-    token_type: str
-
-
-class UpdateRegionModel(BaseModel):
-    id: int | None = None
-    name: str | None = None
-    note: str | None = None
-    public: bool | None = None
-    region_type: (
-        Literal[
-            "single_field",
-            "multi_field",
-            "greater_area",
-            "basin",
-            "reservoir_management_unit",
-            "asset",
-            "country",
-        ]
-        | None
-    ) = None
-    reservoir_type: Literal["Conventional", "Unconventional"] | None = None
-
-
-class UpdateWellModel(BaseModel):
-    basin_id: float | None = None
-    field_id: float | None = None
-    field_segment_id: float | None = None
-    formation_id: float | None = None
-    formation_zone_id: float | None = None
-    id: int | None = None
-    location: Any = None
-    name: str | None = None
-    region_id: int | None = None
-    sub_basin_id: float | None = None
-    uwi: str | None = None
-
-
-class VISCOStageModel(BaseModel):
-    gas_viscosity: float | None = None
-    oil_viscosity: float | None = None
-    pressure: float
-
-
-class ValidationErrorDetailModel(BaseModel):
-    field: str
-    message: str
-
-
-class ValidationErrorResponseModel(BaseModel):
-    errors: list[ValidationErrorDetailModel]
-
-
-class ZipArchiveResponse(RootModel[bytes]):
-    root: bytes
+BinaryInteractionParameterModel = TypeAliasType(
+    "BinaryInteractionParameterModel", dict[str, dict[str, float]]
+)
 
 
 class BlackOilTableRowModel(BaseModel):
@@ -1170,6 +41,69 @@ class BlackOilTableRowModel(BaseModel):
     pressure: float
     solution_cgr: float
     solution_gor: float
+
+
+class BlackOilTablesListModel(BaseModel):
+    black_oil_tables: list[GetSimpleBlackOilTableModel]
+
+
+class CCEExperimentModel(BaseModel):
+    name: str
+    pressure_unit: PressureUnit | None = "bara"
+    relative_oil_volume_unit: RelativeOilVolumeBasis | None = "Vo/Vsat (%)"
+    relative_total_volume_unit: RelativeTotalVolumeUnitType | None = "Vtot/Vsat"
+    saturation_pressure_type: SaturationPressureType | None = None
+    single_phase_density_unit: LiquidDensityUnit | None = "g/cm3"
+    stages: list[CCEStageModel]
+    temperature: float
+    temperature_unit: TemperatureUnit
+    type: Literal["CCE"]
+
+
+class CCEStageModel(BaseModel):
+    is_saturation_pressure: bool
+    pressure: float
+    relative_oil_volume: float | None = None
+    relative_total_volume: float | None = None
+    single_phase_density: float | None = None
+    z_factor: float | None = None
+
+
+class CVDExperimentModel(BaseModel):
+    cumulative_moles_removed_unit: AmountUnit | None = "%"
+    final_stage_oil_composition: CompositionModel | None = None
+    final_stage_oil_density: float | None = None
+    final_stage_oil_density_unit: LiquidDensityUnit | None = None
+    final_stage_oil_mw: float | None = None
+    gas_density_unit: GasDensityUnit | None = "g/cm3"
+    gas_viscosity_unit: ViscosityUnit | None = "cP"
+    incremental_moles_removed_unit: AmountUnit | None = "%"
+    liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
+    name: str
+    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    pressure_unit: PressureUnit | None = "bara"
+    relative_oil_volume_unit: AmountUnit | None = "%"
+    saturation_pressure_type: SaturationPressureType
+    stages: list[CVDStageModel]
+    stock_tank_oil_density: float | None = None
+    stock_tank_oil_density_unit: LiquidDensityUnit | None = None
+    temperature: float
+    temperature_unit: TemperatureUnit
+    type: Literal["CVD"]
+
+
+class CVDStageModel(BaseModel):
+    cumulative_moles_removed: float | None = None
+    gas_density: float | None = None
+    gas_plus_fraction_mw: float | None = None
+    gas_specific_gravity: float | None = None
+    gas_viscosity: float | None = None
+    gas_z_factor: float | None = None
+    incremental_moles_removed: float | None = None
+    is_saturation_pressure: bool
+    oil_density: float | None = None
+    pressure: float
+    relative_oil_volume: float | None = None
 
 
 class ComponentPropertiesModel(BaseModel):
@@ -1193,8 +127,275 @@ class ComponentPropertiesModel(BaseModel):
     volume_shift_gradient: float
 
 
+class CompositionComponentModel(BaseModel):
+    input_name: str
+    mass_amount: MassAmount | None = None
+    molar_amount: MolarAmount | None = None
+    mw: Mw | None = None
+    name: ValidComponentName
+
+
+class CompositionModel(BaseModel):
+    components: list[CompositionComponentModel]
+
+
+ConductivityUnit = TypeAliasType("ConductivityUnit", Literal["micro-S/cm"])
+
+
+class CreateRegionModel(BaseModel):
+    id: int | None = None
+    name: str
+    note: str | None = None
+    public: bool | None = None
+    region_type: RegionType
+    reservoir_type: ReservoirType
+
+
+class CreateSampleModel(BaseModel):
+    bottom_perforation_depth: float | None = None
+    bottom_perforation_depth_unit: HeightUnit | None = None
+    drained_water_density: float | None = None
+    drained_water_density_unit: LiquidDensityUnit | None = None
+    drawdown_pressure: float | None = None
+    drawdown_pressure_unit: PressureUnit | None = None
+    experiments: list[Experiments] | None = None
+    flashed_gas_composition: CompositionModel | None = None
+    flashed_gas_mw: float | None = None
+    flashed_gas_specific_gravity: float | None = None
+    flashed_oil_composition: CompositionModel | None = None
+    flashed_oil_contamination: float | None = None
+    flashed_oil_contamination_unit: MudContaminationUnit | None = None
+    flashed_oil_density: float | None = None
+    flashed_oil_density_unit: LiquidDensityUnit | None = None
+    flashed_oil_mw: float | None = None
+    flashed_oil_temperature: float | None = None
+    flashed_oil_temperature_unit: TemperatureUnit | None = None
+    fluid_type: FluidType
+    gas_composition: CompositionModel | None = None
+    gas_specific_gravity: float | None = None
+    gas_water_ratio: float | None = None
+    gas_water_ratio_unit: GorUnit | None = None
+    id: int | None = None
+    ions: list[IonDataModel] | None = None
+    location: Any = None
+    measured_depth: float | None = None
+    measured_depth_unit: HeightUnit | None = None
+    mud_base: MudBase | None = None
+    mud_sample_id: int | None = None
+    name: str
+    note: str | None = None
+    obm_composition: CompositionModel | None = None
+    obm_density: float | None = None
+    obm_density_unit: LiquidDensityUnit | None = None
+    obm_mw: float | None = None
+    pressure_at_lab: float | None = None
+    pressure_at_lab_unit: PressureUnit | None = None
+    pressure_when_sampled: float | None = None
+    pressure_when_sampled_unit: PressureUnit | None = None
+    recombined_fluid_composition: CompositionModel | None = None
+    recombined_fluid_contamination: float | None = None
+    recombined_fluid_contamination_unit: MudContaminationUnit | None = None
+    recombined_fluid_gor: float | None = None
+    recombined_fluid_gor_unit: GorUnit | None = None
+    recombined_fluid_mw: float | None = None
+    reservoir_density: float | None = None
+    reservoir_density_unit: LiquidDensityUnit | None = None
+    reservoir_pressure: float | None = None
+    reservoir_pressure_unit: PressureUnit | None = None
+    reservoir_temperature: float | None = None
+    reservoir_temperature_unit: TemperatureUnit | None = None
+    sampling_date: date | None = None
+    sep_gas_composition: CompositionModel | None = None
+    sep_gas_mw: float | None = None
+    sep_gor: float | None = None
+    sep_gor_unit: GorUnit | None = None
+    sep_oil_composition: CompositionModel | None = None
+    sep_oil_density: float | None = None
+    sep_oil_density_unit: LiquidDensityUnit | None = None
+    sep_oil_mw: float | None = None
+    sep_pressure: float | None = None
+    sep_pressure_unit: PressureUnit | None = None
+    sep_temperature: float | None = None
+    sep_temperature_unit: TemperatureUnit | None = None
+    temperature_at_lab: float | None = None
+    temperature_at_lab_unit: TemperatureUnit | None = None
+    temperature_when_sampled: float | None = None
+    temperature_when_sampled_unit: TemperatureUnit | None = None
+    top_perforation_depth: float | None = None
+    top_perforation_depth_unit: HeightUnit | None = None
+    total_dissolved_solids: float | None = None
+    transfer_pressure: float | None = None
+    transfer_pressure_unit: PressureUnit | None = None
+    transfer_temperature: float | None = None
+    transfer_temperature_unit: TemperatureUnit | None = None
+    true_vertical_depth: float | None = None
+    true_vertical_depth_unit: HeightUnit | None = None
+    type: SampleType
+    water_conductivity: float | None = None
+    water_conductivity_unit: ConductivityUnit | None = None
+    water_ph: float | None = None
+    water_resistivity: float | None = None
+    water_resistivity_unit: ResistivityUnit | None = None
+    water_salinity: float | None = None
+    water_temperature: float | None = None
+    water_temperature_unit: TemperatureUnit | None = None
+    well_id: int
+
+
+class CreateSampleListModel(RootModel[list[CreateSampleModel]]):
+    root: list[CreateSampleModel]
+
+
+class CreateWellModel(BaseModel):
+    basin_id: float | None = None
+    field_id: float | None = None
+    field_segment_id: float | None = None
+    formation_id: float | None = None
+    formation_zone_id: float | None = None
+    id: int | None = None
+    location: Any = None
+    name: str
+    region_id: int
+    samples: list[CreateWellSampleModel] | None = None
+    sub_basin_id: float | None = None
+    uwi: str | None = None
+
+
+class CreateWellSampleModel(BaseModel):
+    bottom_perforation_depth: float | None = None
+    bottom_perforation_depth_unit: HeightUnit | None = None
+    drained_water_density: float | None = None
+    drained_water_density_unit: LiquidDensityUnit | None = None
+    drawdown_pressure: float | None = None
+    drawdown_pressure_unit: PressureUnit | None = None
+    experiments: list[Experiments] | None = None
+    flashed_gas_composition: CompositionModel | None = None
+    flashed_gas_mw: float | None = None
+    flashed_gas_specific_gravity: float | None = None
+    flashed_oil_composition: CompositionModel | None = None
+    flashed_oil_contamination: float | None = None
+    flashed_oil_contamination_unit: MudContaminationUnit | None = None
+    flashed_oil_density: float | None = None
+    flashed_oil_density_unit: LiquidDensityUnit | None = None
+    flashed_oil_mw: float | None = None
+    flashed_oil_temperature: float | None = None
+    flashed_oil_temperature_unit: TemperatureUnit | None = None
+    fluid_type: FluidType
+    gas_composition: CompositionModel | None = None
+    gas_specific_gravity: float | None = None
+    gas_water_ratio: float | None = None
+    gas_water_ratio_unit: GorUnit | None = None
+    id: int | None = None
+    ions: list[IonDataModel] | None = None
+    location: Any = None
+    measured_depth: float | None = None
+    measured_depth_unit: HeightUnit | None = None
+    mud_base: MudBase | None = None
+    mud_sample_id: int | None = None
+    name: str
+    note: str | None = None
+    obm_composition: CompositionModel | None = None
+    obm_density: float | None = None
+    obm_density_unit: LiquidDensityUnit | None = None
+    obm_mw: float | None = None
+    pressure_at_lab: float | None = None
+    pressure_at_lab_unit: PressureUnit | None = None
+    pressure_when_sampled: float | None = None
+    pressure_when_sampled_unit: PressureUnit | None = None
+    recombined_fluid_composition: CompositionModel | None = None
+    recombined_fluid_contamination: float | None = None
+    recombined_fluid_contamination_unit: MudContaminationUnit | None = None
+    recombined_fluid_gor: float | None = None
+    recombined_fluid_gor_unit: GorUnit | None = None
+    recombined_fluid_mw: float | None = None
+    reservoir_density: float | None = None
+    reservoir_density_unit: LiquidDensityUnit | None = None
+    reservoir_pressure: float | None = None
+    reservoir_pressure_unit: PressureUnit | None = None
+    reservoir_temperature: float | None = None
+    reservoir_temperature_unit: TemperatureUnit | None = None
+    sampling_date: date | None = None
+    sep_gas_composition: CompositionModel | None = None
+    sep_gas_mw: float | None = None
+    sep_gor: float | None = None
+    sep_gor_unit: GorUnit | None = None
+    sep_oil_composition: CompositionModel | None = None
+    sep_oil_density: float | None = None
+    sep_oil_density_unit: LiquidDensityUnit | None = None
+    sep_oil_mw: float | None = None
+    sep_pressure: float | None = None
+    sep_pressure_unit: PressureUnit | None = None
+    sep_temperature: float | None = None
+    sep_temperature_unit: TemperatureUnit | None = None
+    temperature_at_lab: float | None = None
+    temperature_at_lab_unit: TemperatureUnit | None = None
+    temperature_when_sampled: float | None = None
+    temperature_when_sampled_unit: TemperatureUnit | None = None
+    top_perforation_depth: float | None = None
+    top_perforation_depth_unit: HeightUnit | None = None
+    total_dissolved_solids: float | None = None
+    transfer_pressure: float | None = None
+    transfer_pressure_unit: PressureUnit | None = None
+    transfer_temperature: float | None = None
+    transfer_temperature_unit: TemperatureUnit | None = None
+    true_vertical_depth: float | None = None
+    true_vertical_depth_unit: HeightUnit | None = None
+    type: SampleType
+    water_conductivity: float | None = None
+    water_conductivity_unit: ConductivityUnit | None = None
+    water_ph: float | None = None
+    water_resistivity: float | None = None
+    water_resistivity_unit: ResistivityUnit | None = None
+    water_salinity: float | None = None
+    water_temperature: float | None = None
+    water_temperature_unit: TemperatureUnit | None = None
+    well_id: int | None = None
+
+
+class DLEExperimentModel(BaseModel):
+    average_residual_oil_density: float | None = None
+    average_residual_oil_density_unit: LiquidDensityUnit | None = None
+    average_residual_oil_mw: float | None = None
+    dle_experiment_type: DLEExperimentType
+    evolved_gas_composition: CompositionModel | None = None
+    evolved_gas_specific_gravity: float | None = None
+    gas_density_unit: GasDensityUnit | None = "g/cm3"
+    gas_viscosity_unit: ViscosityUnit | None = "cP"
+    gor_unit: StocktankGorUnit | None = "Sm3/Sm3"
+    liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
+    liberated_gas_unit: GorUnit | None = "Sm3/Sm3"
+    name: str
+    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    oil_fvf_unit: FvfUnit | None = "m3/Sm3"
+    pressure_unit: PressureUnit | None = "bara"
+    residual_oil_composition: CompositionModel | None = None
+    saturation_pressure_type: SaturationPressureType
+    stages: list[DLEStageModel]
+    temperature: float
+    temperature_unit: TemperatureUnit
+    type: Literal["DLE"]
+
+
+DLEExperimentType = TypeAliasType(
+    "DLEExperimentType", Literal["Standard DLE Experiment", "High Pressure Final Stage"]
+)
+
+
+class DLEStageModel(BaseModel):
+    gas_density: float | None = None
+    gas_specific_gravity: float | None = None
+    gas_viscosity: float | None = None
+    gas_z_factor: float | None = None
+    gor: float | None = None
+    is_saturation_pressure: bool
+    liberated_gas: float | None = None
+    oil_density: float | None = None
+    oil_fvf: float | None = None
+    pressure: float
+
+
 class EOSModelModel(BaseModel):
-    binary_interaction_parameters: dict[str, dict[str, float]]
+    binary_interaction_parameters: BinaryInteractionParameterModel
     boiling_point_temperature_unit: str
     component_properties: list[ComponentPropertiesModel]
     components_are_mapped: bool
@@ -1202,16 +403,32 @@ class EOSModelModel(BaseModel):
     critical_molar_volume_unit: str
     critical_pressure_unit: str
     critical_temperature_unit: str
-    eos_type: Literal[
-        "Redlich-Kwong (1949)",
-        "Soave-Redlich-Kwong (1972)",
-        "Peng-Robinson (1977)",
-        "Peng-Robinson (1979)",
-    ]
+    eos_type: EOSType
     id: int
     number_of_components: int
     omega_a: float
     omega_b: float
+
+
+EOSType = TypeAliasType(
+    "EOSType",
+    Literal[
+        "Redlich-Kwong (1949)",
+        "Soave-Redlich-Kwong (1972)",
+        "Peng-Robinson (1977)",
+        "Peng-Robinson (1979)",
+    ],
+)
+
+
+class FluidModelsListModel(BaseModel):
+    fluid_models: list[GetSimpleFluidModelModel]
+
+
+FluidType = TypeAliasType("FluidType", Literal["Water", "Gas", "Oil", "Mud", "Multiphase"])
+
+
+FvfUnit = TypeAliasType("FvfUnit", Literal["m3/Sm3", "bbl/STB"])
 
 
 class GammaModelModel(BaseModel):
@@ -1222,174 +439,43 @@ class GammaModelModel(BaseModel):
     shape: float
 
 
-class GetProjectModel(BaseModel):
-    id: int
-    name: str | None = None
-    note: str | None = None
-    note_updated: AwareDatetime | None = None
-    owners: list[str] | None = None
-    public: bool | None = None
-    region_id: int | None = None
-    user_email: str | None = None
+GasDensityUnit = TypeAliasType(
+    "GasDensityUnit", Literal["SG", "kg/m3", "g/cm3", "lbm/bbl", "lbm/ft3"]
+)
 
 
-class GetSimpleBlackOilTableModel(BaseModel):
+GasExpansionFactorUnit = TypeAliasType("GasExpansionFactorUnit", Literal["Sm3/m3", "scf/bbl"])
+
+
+class GetBlackOilTableModel(BaseModel):
     black_oil_table_input_id: int | None = None
     extrapolation_type: str | None = None
+    feed_composition: MolarCompositionModel
     feed_composition_id: int | None = None
     fluid_model_id: int | None = None
+    gas_expansion_factor_unit: GasExpansionFactorUnit
+    gas_formation_volume_factor_unit: FvfUnit
+    gas_viscosity_unit: ViscosityUnit
     id: int
+    injection_composition: MolarCompositionModel | None
     injection_composition_id: int | None = None
     is_dry_gas: bool | None = None
     name: str | None = None
+    oil_formation_volume_factor_unit: FvfUnit
+    oil_viscosity_unit: ViscosityUnit
+    pressure_unit: PressureUnit
     reservoir_pressure: float | None = None
-    reservoir_pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"]
+    reservoir_pressure_unit: PressureUnit
     reservoir_temperature: float | None = None
-    reservoir_temperature_unit: Literal["C", "K", "F", "R"]
+    reservoir_temperature_unit: TemperatureUnit
+    rows: list[BlackOilTableRowModel]
     sample_id: int | None = None
     saturation_pressure: float | None = None
+    solution_cgr_unit: SolutionCgrUnit
+    solution_gor_unit: GorUnit
     status: str | None = None
+    surface_process: SurfaceProcessModel
     surface_process_id: int | None = None
-
-
-class GetSimpleFluidModelModel(BaseModel):
-    creator: str | None = None
-    date_updated: AwareDatetime | None = None
-    id: int
-    name: str | None = None
-    note: str | None = None
-    note_updated: AwareDatetime | None = None
-    project_id: int | None = None
-    status: str | None = None
-    user_email: str | None = None
-
-
-class GetWellSimpleModel(BaseModel):
-    basin_id: float | None = None
-    basin_name: str | None
-    field_id: float | None = None
-    field_name: str | None
-    field_segment_id: float | None = None
-    field_segment_name: str | None
-    formation_id: float | None = None
-    formation_name: str | None
-    formation_zone_id: float | None = None
-    formation_zone_name: str | None
-    id: int
-    location: dict[str, Any] | None = None
-    name: str | None = None
-    region_id: int | None = None
-    sub_basin_id: float | None = None
-    sub_basin_name: str | None
-    uwi: str | None = None
-
-
-class ImportCollisionModel(BaseModel):
-    entity: Literal["report", "well", "sample", "experiment"]
-    import_parent_natural_key_id: str | None = None
-    natural_key_id: str | None
-    reason: str
-
-
-class ImportSuggestionModel(BaseModel):
-    entity: Literal["report", "well", "sample", "experiment"]
-    import_parent_natural_key_id: str | None = None
-    natural_key: dict[str, str | int | None]
-    natural_key_id: str
-    reason: str | None = "natural_key_match"
-
-
-class IonDataModel(BaseModel):
-    concentration: float | None = None
-    equivalence: float | None = None
-    name: str
-    type: Literal["anion", "cation"]
-
-
-class MolarCompositionComponentModel(BaseModel):
-    component_name: str
-    id: int
-    molar_amount: float
-    molar_composition_id: int
-
-
-class MolarCompositionModel(BaseModel):
-    components: list[MolarCompositionComponentModel]
-    id: int
-    sample_id: int | None
-
-
-class ProjectSampleModel(BaseModel):
-    basin_id: int | None = None
-    field_id: int | None = None
-    field_segment_id: int | None = None
-    fluid_type: Literal["Water", "Gas", "Oil", "Mud", "Multiphase"] | None = None
-    formation_id: int | None = None
-    formation_zone_id: int | None = None
-    id: int | None = None
-    mud_sample_id: int | None = None
-    name: str | None = None
-    sub_basin_id: int | None = None
-    type: (
-        Literal["REC", "SEP", "BHS", "OFT", "SEPO", "SEPG", "OBM", "GAS", "FLO", "WATER"] | None
-    ) = None
-    well_id: int | None = None
-
-
-class SurfaceProcessStageModel(BaseModel):
-    pressure: float
-    stage_index: int
-    surface_process_id: int
-    temperature: float
-
-
-class UpdateWellItemModel(BaseModel):
-    basin_id: float | None = None
-    field_id: float | None = None
-    field_segment_id: float | None = None
-    formation_id: float | None = None
-    formation_zone_id: float | None = None
-    id: int
-    location: Any = None
-    name: str | None = None
-    region_id: int | None = None
-    sub_basin_id: float | None = None
-    uwi: str | None = None
-
-
-class ViscosityModelModel(BaseModel):
-    f0: float
-    id: int
-    p0: float
-    p1: float
-    p2: float
-    p3: float
-    p4: float
-
-
-class BlackOilTablesListModel(BaseModel):
-    black_oil_tables: list[GetSimpleBlackOilTableModel]
-
-
-class CCEExperimentModel(BaseModel):
-    name: str
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None = (
-        "bara"
-    )
-    relative_oil_volume_unit: Literal["Vo/Vsat (%)", "Vo/Vtot (%)", "Vo/Vsat", "Vo/Vtot"] | None = (
-        "Vo/Vsat (%)"
-    )
-    relative_total_volume_unit: Literal["Vtot/Vsat", "Vtot"] | None = "Vtot/Vsat"
-    saturation_pressure_type: Literal["Dewpoint", "Bubblepoint"] | None = None
-    single_phase_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    stages: list[CCEStageModel]
-    temperature: float
-    temperature_unit: Literal["C", "K", "F", "R"]
-    type: Literal["CCE"]
-
-
-class FluidModelsListModel(BaseModel):
-    fluid_models: list[GetSimpleFluidModelModel]
 
 
 class GetFluidModelModel(BaseModel):
@@ -1408,6 +494,17 @@ class GetFluidModelModel(BaseModel):
     viscosity_model: ViscosityModelModel
 
 
+class GetProjectModel(BaseModel):
+    id: int
+    name: str | None = None
+    note: str | None = None
+    note_updated: AwareDatetime | None = None
+    owners: list[str] | None = None
+    public: bool | None = None
+    region_id: int | None = None
+    user_email: str | None = None
+
+
 class GetProjectWithFluidModelsModel(BaseModel):
     fluid_models: list[GetSimpleFluidModelModel]
     id: int
@@ -1421,431 +518,139 @@ class GetProjectWithFluidModelsModel(BaseModel):
     user_email: str | None = None
 
 
-class ImportPreflightResultModel(BaseModel):
-    can_commit: bool
-    collisions: list[ImportCollisionModel]
-    skipped: dict[str, int]
-    suggestions: list[ImportSuggestionModel]
-    summary: dict[str, int]
-
-
-class LiberatedGasCompositionsModel(BaseModel):
-    components: list[LiberatedGasComponentModel]
-    stages: list[LiberatedGasStageModel]
-
-
-class MSSExperimentModel(BaseModel):
-    gas_density_unit: Literal["SG", "kg/m3", "g/cm3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    gas_viscosity_unit: Literal["cP", "micro-cP"] | None = "cP"
-    gor_unit: (
-        Literal["Sm3/Sm3", "scf/STB", "1e6-Sm3/Sm3", "MMscf/STB", "1e3-Sm3/Sm3", "Mscf/STB"] | None
-    ) = "Sm3/Sm3"
-    liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
-    liberated_gas_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = "Sm3/Sm3"
-    name: str
-    oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    oil_fvf_unit: Literal["m3/Sm3", "bbl/STB"] | None = "m3/Sm3"
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None = (
-        "bara"
-    )
-    saturation_pressure_type: Literal["Dewpoint", "Bubblepoint"] | None = None
-    single_phase_reference_pressure: float | None = None
-    stages: list[MSSStageModel]
-    stock_tank_oil_composition: CompositionModel | None = None
-    stock_tank_oil_density: float | None = None
-    stock_tank_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    stock_tank_oil_molecular_weight: float | None = None
-    temperature_unit: Literal["C", "K", "F", "R"] | None = "C"
-    type: Literal["MSS"]
-
-
-class ProjectsListModel(BaseModel):
-    projects: list[GetProjectModel]
-
-
-class SlimtubeExperimentModel(BaseModel):
-    average_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = "bara"
-    final_recovery_unit: Literal["%", "frac."] | None = "%"
-    injection_gas_composition: CompositionModel | None = None
-    name: str
-    recovery_at_1_2_pore_volumes_injected_unit: Literal["%", "frac."] | None = "%"
-    recovery_at_1_pore_volumes_injected_unit: Literal["%", "frac."] | None = "%"
-    reported_minimum_miscibility_pressure: float | None = None
-    reported_minimum_miscibility_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    stages: list[SlimtubeStageModel]
-    stock_tank_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    target_injection_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = "bara"
-    target_temperature: float | None = None
-    target_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    temperature_unit: Literal["C", "K", "F", "R"] | None = "C"
-    type: Literal["Slimtube"]
-
-
-class SwellTestExperimentModel(BaseModel):
-    density_at_saturation_pressure_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = (
-        "g/cm3"
-    )
-    gas_oil_ratio_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = "Sm3/Sm3"
-    injection_gas_composition: CompositionModel | None = None
-    moles_injected_unit: (
-        Literal["inj./total %", "inj./initial %", "inj./total", "inj./initial"] | None
-    ) = "inj./total %"
-    name: str
-    relative_volume_at_saturation_pressure_unit: Literal["%", "frac."] | None = "%"
-    saturation_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = "bara"
-    stage_data: list[SwellTestStageModel]
-    temperature: float
-    temperature_unit: Literal["C", "K", "F", "R"]
-    type: Literal["SwellTest"]
-
-
-class UpdateWellsListModel(RootModel[list[UpdateWellItemModel]]):
-    root: list[UpdateWellItemModel]
-
-
-class VISCOExperimentModel(BaseModel):
-    gas_viscosity_unit: Literal["cP", "micro-cP"] | None = "cP"
-    name: str
-    oil_viscosity_unit: Literal["cP", "micro-cP"] | None = "cP"
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None = (
-        "bara"
-    )
-    stages: list[VISCOStageModel]
-    temperature: float
-    temperature_unit: Literal["C", "K", "F", "R"]
-    type: Literal["VISCO"]
-
-
-class WellsListModel(BaseModel):
-    wells: list[GetWellSimpleModel]
-
-
-class SurfaceProcessModel(BaseModel):
+class GetRegionModel(BaseModel):
     id: int
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"]
-    stages: list[SurfaceProcessStageModel]
-    temperature_unit: Literal["C", "K", "F", "R"]
-
-
-class CVDExperimentModel(BaseModel):
-    cumulative_moles_removed_unit: Literal["%", "frac."] | None = "%"
-    final_stage_oil_composition: CompositionModel | None = None
-    final_stage_oil_density: float | None = None
-    final_stage_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    final_stage_oil_mw: float | None = None
-    gas_density_unit: Literal["SG", "kg/m3", "g/cm3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    gas_viscosity_unit: Literal["cP", "micro-cP"] | None = "cP"
-    incremental_moles_removed_unit: Literal["%", "frac."] | None = "%"
-    liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
-    name: str
-    oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None = (
-        "bara"
-    )
-    relative_oil_volume_unit: Literal["%", "frac."] | None = "%"
-    saturation_pressure_type: Literal["Dewpoint", "Bubblepoint"]
-    stages: list[CVDStageModel]
-    stock_tank_oil_density: float | None = None
-    stock_tank_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    temperature: float
-    temperature_unit: Literal["C", "K", "F", "R"]
-    type: Literal["CVD"]
-
-
-class DLEExperimentModel(BaseModel):
-    average_residual_oil_density: float | None = None
-    average_residual_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    average_residual_oil_mw: float | None = None
-    dle_experiment_type: Literal["Standard DLE Experiment", "High Pressure Final Stage"]
-    evolved_gas_composition: CompositionModel | None = None
-    evolved_gas_specific_gravity: float | None = None
-    gas_density_unit: Literal["SG", "kg/m3", "g/cm3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    gas_viscosity_unit: Literal["cP", "micro-cP"] | None = "cP"
-    gor_unit: (
-        Literal["Sm3/Sm3", "scf/STB", "1e6-Sm3/Sm3", "MMscf/STB", "1e3-Sm3/Sm3", "Mscf/STB"] | None
-    ) = "Sm3/Sm3"
-    liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
-    liberated_gas_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = "Sm3/Sm3"
-    name: str
-    oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = "g/cm3"
-    oil_fvf_unit: Literal["m3/Sm3", "bbl/STB"] | None = "m3/Sm3"
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None = (
-        "bara"
-    )
-    residual_oil_composition: CompositionModel | None = None
-    saturation_pressure_type: Literal["Dewpoint", "Bubblepoint"]
-    stages: list[DLEStageModel]
-    temperature: float
-    temperature_unit: Literal["C", "K", "F", "R"]
-    type: Literal["DLE"]
-
-
-class GetBlackOilTableModel(BaseModel):
-    black_oil_table_input_id: int | None = None
-    extrapolation_type: str | None = None
-    feed_composition: MolarCompositionModel
-    feed_composition_id: int | None = None
-    fluid_model_id: int | None = None
-    gas_expansion_factor_unit: Literal["Sm3/m3", "scf/bbl"]
-    gas_formation_volume_factor_unit: Literal["m3/Sm3", "bbl/STB"]
-    gas_viscosity_unit: Literal["cP", "micro-cP"]
-    id: int
-    injection_composition: MolarCompositionModel | None
-    injection_composition_id: int | None = None
-    is_dry_gas: bool | None = None
     name: str | None = None
-    oil_formation_volume_factor_unit: Literal["m3/Sm3", "bbl/STB"]
-    oil_viscosity_unit: Literal["cP", "micro-cP"]
-    pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"]
-    reservoir_pressure: float | None = None
-    reservoir_pressure_unit: Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"]
-    reservoir_temperature: float | None = None
-    reservoir_temperature_unit: Literal["C", "K", "F", "R"]
-    rows: list[BlackOilTableRowModel]
-    sample_id: int | None = None
-    saturation_pressure: float | None = None
-    solution_cgr_unit: Literal["Sm3/1e6-Sm3", "STB/MMscf"]
-    solution_gor_unit: Literal[
-        "Sm3/Sm3",
-        "Sm3/m3",
-        "scf/STB",
-        "scf/bbl",
-        "1e6-Sm3/Sm3",
-        "1e6-Sm3/m3",
-        "MMscf/STB",
-        "MMscf/bbl",
-        "1e3-Sm3/Sm3",
-        "1e3-Sm3/m3",
-        "Mscf/STB",
-        "Mscf/bbl",
-    ]
-    status: str | None = None
-    surface_process: SurfaceProcessModel
-    surface_process_id: int | None = None
+    note: str | None = None
+    public: bool | None = None
+    region_type: RegionType | None = None
+    reservoir_type: ReservoirType | None = None
+
+
+class GetSampleListModel(BaseModel):
+    samples: list[GetSampleModel]
 
 
 class GetSampleModel(BaseModel):
     bottom_perforation_depth: float | None = None
-    bottom_perforation_depth_unit: Literal["m", "ft"] | None = None
+    bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    drained_water_density_unit: LiquidDensityUnit | None = None
     drawdown_pressure: float | None = None
-    drawdown_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    experiments: (
-        list[
-            Annotated[
-                CCEExperimentModel
-                | CVDExperimentModel
-                | DLEExperimentModel
-                | MSSExperimentModel
-                | TBPExperimentModel
-                | VISCOExperimentModel
-                | SlimtubeExperimentModel
-                | SwellTestExperimentModel,
-                Field(discriminator="type"),
-            ]
-        ]
-        | None
-    ) = None
+    drawdown_pressure_unit: PressureUnit | None = None
+    experiments: list[Experiments] | None = None
     flashed_gas_composition: CompositionModel | None = None
     flashed_gas_mw: float | None = None
     flashed_gas_specific_gravity: float | None = None
     flashed_oil_composition: CompositionModel | None = None
     flashed_oil_contamination: float | None = None
-    flashed_oil_contamination_unit: Literal["mass%", "mole%"] | None = None
+    flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    flashed_oil_density_unit: LiquidDensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
-    flashed_oil_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    fluid_type: Literal["Water", "Gas", "Oil", "Mud", "Multiphase"] | None = None
+    flashed_oil_temperature_unit: TemperatureUnit | None = None
+    fluid_type: FluidType | None = None
     gas_composition: CompositionModel | None = None
     gas_specific_gravity: float | None = None
     gas_water_ratio: float | None = None
-    gas_water_ratio_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    gas_water_ratio_unit: GorUnit | None = None
     id: int
     ions: list[IonDataModel] | None = None
     location: dict[str, Any] | None = None
     measured_depth: float | None = None
-    measured_depth_unit: Literal["m", "ft"] | None = None
-    mud_base: Literal["Water", "Oil"] | None = None
+    measured_depth_unit: HeightUnit | None = None
+    mud_base: MudBase | None = None
     mud_sample_id: int | None = None
     name: str | None = None
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    obm_density_unit: LiquidDensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
-    pressure_at_lab_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
-    pressure_when_sampled_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    pressure_when_sampled_unit: PressureUnit | None = None
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
-    recombined_fluid_contamination_unit: Literal["mass%", "mole%"] | None = None
+    recombined_fluid_contamination_unit: MudContaminationUnit | None = None
     recombined_fluid_gor: float | None = None
-    recombined_fluid_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    reservoir_density_unit: LiquidDensityUnit | None = None
     reservoir_pressure: float | None = None
-    reservoir_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
-    reservoir_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    reservoir_temperature_unit: TemperatureUnit | None = None
     sampling_date: date | None = None
     sep_gas_composition: CompositionModel | None = None
     sep_gas_mw: float | None = None
     sep_gor: float | None = None
-    sep_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    sep_oil_density_unit: LiquidDensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
-    sep_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
-    sep_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    sep_temperature_unit: TemperatureUnit | None = None
     temperature_at_lab: float | None = None
-    temperature_at_lab_unit: Literal["C", "K", "F", "R"] | None = None
+    temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
-    temperature_when_sampled_unit: Literal["C", "K", "F", "R"] | None = None
+    temperature_when_sampled_unit: TemperatureUnit | None = None
     top_perforation_depth: float | None = None
-    top_perforation_depth_unit: Literal["m", "ft"] | None = None
+    top_perforation_depth_unit: HeightUnit | None = None
     total_dissolved_solids: float | None = None
     transfer_pressure: float | None = None
-    transfer_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    transfer_pressure_unit: PressureUnit | None = None
     transfer_temperature: float | None = None
-    transfer_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    transfer_temperature_unit: TemperatureUnit | None = None
     true_vertical_depth: float | None = None
-    true_vertical_depth_unit: Literal["m", "ft"] | None = None
-    type: (
-        Literal["REC", "SEP", "BHS", "OFT", "SEPO", "SEPG", "OBM", "GAS", "FLO", "WATER"] | None
-    ) = None
+    true_vertical_depth_unit: HeightUnit | None = None
+    type: SampleType | None = None
     water_conductivity: float | None = None
-    water_conductivity_unit: Literal["micro-S/cm"] | None = None
+    water_conductivity_unit: ConductivityUnit | None = None
     water_ph: float | None = None
     water_resistivity: float | None = None
-    water_resistivity_unit: Literal["ohm-m"] | None = None
+    water_resistivity_unit: ResistivityUnit | None = None
     water_salinity: float | None = None
     water_temperature: float | None = None
-    water_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    water_temperature_unit: TemperatureUnit | None = None
     well_id: int | None = None
+
+
+class GetSimpleBlackOilTableModel(BaseModel):
+    black_oil_table_input_id: int | None = None
+    extrapolation_type: str | None = None
+    feed_composition_id: int | None = None
+    fluid_model_id: int | None = None
+    id: int
+    injection_composition_id: int | None = None
+    is_dry_gas: bool | None = None
+    name: str | None = None
+    reservoir_pressure: float | None = None
+    reservoir_pressure_unit: PressureUnit
+    reservoir_temperature: float | None = None
+    reservoir_temperature_unit: TemperatureUnit
+    sample_id: int | None = None
+    saturation_pressure: float | None = None
+    status: str | None = None
+    surface_process_id: int | None = None
+
+
+class GetSimpleFluidModelModel(BaseModel):
+    creator: str | None = None
+    date_updated: AwareDatetime | None = None
+    id: int
+    name: str | None = None
+    note: str | None = None
+    note_updated: AwareDatetime | None = None
+    project_id: int | None = None
+    status: str | None = None
+    user_email: str | None = None
 
 
 class GetWellModel(BaseModel):
@@ -1869,675 +674,617 @@ class GetWellModel(BaseModel):
     uwi: str | None = None
 
 
-class UpdateSampleModel(BaseModel):
-    bottom_perforation_depth: float | None = None
-    bottom_perforation_depth_unit: Literal["m", "ft"] | None = None
-    drained_water_density: float | None = None
-    drained_water_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    drawdown_pressure: float | None = None
-    drawdown_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    experiments: (
-        list[
-            Annotated[
-                CCEExperimentModel
-                | CVDExperimentModel
-                | DLEExperimentModel
-                | MSSExperimentModel
-                | TBPExperimentModel
-                | VISCOExperimentModel
-                | SlimtubeExperimentModel
-                | SwellTestExperimentModel,
-                Field(discriminator="type"),
-            ]
-        ]
-        | None
-    ) = None
-    flashed_gas_composition: CompositionModel | None = None
-    flashed_gas_mw: float | None = None
-    flashed_gas_specific_gravity: float | None = None
-    flashed_oil_composition: CompositionModel | None = None
-    flashed_oil_contamination: float | None = None
-    flashed_oil_contamination_unit: Literal["mass%", "mole%"] | None = None
-    flashed_oil_density: float | None = None
-    flashed_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    flashed_oil_mw: float | None = None
-    flashed_oil_temperature: float | None = None
-    flashed_oil_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    fluid_type: Literal["Water", "Gas", "Oil", "Mud", "Multiphase"] | None = None
-    gas_composition: CompositionModel | None = None
+class GetWellSimpleModel(BaseModel):
+    basin_id: float | None = None
+    basin_name: str | None
+    field_id: float | None = None
+    field_name: str | None
+    field_segment_id: float | None = None
+    field_segment_name: str | None
+    formation_id: float | None = None
+    formation_name: str | None
+    formation_zone_id: float | None = None
+    formation_zone_name: str | None
+    id: int
+    location: dict[str, Any] | None = None
+    name: str | None = None
+    region_id: int | None = None
+    sub_basin_id: float | None = None
+    sub_basin_name: str | None
+    uwi: str | None = None
+
+
+GorUnit = TypeAliasType(
+    "GorUnit",
+    Literal[
+        "Sm3/Sm3",
+        "Sm3/m3",
+        "scf/STB",
+        "scf/bbl",
+        "1e6-Sm3/Sm3",
+        "1e6-Sm3/m3",
+        "MMscf/STB",
+        "MMscf/bbl",
+        "1e3-Sm3/Sm3",
+        "1e3-Sm3/m3",
+        "Mscf/STB",
+        "Mscf/bbl",
+    ],
+)
+
+
+HeightUnit = TypeAliasType("HeightUnit", Literal["m", "ft"])
+
+
+class ImportCollisionModel(BaseModel):
+    entity: ArchiveEntity
+    import_parent_natural_key_id: str | None = None
+    natural_key_id: str | None
+    reason: str
+
+
+class ImportCommitResultModel(BaseModel):
+    created: dict[str, int]
+    id_map: dict[str, dict[str, int]]
+    reused: dict[str, int]
+    skipped: dict[str, int]
+
+
+class ImportPreflightResultModel(BaseModel):
+    can_commit: bool
+    collisions: list[ImportCollisionModel]
+    skipped: dict[str, int]
+    suggestions: list[ImportSuggestionModel]
+    summary: dict[str, int]
+
+
+class ImportSuggestionModel(BaseModel):
+    entity: ArchiveEntity
+    import_parent_natural_key_id: str | None = None
+    natural_key: dict[str, str | int | None]
+    natural_key_id: str
+    reason: str | None = "natural_key_match"
+
+
+class IonDataModel(BaseModel):
+    concentration: float | None = None
+    equivalence: float | None = None
+    name: str
+    type: IonType
+
+
+IonType = TypeAliasType("IonType", Literal["anion", "cation"])
+
+
+LabVolumeUnit = TypeAliasType("LabVolumeUnit", Literal["L", "mL", "cm3", "m3"])
+
+
+class LiberatedGasComponentModel(BaseModel):
+    input_name: str
+    mw: Mw | None = None
+    name: ValidComponentName
+
+
+class LiberatedGasComponentMolarAmountModel(BaseModel):
+    component_name: ValidComponentName
+    molar_amount: MolarAmount | None = None
+    stage_number: int
+
+
+class LiberatedGasCompositionsModel(BaseModel):
+    components: list[LiberatedGasComponentModel]
+    stages: list[LiberatedGasStageModel]
+
+
+class LiberatedGasStageModel(BaseModel):
+    composition: list[LiberatedGasComponentMolarAmountModel]
+    stage_number: int
+
+
+LiquidDensityUnit = TypeAliasType(
+    "LiquidDensityUnit", Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"]
+)
+
+
+class MSSExperimentModel(BaseModel):
+    gas_density_unit: GasDensityUnit | None = "g/cm3"
+    gas_viscosity_unit: ViscosityUnit | None = "cP"
+    gor_unit: StocktankGorUnit | None = "Sm3/Sm3"
+    liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
+    liberated_gas_unit: GorUnit | None = "Sm3/Sm3"
+    name: str
+    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    oil_fvf_unit: FvfUnit | None = "m3/Sm3"
+    pressure_unit: PressureUnit | None = "bara"
+    saturation_pressure_type: SaturationPressureType | None = None
+    single_phase_reference_pressure: float | None = None
+    stages: list[MSSStageModel]
+    stock_tank_oil_composition: CompositionModel | None = None
+    stock_tank_oil_density: float | None = None
+    stock_tank_oil_density_unit: LiquidDensityUnit | None = None
+    stock_tank_oil_molecular_weight: float | None = None
+    temperature_unit: TemperatureUnit | None = "C"
+    type: Literal["MSS"]
+
+
+class MSSStageModel(BaseModel):
+    gas_density: float | None = None
     gas_specific_gravity: float | None = None
-    gas_water_ratio: float | None = None
-    gas_water_ratio_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    gas_viscosity: float | None = None
+    gas_z_factor: float | None = None
+    gor: float | None = None
+    is_saturation_pressure: bool
+    liberated_gas: float | None = None
+    oil_density: float | None = None
+    oil_fvf: float | None = None
+    pressure: float
+    temperature: float
+
+
+MassAmount = TypeAliasType("MassAmount", Annotated[float, Field(ge=0.0)])
+
+
+MolarAmount = TypeAliasType("MolarAmount", Annotated[float, Field(ge=0.0)])
+
+
+class MolarCompositionComponentModel(BaseModel):
+    component_name: str
+    id: int
+    molar_amount: float
+    molar_composition_id: int
+
+
+class MolarCompositionModel(BaseModel):
+    components: list[MolarCompositionComponentModel]
+    id: int
+    sample_id: int | None
+
+
+MolesInjectedUnit = TypeAliasType(
+    "MolesInjectedUnit", Literal["inj./total %", "inj./initial %", "inj./total", "inj./initial"]
+)
+
+
+MudBase = TypeAliasType("MudBase", Literal["Water", "Oil"])
+
+
+MudContaminationUnit = TypeAliasType("MudContaminationUnit", Literal["mass%", "mole%"])
+
+
+Mw = TypeAliasType("Mw", Annotated[float, Field(gt=0.0)])
+
+
+PressureUnit = TypeAliasType(
+    "PressureUnit", Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"]
+)
+
+
+class ProjectSampleModel(BaseModel):
+    basin_id: int | None = None
+    field_id: int | None = None
+    field_segment_id: int | None = None
+    fluid_type: FluidType | None = None
+    formation_id: int | None = None
+    formation_zone_id: int | None = None
     id: int | None = None
-    ions: list[IonDataModel] | None = None
-    location: Any = None
-    measured_depth: float | None = None
-    measured_depth_unit: Literal["m", "ft"] | None = None
-    mud_base: Literal["Water", "Oil"] | None = None
     mud_sample_id: int | None = None
     name: str | None = None
-    note: str | None = None
-    obm_composition: CompositionModel | None = None
-    obm_density: float | None = None
-    obm_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    obm_mw: float | None = None
-    pressure_at_lab: float | None = None
-    pressure_at_lab_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    pressure_when_sampled: float | None = None
-    pressure_when_sampled_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    recombined_fluid_composition: CompositionModel | None = None
-    recombined_fluid_contamination: float | None = None
-    recombined_fluid_contamination_unit: Literal["mass%", "mole%"] | None = None
-    recombined_fluid_gor: float | None = None
-    recombined_fluid_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
-    recombined_fluid_mw: float | None = None
-    reservoir_density: float | None = None
-    reservoir_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    reservoir_pressure: float | None = None
-    reservoir_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    reservoir_temperature: float | None = None
-    reservoir_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    sampling_date: date | None = None
-    sep_gas_composition: CompositionModel | None = None
-    sep_gas_mw: float | None = None
-    sep_gor: float | None = None
-    sep_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
-    sep_oil_composition: CompositionModel | None = None
-    sep_oil_density: float | None = None
-    sep_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    sep_oil_mw: float | None = None
-    sep_pressure: float | None = None
-    sep_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    sep_temperature: float | None = None
-    sep_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    temperature_at_lab: float | None = None
-    temperature_at_lab_unit: Literal["C", "K", "F", "R"] | None = None
-    temperature_when_sampled: float | None = None
-    temperature_when_sampled_unit: Literal["C", "K", "F", "R"] | None = None
-    top_perforation_depth: float | None = None
-    top_perforation_depth_unit: Literal["m", "ft"] | None = None
-    total_dissolved_solids: float | None = None
-    transfer_pressure: float | None = None
-    transfer_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    transfer_temperature: float | None = None
-    transfer_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    true_vertical_depth: float | None = None
-    true_vertical_depth_unit: Literal["m", "ft"] | None = None
-    type: (
-        Literal["REC", "SEP", "BHS", "OFT", "SEPO", "SEPG", "OBM", "GAS", "FLO", "WATER"] | None
-    ) = None
-    water_conductivity: float | None = None
-    water_conductivity_unit: Literal["micro-S/cm"] | None = None
-    water_ph: float | None = None
-    water_resistivity: float | None = None
-    water_resistivity_unit: Literal["ohm-m"] | None = None
-    water_salinity: float | None = None
-    water_temperature: float | None = None
-    water_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    sub_basin_id: int | None = None
+    type: SampleType | None = None
     well_id: int | None = None
 
 
-class CreateWellSampleModel(BaseModel):
-    bottom_perforation_depth: float | None = None
-    bottom_perforation_depth_unit: Literal["m", "ft"] | None = None
-    drained_water_density: float | None = None
-    drained_water_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    drawdown_pressure: float | None = None
-    drawdown_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    experiments: (
-        list[
-            Annotated[
-                CCEExperimentModel
-                | CVDExperimentModel
-                | DLEExperimentModel
-                | MSSExperimentModel
-                | TBPExperimentModel
-                | VISCOExperimentModel
-                | SlimtubeExperimentModel
-                | SwellTestExperimentModel,
-                Field(discriminator="type"),
-            ]
-        ]
-        | None
-    ) = None
-    flashed_gas_composition: CompositionModel | None = None
-    flashed_gas_mw: float | None = None
-    flashed_gas_specific_gravity: float | None = None
-    flashed_oil_composition: CompositionModel | None = None
-    flashed_oil_contamination: float | None = None
-    flashed_oil_contamination_unit: Literal["mass%", "mole%"] | None = None
-    flashed_oil_density: float | None = None
-    flashed_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    flashed_oil_mw: float | None = None
-    flashed_oil_temperature: float | None = None
-    flashed_oil_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    fluid_type: Literal["Water", "Gas", "Oil", "Mud", "Multiphase"]
-    gas_composition: CompositionModel | None = None
-    gas_specific_gravity: float | None = None
-    gas_water_ratio: float | None = None
-    gas_water_ratio_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
-    id: int | None = None
-    ions: list[IonDataModel] | None = None
-    location: Any = None
-    measured_depth: float | None = None
-    measured_depth_unit: Literal["m", "ft"] | None = None
-    mud_base: Literal["Water", "Oil"] | None = None
-    mud_sample_id: int | None = None
+class ProjectsListModel(BaseModel):
+    projects: list[GetProjectModel]
+
+
+class RateLimitErrorResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    message: str | None = "Rate limit exceeded"
+    retry_after_seconds: int | None = None
+    status: str | None = "too_many_requests"
+    status_code: int | None = 429
+
+
+RegionType = TypeAliasType(
+    "RegionType",
+    Literal[
+        "single_field",
+        "multi_field",
+        "greater_area",
+        "basin",
+        "reservoir_management_unit",
+        "asset",
+        "country",
+    ],
+)
+
+
+class RegionsListModel(BaseModel):
+    regions: list[GetRegionModel]
+
+
+RelativeOilVolumeBasis = TypeAliasType(
+    "RelativeOilVolumeBasis", Literal["Vo/Vsat (%)", "Vo/Vtot (%)", "Vo/Vsat", "Vo/Vtot"]
+)
+
+
+RelativeTotalVolumeUnitType = TypeAliasType(
+    "RelativeTotalVolumeUnitType", Literal["Vtot/Vsat", "Vtot"]
+)
+
+
+ReservoirType = TypeAliasType("ReservoirType", Literal["Conventional", "Unconventional"])
+
+
+ResistivityUnit = TypeAliasType("ResistivityUnit", Literal["ohm-m"])
+
+
+SampleType = TypeAliasType(
+    "SampleType", Literal["REC", "SEP", "BHS", "OFT", "SEPO", "SEPG", "OBM", "GAS", "FLO", "WATER"]
+)
+
+
+SaturationPressureType = TypeAliasType("SaturationPressureType", Literal["Dewpoint", "Bubblepoint"])
+
+
+class SlimtubeExperimentModel(BaseModel):
+    average_pressure_unit: PressureUnit | None = "bara"
+    final_recovery_unit: AmountUnit | None = "%"
+    injection_gas_composition: CompositionModel | None = None
     name: str
-    note: str | None = None
-    obm_composition: CompositionModel | None = None
-    obm_density: float | None = None
-    obm_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    obm_mw: float | None = None
-    pressure_at_lab: float | None = None
-    pressure_at_lab_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    pressure_when_sampled: float | None = None
-    pressure_when_sampled_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    recovery_at_1_2_pore_volumes_injected_unit: AmountUnit | None = "%"
+    recovery_at_1_pore_volumes_injected_unit: AmountUnit | None = "%"
+    reported_minimum_miscibility_pressure: float | None = None
+    reported_minimum_miscibility_pressure_unit: PressureUnit | None = None
+    stages: list[SlimtubeStageModel]
+    stock_tank_oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    target_injection_pressure_unit: PressureUnit | None = "bara"
+    target_temperature: float | None = None
+    target_temperature_unit: TemperatureUnit | None = None
+    temperature_unit: TemperatureUnit | None = "C"
+    type: Literal["Slimtube"]
+
+
+class SlimtubeRecoveryStageDataModel(BaseModel):
+    fluid_transparency: float | None = None
+    gas_recovery: float | None = None
+    gas_volume: float | None = None
+    injection_pressure: float | None = None
+    oil_recovery: float | None = None
+    oil_volume: float | None = None
+    pore_volume_injected: float | None = None
+    pressure_difference: float | None = None
+    time_elapsed: float | None = None
+
+
+class SlimtubeStageModel(BaseModel):
+    average_pressure: float | None = None
+    final_recovery: float | None = None
+    fluid_transparency_unit: AmountUnit | None = "%"
+    gas_recovery_unit: AmountUnit | None = "%"
+    gas_volume_unit: LabVolumeUnit | None = "L"
+    injection_pressure_unit: PressureUnit | None = "bara"
+    is_miscible: bool | None = None
+    oil_recovery_unit: AmountUnit | None = "%"
+    oil_volume_unit: LabVolumeUnit | None = "L"
+    pressure_difference_unit: PressureUnit | None = "bara"
+    recovery_at_1_2_pore_volumes_injected: float
+    recovery_at_1_pore_volumes_injected: float | None = None
+    recovery_stage_data: list[SlimtubeRecoveryStageDataModel]
+    stock_tank_oil_density: float | None = None
+    target_injection_pressure: float
+    temperature: float | None = None
+    time_elapsed_unit: TimeUnit | None = "sec."
+
+
+SolutionCgrUnit = TypeAliasType("SolutionCgrUnit", Literal["Sm3/1e6-Sm3", "STB/MMscf"])
+
+
+StocktankGorUnit = TypeAliasType(
+    "StocktankGorUnit",
+    Literal["Sm3/Sm3", "scf/STB", "1e6-Sm3/Sm3", "MMscf/STB", "1e3-Sm3/Sm3", "Mscf/STB"],
+)
+
+
+class SurfaceProcessModel(BaseModel):
+    id: int
+    pressure_unit: PressureUnit
+    stages: list[SurfaceProcessStageModel]
+    temperature_unit: TemperatureUnit
+
+
+class SurfaceProcessStageModel(BaseModel):
+    pressure: float
+    stage_index: int
+    surface_process_id: int
+    temperature: float
+
+
+class SwellTestExperimentModel(BaseModel):
+    density_at_saturation_pressure_unit: LiquidDensityUnit | None = "g/cm3"
+    gas_oil_ratio_unit: GorUnit | None = "Sm3/Sm3"
+    injection_gas_composition: CompositionModel | None = None
+    moles_injected_unit: MolesInjectedUnit | None = "inj./total %"
+    name: str
+    relative_volume_at_saturation_pressure_unit: AmountUnit | None = "%"
+    saturation_pressure_unit: PressureUnit | None = "bara"
+    stage_data: list[SwellTestStageModel]
+    temperature: float
+    temperature_unit: TemperatureUnit
+    type: Literal["SwellTest"]
+
+
+class SwellTestStageCCEDataModel(BaseModel):
+    pressure: float
+    relative_oil_volume: float | None = None
+    relative_total_volume: float | None = None
+    single_phase_density: float | None = None
+
+
+class SwellTestStageModel(BaseModel):
+    cce_data: list[SwellTestStageCCEDataModel]
+    density_at_saturation_pressure: float | None = None
+    gas_oil_ratio: float | None = None
+    moles_injected: float
+    pressure_unit: PressureUnit | None = "bara"
     recombined_fluid_composition: CompositionModel | None = None
-    recombined_fluid_contamination: float | None = None
-    recombined_fluid_contamination_unit: Literal["mass%", "mole%"] | None = None
-    recombined_fluid_gor: float | None = None
-    recombined_fluid_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
-    recombined_fluid_mw: float | None = None
-    reservoir_density: float | None = None
-    reservoir_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    reservoir_pressure: float | None = None
-    reservoir_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    reservoir_temperature: float | None = None
-    reservoir_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    sampling_date: date | None = None
-    sep_gas_composition: CompositionModel | None = None
-    sep_gas_mw: float | None = None
-    sep_gor: float | None = None
-    sep_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
-    sep_oil_composition: CompositionModel | None = None
-    sep_oil_density: float | None = None
-    sep_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
-    sep_oil_mw: float | None = None
-    sep_pressure: float | None = None
-    sep_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    sep_temperature: float | None = None
-    sep_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    temperature_at_lab: float | None = None
-    temperature_at_lab_unit: Literal["C", "K", "F", "R"] | None = None
-    temperature_when_sampled: float | None = None
-    temperature_when_sampled_unit: Literal["C", "K", "F", "R"] | None = None
-    top_perforation_depth: float | None = None
-    top_perforation_depth_unit: Literal["m", "ft"] | None = None
-    total_dissolved_solids: float | None = None
-    transfer_pressure: float | None = None
-    transfer_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    transfer_temperature: float | None = None
-    transfer_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    true_vertical_depth: float | None = None
-    true_vertical_depth_unit: Literal["m", "ft"] | None = None
-    type: Literal["REC", "SEP", "BHS", "OFT", "SEPO", "SEPG", "OBM", "GAS", "FLO", "WATER"]
-    water_conductivity: float | None = None
-    water_conductivity_unit: Literal["micro-S/cm"] | None = None
-    water_ph: float | None = None
-    water_resistivity: float | None = None
-    water_resistivity_unit: Literal["ohm-m"] | None = None
-    water_salinity: float | None = None
-    water_temperature: float | None = None
-    water_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    well_id: int | None = None
+    relative_oil_volume_unit: RelativeOilVolumeBasis | None = "Vo/Vsat (%)"
+    relative_volume_at_saturation_pressure: float | None = None
+    saturation_pressure: float
+    saturation_pressure_type: SaturationPressureType
+    single_phase_density_unit: LiquidDensityUnit | None = "g/cm3"
+
+
+class TBPCutModel(BaseModel):
+    cumulative_mass_amount: float | None = None
+    cumulative_volume_amount: float | None = None
+    density: float | None = None
+    lower_temperature: float | None = None
+    mass_amount: float | None = None
+    mw: float | None = None
+    upper_temperature: float | None = None
+    volume_amount: float | None = None
+
+
+class TBPExperimentModel(BaseModel):
+    cumulative_mass_amount_unit: AmountUnit | None = "%"
+    cumulative_volume_amount_unit: AmountUnit | None = "%"
+    cuts: list[TBPCutModel]
+    density_unit: LiquidDensityUnit | None = "g/cm3"
+    lower_temperature_unit: TemperatureUnit | None = "C"
+    mass_amount_unit: AmountUnit | None = "%"
+    name: str
+    type: Literal["TBP"]
+    upper_temperature_unit: TemperatureUnit | None = "C"
+    volume_amount_unit: AmountUnit | None = "%"
+
+
+TemperatureUnit = TypeAliasType("TemperatureUnit", Literal["C", "K", "F", "R"])
+
+
+TimeUnit = TypeAliasType("TimeUnit", Literal["sec.", "min."])
+
+
+class TokenData(BaseModel):
+    access_token: str
+    expires_at: float | None = 0
+    expires_in: int
+    token_type: str
+
+
+class UpdateRegionModel(BaseModel):
+    id: int | None = None
+    name: str | None = None
+    note: str | None = None
+    public: bool | None = None
+    region_type: RegionType | None = None
+    reservoir_type: ReservoirType | None = None
 
 
 class UpdateSampleItemModel(BaseModel):
     bottom_perforation_depth: float | None = None
-    bottom_perforation_depth_unit: Literal["m", "ft"] | None = None
+    bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    drained_water_density_unit: LiquidDensityUnit | None = None
     drawdown_pressure: float | None = None
-    drawdown_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    experiments: (
-        list[
-            Annotated[
-                CCEExperimentModel
-                | CVDExperimentModel
-                | DLEExperimentModel
-                | MSSExperimentModel
-                | TBPExperimentModel
-                | VISCOExperimentModel
-                | SlimtubeExperimentModel
-                | SwellTestExperimentModel,
-                Field(discriminator="type"),
-            ]
-        ]
-        | None
-    ) = None
+    drawdown_pressure_unit: PressureUnit | None = None
+    experiments: list[Experiments] | None = None
     flashed_gas_composition: CompositionModel | None = None
     flashed_gas_mw: float | None = None
     flashed_gas_specific_gravity: float | None = None
     flashed_oil_composition: CompositionModel | None = None
     flashed_oil_contamination: float | None = None
-    flashed_oil_contamination_unit: Literal["mass%", "mole%"] | None = None
+    flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    flashed_oil_density_unit: LiquidDensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
-    flashed_oil_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    fluid_type: Literal["Water", "Gas", "Oil", "Mud", "Multiphase"] | None = None
+    flashed_oil_temperature_unit: TemperatureUnit | None = None
+    fluid_type: FluidType | None = None
     gas_composition: CompositionModel | None = None
     gas_specific_gravity: float | None = None
     gas_water_ratio: float | None = None
-    gas_water_ratio_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    gas_water_ratio_unit: GorUnit | None = None
     id: int
     ions: list[IonDataModel] | None = None
     location: Any = None
     measured_depth: float | None = None
-    measured_depth_unit: Literal["m", "ft"] | None = None
-    mud_base: Literal["Water", "Oil"] | None = None
+    measured_depth_unit: HeightUnit | None = None
+    mud_base: MudBase | None = None
     mud_sample_id: int | None = None
     name: str | None = None
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    obm_density_unit: LiquidDensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
-    pressure_at_lab_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
-    pressure_when_sampled_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    pressure_when_sampled_unit: PressureUnit | None = None
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
-    recombined_fluid_contamination_unit: Literal["mass%", "mole%"] | None = None
+    recombined_fluid_contamination_unit: MudContaminationUnit | None = None
     recombined_fluid_gor: float | None = None
-    recombined_fluid_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    reservoir_density_unit: LiquidDensityUnit | None = None
     reservoir_pressure: float | None = None
-    reservoir_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
-    reservoir_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    reservoir_temperature_unit: TemperatureUnit | None = None
     sampling_date: date | None = None
     sep_gas_composition: CompositionModel | None = None
     sep_gas_mw: float | None = None
     sep_gor: float | None = None
-    sep_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    sep_oil_density_unit: LiquidDensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
-    sep_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
-    sep_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    sep_temperature_unit: TemperatureUnit | None = None
     temperature_at_lab: float | None = None
-    temperature_at_lab_unit: Literal["C", "K", "F", "R"] | None = None
+    temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
-    temperature_when_sampled_unit: Literal["C", "K", "F", "R"] | None = None
+    temperature_when_sampled_unit: TemperatureUnit | None = None
     top_perforation_depth: float | None = None
-    top_perforation_depth_unit: Literal["m", "ft"] | None = None
+    top_perforation_depth_unit: HeightUnit | None = None
     total_dissolved_solids: float | None = None
     transfer_pressure: float | None = None
-    transfer_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    transfer_pressure_unit: PressureUnit | None = None
     transfer_temperature: float | None = None
-    transfer_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    transfer_temperature_unit: TemperatureUnit | None = None
     true_vertical_depth: float | None = None
-    true_vertical_depth_unit: Literal["m", "ft"] | None = None
-    type: (
-        Literal["REC", "SEP", "BHS", "OFT", "SEPO", "SEPG", "OBM", "GAS", "FLO", "WATER"] | None
-    ) = None
+    true_vertical_depth_unit: HeightUnit | None = None
+    type: SampleType | None = None
     water_conductivity: float | None = None
-    water_conductivity_unit: Literal["micro-S/cm"] | None = None
+    water_conductivity_unit: ConductivityUnit | None = None
     water_ph: float | None = None
     water_resistivity: float | None = None
-    water_resistivity_unit: Literal["ohm-m"] | None = None
+    water_resistivity_unit: ResistivityUnit | None = None
     water_salinity: float | None = None
     water_temperature: float | None = None
-    water_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    water_temperature_unit: TemperatureUnit | None = None
     well_id: int | None = None
 
 
-class CreateSampleModel(BaseModel):
+class UpdateSampleListModel(RootModel[list[UpdateSampleItemModel]]):
+    root: list[UpdateSampleItemModel]
+
+
+class UpdateSampleModel(BaseModel):
     bottom_perforation_depth: float | None = None
-    bottom_perforation_depth_unit: Literal["m", "ft"] | None = None
+    bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    drained_water_density_unit: LiquidDensityUnit | None = None
     drawdown_pressure: float | None = None
-    drawdown_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
-    experiments: (
-        list[
-            Annotated[
-                CCEExperimentModel
-                | CVDExperimentModel
-                | DLEExperimentModel
-                | MSSExperimentModel
-                | TBPExperimentModel
-                | VISCOExperimentModel
-                | SlimtubeExperimentModel
-                | SwellTestExperimentModel,
-                Field(discriminator="type"),
-            ]
-        ]
-        | None
-    ) = None
+    drawdown_pressure_unit: PressureUnit | None = None
+    experiments: list[Experiments] | None = None
     flashed_gas_composition: CompositionModel | None = None
     flashed_gas_mw: float | None = None
     flashed_gas_specific_gravity: float | None = None
     flashed_oil_composition: CompositionModel | None = None
     flashed_oil_contamination: float | None = None
-    flashed_oil_contamination_unit: Literal["mass%", "mole%"] | None = None
+    flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    flashed_oil_density_unit: LiquidDensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
-    flashed_oil_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    fluid_type: Literal["Water", "Gas", "Oil", "Mud", "Multiphase"]
+    flashed_oil_temperature_unit: TemperatureUnit | None = None
+    fluid_type: FluidType | None = None
     gas_composition: CompositionModel | None = None
     gas_specific_gravity: float | None = None
     gas_water_ratio: float | None = None
-    gas_water_ratio_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    gas_water_ratio_unit: GorUnit | None = None
     id: int | None = None
     ions: list[IonDataModel] | None = None
     location: Any = None
     measured_depth: float | None = None
-    measured_depth_unit: Literal["m", "ft"] | None = None
-    mud_base: Literal["Water", "Oil"] | None = None
+    measured_depth_unit: HeightUnit | None = None
+    mud_base: MudBase | None = None
     mud_sample_id: int | None = None
-    name: str
+    name: str | None = None
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    obm_density_unit: LiquidDensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
-    pressure_at_lab_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
-    pressure_when_sampled_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    pressure_when_sampled_unit: PressureUnit | None = None
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
-    recombined_fluid_contamination_unit: Literal["mass%", "mole%"] | None = None
+    recombined_fluid_contamination_unit: MudContaminationUnit | None = None
     recombined_fluid_gor: float | None = None
-    recombined_fluid_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    reservoir_density_unit: LiquidDensityUnit | None = None
     reservoir_pressure: float | None = None
-    reservoir_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
-    reservoir_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    reservoir_temperature_unit: TemperatureUnit | None = None
     sampling_date: date | None = None
     sep_gas_composition: CompositionModel | None = None
     sep_gas_mw: float | None = None
     sep_gor: float | None = None
-    sep_gor_unit: (
-        Literal[
-            "Sm3/Sm3",
-            "Sm3/m3",
-            "scf/STB",
-            "scf/bbl",
-            "1e6-Sm3/Sm3",
-            "1e6-Sm3/m3",
-            "MMscf/STB",
-            "MMscf/bbl",
-            "1e3-Sm3/Sm3",
-            "1e3-Sm3/m3",
-            "Mscf/STB",
-            "Mscf/bbl",
-        ]
-        | None
-    ) = None
+    sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"] | None = None
+    sep_oil_density_unit: LiquidDensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
-    sep_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
-    sep_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    sep_temperature_unit: TemperatureUnit | None = None
     temperature_at_lab: float | None = None
-    temperature_at_lab_unit: Literal["C", "K", "F", "R"] | None = None
+    temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
-    temperature_when_sampled_unit: Literal["C", "K", "F", "R"] | None = None
+    temperature_when_sampled_unit: TemperatureUnit | None = None
     top_perforation_depth: float | None = None
-    top_perforation_depth_unit: Literal["m", "ft"] | None = None
+    top_perforation_depth_unit: HeightUnit | None = None
     total_dissolved_solids: float | None = None
     transfer_pressure: float | None = None
-    transfer_pressure_unit: (
-        Literal["bara", "barg", "psia", "psig", "kPaa", "kPag", "atm", "atmg"] | None
-    ) = None
+    transfer_pressure_unit: PressureUnit | None = None
     transfer_temperature: float | None = None
-    transfer_temperature_unit: Literal["C", "K", "F", "R"] | None = None
+    transfer_temperature_unit: TemperatureUnit | None = None
     true_vertical_depth: float | None = None
-    true_vertical_depth_unit: Literal["m", "ft"] | None = None
-    type: Literal["REC", "SEP", "BHS", "OFT", "SEPO", "SEPG", "OBM", "GAS", "FLO", "WATER"]
+    true_vertical_depth_unit: HeightUnit | None = None
+    type: SampleType | None = None
     water_conductivity: float | None = None
-    water_conductivity_unit: Literal["micro-S/cm"] | None = None
+    water_conductivity_unit: ConductivityUnit | None = None
     water_ph: float | None = None
     water_resistivity: float | None = None
-    water_resistivity_unit: Literal["ohm-m"] | None = None
+    water_resistivity_unit: ResistivityUnit | None = None
     water_salinity: float | None = None
     water_temperature: float | None = None
-    water_temperature_unit: Literal["C", "K", "F", "R"] | None = None
-    well_id: int
+    water_temperature_unit: TemperatureUnit | None = None
+    well_id: int | None = None
 
 
-class CreateWellModel(BaseModel):
+class UpdateWellItemModel(BaseModel):
+    basin_id: float | None = None
+    field_id: float | None = None
+    field_segment_id: float | None = None
+    formation_id: float | None = None
+    formation_zone_id: float | None = None
+    id: int
+    location: Any = None
+    name: str | None = None
+    region_id: int | None = None
+    sub_basin_id: float | None = None
+    uwi: str | None = None
+
+
+class UpdateWellModel(BaseModel):
     basin_id: float | None = None
     field_id: float | None = None
     field_segment_id: float | None = None
@@ -2545,20 +1292,361 @@ class CreateWellModel(BaseModel):
     formation_zone_id: float | None = None
     id: int | None = None
     location: Any = None
-    name: str
-    region_id: int
-    samples: list[CreateWellSampleModel] | None = None
+    name: str | None = None
+    region_id: int | None = None
     sub_basin_id: float | None = None
     uwi: str | None = None
 
 
-class GetSampleListModel(BaseModel):
-    samples: list[GetSampleModel]
+class UpdateWellsListModel(RootModel[list[UpdateWellItemModel]]):
+    root: list[UpdateWellItemModel]
 
 
-class UpdateSampleListModel(RootModel[list[UpdateSampleItemModel]]):
-    root: list[UpdateSampleItemModel]
+class VISCOExperimentModel(BaseModel):
+    gas_viscosity_unit: ViscosityUnit | None = "cP"
+    name: str
+    oil_viscosity_unit: ViscosityUnit | None = "cP"
+    pressure_unit: PressureUnit | None = "bara"
+    stages: list[VISCOStageModel]
+    temperature: float
+    temperature_unit: TemperatureUnit
+    type: Literal["VISCO"]
 
 
-class CreateSampleListModel(RootModel[list[CreateSampleModel]]):
-    root: list[CreateSampleModel]
+Experiments = TypeAliasType(
+    "Experiments",
+    Annotated[
+        CCEExperimentModel
+        | CVDExperimentModel
+        | DLEExperimentModel
+        | MSSExperimentModel
+        | TBPExperimentModel
+        | VISCOExperimentModel
+        | SlimtubeExperimentModel
+        | SwellTestExperimentModel,
+        Field(discriminator="type"),
+    ],
+)
+
+
+class VISCOStageModel(BaseModel):
+    gas_viscosity: float | None = None
+    oil_viscosity: float | None = None
+    pressure: float
+
+
+ValidComponentName = TypeAliasType(
+    "ValidComponentName",
+    Literal[
+        "Neon",
+        "Argon",
+        "Krypton",
+        "Xeon",
+        "Radon",
+        "He",
+        "H2",
+        "N2",
+        "O2",
+        "CO",
+        "NO",
+        "N2O",
+        "CO2",
+        "H2S",
+        "NH3",
+        "SO2",
+        "NO2",
+        "N2O4",
+        "H2O",
+        "C1",
+        "C2",
+        "C3",
+        "C-C3",
+        "i-C4",
+        "n-C4",
+        "C4",
+        "Neo-C5",
+        "C-C4",
+        "i-C5",
+        "n-C5",
+        "C5",
+        "C-C5",
+        "22DM-C4",
+        "23DM-C4",
+        "2M-C5",
+        "3M-C5",
+        "n-C6",
+        "C6",
+        "MC-C5",
+        "22DM-C5",
+        "Benzene",
+        "24DM-C5",
+        "C-C6",
+        "223TM-C4",
+        "33DM-C5",
+        "23DM-C5",
+        "2M-C6",
+        "3M-C6",
+        "3E-C5",
+        "n-C7",
+        "C7",
+        "MC-C6",
+        "EC-C5",
+        "Toluene",
+        "C-C7",
+        "n-C8",
+        "C8",
+        "E-Benzene",
+        "P-Xylene",
+        "M-Xylene",
+        "O-Xylene",
+        "n-C9",
+        "C9",
+        "C-C8",
+        "Cumene",
+        "P-Benzene",
+        "1E4M-Benzene",
+        "135TM-Benzene",
+        "124TM-Benzene",
+        "n-C10",
+        "C10",
+        "123TM-Benzene",
+        "n-C11",
+        "C11",
+        "n-C12",
+        "C12",
+        "Napthalen",
+        "n-C13",
+        "C13",
+        "2M-Napthalene",
+        "1M-Napthalene",
+        "n-C14",
+        "C14",
+        "DPh-C1",
+        "n-C15",
+        "C15",
+        "n-C16",
+        "C16",
+        "n-C17",
+        "C17",
+        "n-C18",
+        "C18",
+        "n-C19",
+        "C19",
+        "12DPh-Benzene",
+        "Phenanthrene",
+        "Anthracene",
+        "n-C20",
+        "C20",
+        "n-C21",
+        "C21",
+        "13DPh-Benzene",
+        "n-C22",
+        "C22",
+        "14DPh-Benzene",
+        "n-C23",
+        "C23",
+        "n-C24",
+        "C24",
+        "n-C25",
+        "C25",
+        "n-C26",
+        "C26",
+        "n-C27",
+        "C27",
+        "n-C28",
+        "C28",
+        "n-C29",
+        "C29",
+        "n-C30",
+        "C30",
+        "n-C31",
+        "C31",
+        "n-C32",
+        "C32",
+        "n-C33",
+        "C33",
+        "n-C34",
+        "C34",
+        "n-C35",
+        "C35",
+        "n-C36",
+        "C36",
+        "C37",
+        "C38",
+        "C39",
+        "C40",
+        "C41",
+        "C42",
+        "C43",
+        "C44",
+        "C45",
+        "C46",
+        "C47",
+        "C48",
+        "C49",
+        "C50",
+        "C51",
+        "C52",
+        "C53",
+        "C54",
+        "C55",
+        "C56",
+        "C57",
+        "C58",
+        "C59",
+        "C60",
+        "C61",
+        "C62",
+        "C63",
+        "C64",
+        "C65",
+        "C66",
+        "C67",
+        "C68",
+        "C69",
+        "C70",
+        "C71",
+        "C72",
+        "C73",
+        "C74",
+        "C75",
+        "C76",
+        "C77",
+        "C78",
+        "C79",
+        "C80",
+        "C7M",
+        "C8M",
+        "C9M",
+        "C10M",
+        "C11M",
+        "C12M",
+        "C13M",
+        "C14M",
+        "C15M",
+        "C16M",
+        "C17M",
+        "C18M",
+        "C19M",
+        "C20M",
+        "C21M",
+        "C22M",
+        "C23M",
+        "C24M",
+        "C25M",
+        "C26M",
+        "C27M",
+        "C28M",
+        "C29M",
+        "C30M",
+        "C31M",
+        "C32M",
+        "C33M",
+        "C34M",
+        "C35M",
+        "C36M",
+        "C7+",
+        "C8+",
+        "C9+",
+        "C10+",
+        "C11+",
+        "C12+",
+        "C13+",
+        "C14+",
+        "C15+",
+        "C16+",
+        "C17+",
+        "C18+",
+        "C19+",
+        "C20+",
+        "C21+",
+        "C22+",
+        "C23+",
+        "C24+",
+        "C25+",
+        "C26+",
+        "C27+",
+        "C28+",
+        "C29+",
+        "C30+",
+        "C31+",
+        "C32+",
+        "C33+",
+        "C34+",
+        "C35+",
+        "C36+",
+        "C37+",
+        "C38+",
+        "C39+",
+        "C40+",
+        "C41+",
+        "C42+",
+        "C43+",
+        "C44+",
+        "C45+",
+        "C46+",
+        "C47+",
+        "C48+",
+        "C49+",
+        "C50+",
+        "C51+",
+        "C52+",
+        "C53+",
+        "C54+",
+        "C55+",
+        "C56+",
+        "C57+",
+        "C58+",
+        "C59+",
+        "C60+",
+        "C61+",
+        "C62+",
+        "C63+",
+        "C64+",
+        "C65+",
+        "C66+",
+        "C67+",
+        "C68+",
+        "C69+",
+        "C70+",
+        "C71+",
+        "C72+",
+        "C73+",
+        "C74+",
+        "C75+",
+        "C76+",
+        "C77+",
+        "C78+",
+        "C79+",
+        "C80+",
+    ],
+)
+
+
+class ValidationErrorDetailModel(BaseModel):
+    field: str
+    message: str
+
+
+class ValidationErrorResponseModel(BaseModel):
+    errors: list[ValidationErrorDetailModel]
+
+
+class ViscosityModelModel(BaseModel):
+    f0: float
+    id: int
+    p0: float
+    p1: float
+    p2: float
+    p3: float
+    p4: float
+
+
+ViscosityUnit = TypeAliasType("ViscosityUnit", Literal["cP", "micro-cP"])
+
+
+class WellsListModel(BaseModel):
+    wells: list[GetWellSimpleModel]
+
+
+ZipArchiveResponse = TypeAliasType("ZipArchiveResponse", bytes)
