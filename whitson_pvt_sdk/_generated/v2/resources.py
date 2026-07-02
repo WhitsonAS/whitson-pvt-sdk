@@ -58,6 +58,8 @@ ListType = list
 
 
 class Regions:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
@@ -94,6 +96,8 @@ class Regions:
 
 
 class Wells:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
@@ -142,6 +146,8 @@ class Wells:
 
 
 class Samples:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
@@ -173,6 +179,8 @@ class Samples:
 
 
 class Projects:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
@@ -205,6 +213,8 @@ class Projects:
 
 
 class FluidModels:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
@@ -237,6 +247,8 @@ class FluidModels:
 
 
 class BlackOilTables:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
@@ -269,6 +281,8 @@ class BlackOilTables:
 
 
 class Reports:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
@@ -305,6 +319,8 @@ class Reports:
 
 
 class Calculations:
+    _transport: HTTPTransport
+
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 

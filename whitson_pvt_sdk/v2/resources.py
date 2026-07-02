@@ -1,5 +1,3 @@
-from typing import Any
-
 from whitson_pvt_sdk._generated.v2 import resources as generated_resources
 from whitson_pvt_sdk.shared.models import CompositionSource
 from whitson_pvt_sdk.v2._helpers import calculations as calculation_helpers
@@ -8,6 +6,8 @@ from whitson_pvt_sdk.v2.models import (
     GetSampleListModel,
     GorRecombinationCalculationInputModel,
     GorRecombinationCalculationRequestModel,
+    GorUnit,
+    RecombinationType,
     SampleToEosSlateConversionCalculationRequestModel,
     SurfaceProcessModel,
 )
@@ -68,8 +68,8 @@ class Calculations(generated_resources.Calculations):
         self,
         fluid_model_id: int,
         gor_values: dict[int, float],
-        gor_unit: Any,
-        recombination_type: Any,
+        gor_unit: GorUnit,
+        recombination_type: RecombinationType,
         surface_process: SurfaceProcessModel,
         *,
         remove_mud_components: bool = False,
@@ -113,8 +113,8 @@ class Calculations(generated_resources.Calculations):
         fluid_model_id: int,
         sample_id: int,
         recombination_gor: float,
-        gor_unit: Any,
-        recombination_type: Any,
+        gor_unit: GorUnit,
+        recombination_type: RecombinationType,
         surface_process: SurfaceProcessModel,
         *,
         remove_mud_components: bool = False,
