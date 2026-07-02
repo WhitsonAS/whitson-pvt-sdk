@@ -29,7 +29,16 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "W"]
+select = ["E", "F", "I", "TID251", "UP", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"whitson_pvt_sdk/_generated/*/models.py" = ["E501"]
+"whitson_pvt_sdk/v1/models/__init__.py" = ["TID251"]
+"whitson_pvt_sdk/v2/models/__init__.py" = ["TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"whitson_pvt_sdk._generated.v1.models".msg = "Import models from whitson_pvt_sdk.v1.models instead."
+"whitson_pvt_sdk._generated.v2.models".msg = "Import models from whitson_pvt_sdk.v2.models instead."
 
 [tool.ruff.lint.isort]
 known-first-party = ["whitson_pvt_sdk"]
