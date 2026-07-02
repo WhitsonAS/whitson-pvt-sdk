@@ -1,6 +1,6 @@
 [project]
 name = "whitson-pvt-sdk"
-version = "1.2.0"
+version = "1.2.1"
 description = "whitson PVT SDK — HTTP client for the whitson PVT external API"
 readme = "README.md"
 license = "Apache-2.0"
