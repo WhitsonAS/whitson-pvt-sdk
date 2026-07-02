@@ -228,6 +228,7 @@ def render_resource_class(resource: str, endpoints: list[Endpoint]) -> str:
     class_name = RESOURCE_CLASS_NAMES.get(resource, to_pascal(resource))
     lines = [
         f"class {class_name}:\n",
+        "    _transport: HTTPTransport\n\n",
         "    def __init__(self, transport: HTTPTransport) -> None:\n",
         "        self._transport = transport\n\n",
     ]

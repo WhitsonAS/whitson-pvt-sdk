@@ -1,7 +1,12 @@
 import json
+import sys
+from importlib.util import module_from_spec, spec_from_file_location
+from types import ModuleType
+from uuid import uuid4
 
 import pytest
-from sdk_generator.generate import detect_collisions
+from pydantic import ValidationError
+from sdk_generator.generate import detect_collisions, generate_model_file
 from sdk_generator.models import (
     Endpoint,
     EndpointParam,
@@ -26,6 +31,48 @@ from sdk_generator.render import (
     render_module,
     render_resources,
 )
+
+
+def generate_models_source(tmp_path, schemas):
+    target = tmp_path / "models.py"
+    generate_model_file(
+        "v1",
+        {
+            "openapi": "3.1.0",
+            "info": {"title": "test", "version": "1"},
+            "paths": {},
+            "components": {"schemas": schemas},
+        },
+        target,
+        reuse_model=False,
+        collapse_reuse_models=False,
+    )
+    return target.read_text()
+
+
+def import_generated_models(tmp_path, schemas) -> ModuleType:
+    target = tmp_path / "models.py"
+    generate_model_file(
+        "v1",
+        {
+            "openapi": "3.1.0",
+            "info": {"title": "test", "version": "1"},
+            "paths": {},
+            "components": {"schemas": schemas},
+        },
+        target,
+        reuse_model=False,
+        collapse_reuse_models=False,
+    )
+    module_name = f"generated_models_{uuid4().hex}"
+    spec = spec_from_file_location(module_name, target)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 # ── naming ──
 
@@ -257,6 +304,79 @@ def test_parse_endpoints_uses_normalized_schema_titles():
 
     assert endpoints[0].request_model == "FlashCalculationInputModel"
     assert endpoints[0].response_model == "FlashCalculationResponseModel"
+
+
+# ── model generation ──
+
+
+def test_generate_model_file_emits_type_alias_for_named_enum(tmp_path):
+    source = generate_models_source(
+        tmp_path,
+        {
+            "GorUnit": {"type": "string", "enum": ["Sm3/Sm3", "Sm3/m3"], "title": "GorUnit"},
+            "SampleModel": {
+                "type": "object",
+                "properties": {
+                    "initial_gor_unit": {"$ref": "#/components/schemas/GorUnit"},
+                    "separator_gor_unit": {"$ref": "#/components/schemas/GorUnit"},
+                },
+            },
+        },
+    )
+
+    assert 'GorUnit = TypeAliasType("GorUnit", Literal["Sm3/Sm3", "Sm3/m3"])' in source
+    assert "initial_gor_unit: GorUnit | None = None" in source
+    assert "separator_gor_unit: GorUnit | None = None" in source
+
+
+def test_generated_constrained_scalar_alias_validates_model_fields(tmp_path):
+    schemas = {
+        "MassAmount": {"type": "number", "minimum": 0.0, "title": "MassAmount"},
+        "CompositionModel": {
+            "type": "object",
+            "properties": {"mass_amount": {"$ref": "#/components/schemas/MassAmount"}},
+        },
+    }
+    source = generate_models_source(
+        tmp_path,
+        schemas,
+    )
+
+    assert 'MassAmount = TypeAliasType("MassAmount", Annotated[float, Field(ge=0.0)])' in source
+    assert "mass_amount: MassAmount | None = None" in source
+    module = import_generated_models(
+        tmp_path,
+        schemas,
+    )
+
+    assert module.CompositionModel(mass_amount=1.0).mass_amount == 1.0
+    with pytest.raises(ValidationError):
+        module.CompositionModel(mass_amount=-1.0)
+
+
+def test_generated_array_root_model_accepts_root_and_exposes_root(tmp_path):
+    schemas = {
+        "CreateSampleModel": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {"name": {"type": "string"}},
+        },
+        "CreateSampleListModel": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/CreateSampleModel"},
+            "title": "CreateSampleListModel",
+        },
+    }
+    source = generate_models_source(tmp_path, schemas)
+
+    assert "class CreateSampleListModel(RootModel[list[CreateSampleModel]]):" in source
+    assert 'CreateSampleListModel = TypeAliasType("CreateSampleListModel"' not in source
+    module = import_generated_models(tmp_path, schemas)
+
+    sample = module.CreateSampleModel(name="S1")
+    data = module.CreateSampleListModel(root=[sample])
+    assert data.root == [sample]
+    assert data.model_dump() == [{"name": "S1"}]
 
 
 # ── resource inference ──
@@ -667,6 +787,7 @@ def test_render_resources_output():
     )
     rendered = render_resources("v1", {"regions": [ep]})
     assert "class Regions:" in rendered
+    assert "    _transport: HTTPTransport" in rendered
     assert "def list(self" in rendered
 
 

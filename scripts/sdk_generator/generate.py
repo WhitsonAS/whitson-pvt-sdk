@@ -1,6 +1,7 @@
 import argparse
 import difflib
 import json
+import re
 import sys
 import tempfile
 from collections import defaultdict
@@ -16,6 +17,11 @@ from sdk_generator.config import GENERATED_DIR, SUPPORTED_VERSIONS
 from sdk_generator.models import Endpoint
 from sdk_generator.openapi import load_openapi, parse_endpoints
 from sdk_generator.render import format_python, render_resources
+
+LIST_TYPE_ALIAS_RE = re.compile(
+    r'^([A-Za-z_]\w*) = TypeAliasType\("([A-Za-z_]\w*)", (list\[.+\])\)$',
+    re.MULTILINE,
+)
 
 
 def main() -> None:
@@ -106,7 +112,9 @@ def generate_model_file(
         output_model_type=DataModelType.PydanticV2BaseModel,
         target_python_version=PythonVersion.PY_310,
         base_class="pydantic.BaseModel",
-        collapse_root_models=True,
+        keep_model_order=True,
+        collapse_root_models=False,
+        use_type_alias=True,
         reuse_model=reuse_model,
         collapse_reuse_models=collapse_reuse_models,
         snake_case_field=True,
@@ -121,16 +129,77 @@ def generate_model_file(
         formatters=[Formatter.RUFF_CHECK, Formatter.RUFF_FORMAT],
         disable_timestamp=True,
     )
+    array_root_model_names = find_array_root_model_names(spec)
     generate(json.dumps(strip_schema_titles(spec)), config=config)
+    restore_list_root_models(target, array_root_model_names)
+
+
+def find_array_root_model_names(spec: dict[str, Any]) -> set[str]:
+    schemas = spec.get("components", {}).get("schemas", {})
+    if not isinstance(schemas, dict):
+        return set()
+    return {
+        name
+        for name, schema in schemas.items()
+        if isinstance(name, str) and isinstance(schema, dict) and schema.get("type") == "array"
+    }
+
+
+def restore_list_root_models(target: Path, model_names: set[str]) -> None:
+    if not model_names:
+        return
+    content = target.read_text()
+    restored = False
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal restored
+        replacement = replace_list_type_alias(match, model_names)
+        if replacement != match.group(0):
+            restored = True
+        return replacement
+
+    content = LIST_TYPE_ALIAS_RE.sub(replace, content)
+    if not restored:
+        return
+    target.write_text(ensure_pydantic_import(content, "RootModel"))
+
+
+def replace_list_type_alias(match: re.Match[str], model_names: set[str]) -> str:
+    name = match.group(1)
+    alias_name = match.group(2)
+    list_type = match.group(3)
+    if name != alias_name or name not in model_names:
+        return match.group(0)
+    return f"class {name}(RootModel[{list_type}]):\n    root: {list_type}"
+
+
+def ensure_pydantic_import(content: str, import_name: str) -> str:
+    lines = content.splitlines()
+    for index, line in enumerate(lines):
+        prefix = "from pydantic import "
+        if not line.startswith(prefix):
+            continue
+        imports = [name.strip() for name in line.removeprefix(prefix).split(",")]
+        if import_name not in imports:
+            imports.append(import_name)
+            lines[index] = f"{prefix}{', '.join(sorted(imports))}"
+        return "\n".join(lines) + "\n"
+
+    insert_at = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("from typing_extensions import ")
+        ),
+        len(lines),
+    )
+    lines.insert(insert_at, f"from pydantic import {import_name}")
+    return "\n".join(lines) + "\n"
 
 
 def strip_schema_titles(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
-            key: strip_schema_titles(child)
-            for key, child in value.items()
-            if key != "title"
-        }
+        return {key: strip_schema_titles(child) for key, child in value.items() if key != "title"}
     if isinstance(value, list):
         return [strip_schema_titles(child) for child in value]
     return value
@@ -175,9 +244,7 @@ def detect_collisions(endpoints: list[Endpoint]) -> None:
     _raise_collisions(by_public, "public method")
 
 
-def _raise_collisions(
-    grouped: dict[tuple[str, str], list[Endpoint]], field_name: str
-) -> None:
+def _raise_collisions(grouped: dict[tuple[str, str], list[Endpoint]], field_name: str) -> None:
     for (resource, name), endpoints in grouped.items():
         if len(endpoints) <= 1:
             continue

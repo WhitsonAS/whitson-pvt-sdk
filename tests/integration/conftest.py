@@ -16,7 +16,6 @@ from whitson_pvt_sdk.v2.models import (
     CreateSampleModel,
     CreateWellModel,
     GetWellModel,
-    MolarAmount,
 )
 
 
@@ -42,12 +41,8 @@ def _sample_model(name: str, well_id: int) -> CreateSampleModel:
         well_id=well_id,
         recombined_fluid_composition=CompositionModel(
             components=[
-                CompositionComponentModel(
-                    name="C1", input_name="C1", molar_amount=MolarAmount(root=0.8)
-                ),
-                CompositionComponentModel(
-                    name="C2", input_name="C2", molar_amount=MolarAmount(root=0.2)
-                ),
+                CompositionComponentModel(name="C1", input_name="C1", molar_amount=0.8),
+                CompositionComponentModel(name="C2", input_name="C2", molar_amount=0.2),
             ]
         ),
         experiments=[
@@ -147,9 +142,7 @@ def created_region(client_v2: WhitsonPVTClientV2, run_name: str):
 
 
 @pytest.fixture(scope="session")
-def created_well_result(
-    client_v2: WhitsonPVTClientV2, created_region, run_name: str
-):
+def created_well_result(client_v2: WhitsonPVTClientV2, created_region, run_name: str):
     try:
         return client_v2.wells.create(
             CreateWellModel(
@@ -163,9 +156,7 @@ def created_well_result(
 
 
 @pytest.fixture(scope="session")
-def created_well(
-    client_v2: WhitsonPVTClientV2, created_well_result, created_region, run_name: str
-):
+def created_well(client_v2: WhitsonPVTClientV2, created_well_result, created_region, run_name: str):
     if isinstance(created_well_result, Exception):
         body = {
             "name": f"{run_name}-well-setup",
