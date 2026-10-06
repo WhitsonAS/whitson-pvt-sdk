@@ -46,7 +46,7 @@ def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str
     )
     lines = ["from ...http import HTTPTransport\n"]
     if has_multipart:
-        lines.insert(0, "from io import BytesIO\n\n")
+        lines.insert(0, "from io import BytesIO\n\nfrom pydantic import BaseModel\n\n")
         lines.append("from ...shared.models import ImportArchiveOptions\n")
     elif needs_pagination(endpoints):
         lines.append("from ...shared.models import PaginationParams\n")
@@ -76,8 +76,11 @@ def render_endpoint(endpoint: Endpoint) -> str:
     if endpoint.body_kind in {"model", "root_list"}:
         call += f", body={render_body_expr(endpoint)}"
     call += ")"
-    lines.append(f"    body = {call}\n")
-    lines.append(f"    return {endpoint.response_model}.model_validate(body)\n")
+    if endpoint.return_kind == "none":
+        lines.append(f"    {call}\n")
+    else:
+        lines.append(f"    body = {call}\n")
+        lines.append(f"    return {endpoint.response_model}.model_validate(body)\n")
     return "".join(lines)
 
 
@@ -85,9 +88,10 @@ def render_bytes_endpoint(endpoint: Endpoint) -> str:
     signature = render_function_signature(endpoint)
     path = render_path(endpoint.path)
     filename = endpoint.filename_expr or '"download.bin"'
+    params = f", params={render_params_expr(endpoint)}" if endpoint.query_params else ""
     return (
         f"def {endpoint.function_name}({signature}) -> tuple[bytes, str]:\n"
-        f"    data = transport.get_bytes({path})\n"
+        f"    data = transport.get_bytes({path}{params})\n"
         f"    filename = {filename}\n"
         "    return data, filename\n"
     )
@@ -95,14 +99,15 @@ def render_bytes_endpoint(endpoint: Endpoint) -> str:
 
 def render_multipart_endpoint(endpoint: Endpoint) -> str:
     return_model = endpoint.response_model or "dict"
+    options_model = endpoint.request_model or "ImportArchiveOptions"
     return (
         f"def {endpoint.function_name}(\n"
         "    transport: HTTPTransport,\n"
         "    archive_data: bytes,\n"
-        "    options: ImportArchiveOptions | None = None,\n"
+        f"    options: {options_model} | None = None,\n"
         f") -> {return_model}:\n"
         "    if options is None:\n"
-        "        options = ImportArchiveOptions()\n\n"
+        f"        options = {options_model}()\n\n"
         "    body = transport.post_multipart(\n"
         f"        {render_path(endpoint.path)},\n"
         '        files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},\n'
@@ -135,10 +140,16 @@ def render_path(path: str) -> str:
 
 def render_params_expr(endpoint: Endpoint) -> str:
     names = {param.python_name for param in endpoint.query_params}
+    params = endpoint.query_params
+    pagination = None
     if endpoint.version == "v2" and {"cursor", "limit"}.issubset(names):
-        return "PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True)"
-    pairs = ", ".join(f'"{param.name}": {param.python_name}' for param in endpoint.query_params)
-    return f"{{{pairs}}}"
+        pagination = "PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True)"
+        params = [param for param in params if param.python_name not in {"cursor", "limit"}]
+        if not params:
+            return pagination
+    pairs = ", ".join(f'"{param.name}": {param.python_name}' for param in params)
+    filtered = f"{{key: value for key, value in {{{pairs}}}.items() if value is not None}}"
+    return f"{{**{pagination}, **{filtered}}}" if pagination else filtered
 
 
 def render_body_expr(endpoint: Endpoint) -> str:
@@ -151,7 +162,7 @@ def render_body_expr(endpoint: Endpoint) -> str:
 
 def render_meta_data_helper() -> str:
     return (
-        "def _meta_data(options: ImportArchiveOptions) -> dict | None:\n"
+        "def _meta_data(options: BaseModel) -> dict | None:\n"
         "    dumped = options.model_dump(exclude_unset=True, exclude_defaults=True)\n"
         "    if not dumped:\n"
         "        return None\n"
@@ -206,7 +217,9 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
     lines.append("\n")
 
     if has_multipart:
-        lines.append("from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n\n")
+        lines.append("from pydantic import BaseModel\n\n")
+        if "ImportArchiveOptions" in model_imports:
+            lines.append("from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n\n")
 
     # Runtime model imports -- needed by inline model_validate() calls
     generated_models = [model for model in model_imports if model != "ImportArchiveOptions"]
@@ -245,9 +258,7 @@ def render_resource_pagination_methods(endpoint: Endpoint) -> str:
     signature_args = f", {', '.join(args)}" if args else ""
 
     call_parts = [f"{param.python_name}={param.python_name}" for param in endpoint.path_params]
-    call_parts.extend(
-        f"{param.python_name}={param.python_name}" for param in endpoint.query_params
-    )
+    call_parts.extend(f"{param.python_name}={param.python_name}" for param in endpoint.query_params)
     paginator_call = ", ".join(call_parts)
     if paginator_call:
         paginator_call = f", {paginator_call}"
@@ -274,12 +285,14 @@ def render_resource_method(resource: str, endpoint: Endpoint) -> str:
 
 def _render_bytes_resource_method(endpoint: Endpoint) -> str:
     args = [f"{param.python_name}: {param.python_type}" for param in endpoint.path_params]
+    args.extend(render_query_param(param) for param in endpoint.query_params)
     path_expr = render_path(endpoint.path)
+    params = f", params={render_params_expr(endpoint)}" if endpoint.query_params else ""
     filename = endpoint.filename_expr or '"download.bin"'
     return (
         f"    def {endpoint.public_method_name}(self"
         f"{', ' if args else ''}{', '.join(args)}) -> tuple[bytes, str]:\n"
-        f"        data = self._transport.get_bytes({path_expr})\n"
+        f"        data = self._transport.get_bytes({path_expr}{params})\n"
         f"        filename = {filename}\n"
         "        return data, filename\n\n"
     )
@@ -287,12 +300,13 @@ def _render_bytes_resource_method(endpoint: Endpoint) -> str:
 
 def _render_multipart_resource_method(endpoint: Endpoint) -> str:
     return_model = endpoint.response_model or "dict"
+    options_model = endpoint.request_model or "ImportArchiveOptions"
     return (
         f"    def {endpoint.public_method_name}(\n"
-        "        self, archive_data: bytes, options: ImportArchiveOptions | None = None\n"
+        f"        self, archive_data: bytes, options: {options_model} | None = None\n"
         f"    ) -> {return_model}:\n"
         "        if options is None:\n"
-        "            options = ImportArchiveOptions()\n\n"
+        f"            options = {options_model}()\n\n"
         "        body = self._transport.post_multipart(\n"
         f"            {render_path(endpoint.path)},\n"
         '            files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},\n'
@@ -323,11 +337,18 @@ def _render_inline_resource_method(endpoint: Endpoint) -> str:
 
     transport_call = f"self._transport.{endpoint.http_method}({', '.join(call_parts)})"
 
+    body = (
+        f"        {transport_call}\n\n"
+        if endpoint.return_kind == "none"
+        else (
+            f"        body = {transport_call}\n"
+            f"        return {endpoint.response_model}.model_validate(body)\n\n"
+        )
+    )
     return (
         f"    def {endpoint.public_method_name}(self"
         f"{', ' if args else ''}{', '.join(args)}) -> {return_type}:\n"
-        f"        body = {transport_call}\n"
-        f"        return {endpoint.response_model}.model_validate(body)\n\n"
+        f"{body}"
     )
 
 

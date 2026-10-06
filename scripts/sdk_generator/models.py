@@ -3,10 +3,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Version = Literal["v1", "v2"]
-HTTPMethod = Literal["get", "post", "put"]
+HTTPMethod = Literal["get", "post", "put", "patch", "delete"]
 ParamLocation = Literal["path", "query"]
 BodyKind = Literal["none", "model", "root_list", "multipart"]
-ReturnKind = Literal["model", "tuple_bytes_filename"]
+ReturnKind = Literal["model", "tuple_bytes_filename", "none"]
 
 
 class EndpointParam(BaseModel):

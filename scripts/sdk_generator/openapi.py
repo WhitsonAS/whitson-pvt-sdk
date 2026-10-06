@@ -7,7 +7,7 @@ from urllib.request import urlopen
 from datamodel_code_generator.parser.base import title_to_class_name
 
 from sdk_generator.config import EXCLUDED_RESOURCES, HTTP_METHODS, OVERRIDES
-from sdk_generator.models import BodyKind, Endpoint, EndpointParam, Version
+from sdk_generator.models import BodyKind, Endpoint, EndpointParam, HTTPMethod, Version
 from sdk_generator.naming import singular, to_snake
 
 JsonObject = dict[str, Any]
@@ -113,7 +113,7 @@ def _validate_operation(method: str, path: str, operation: dict[str, Any]) -> No
     if "$ref" in operation:
         raise SystemExit(f"Unsupported $ref operation at {method.upper()} {path}")
     responses = operation.get("responses") or {}
-    for status in ("200", "201", "202", "default"):
+    for status in ("200", "201", "202", "204", "default"):
         if status in responses:
             break
     else:
@@ -147,13 +147,19 @@ def infer_endpoint(
         public_method_name=infer_public_method_name(
             function_name, resource, method, path, body_kind
         ),
-        http_method=cast(Literal["get", "post", "put"], method),
+        http_method=cast(HTTPMethod, method),
         path=path,
         path_params=[p for p in params if p.location == "path"],
         query_params=[p for p in params if p.location == "query"],
         request_model=request_model,
         response_model=response_model,
         body_kind=body_kind,
+        return_kind=(
+            "none"
+            if "204" in operation.get("responses", {})
+            and not any(status in operation["responses"] for status in ("200", "201", "202"))
+            else "model"
+        ),
         pagination_items_field=pagination[0] if pagination else None,
         pagination_item_model=pagination[1] if pagination else None,
     )
@@ -224,7 +230,7 @@ def apply_override(endpoint: Endpoint) -> Endpoint:
 
 
 def _validate_endpoint(endpoint: Endpoint) -> None:
-    if endpoint.return_kind == "tuple_bytes_filename":
+    if endpoint.return_kind in {"tuple_bytes_filename", "none"}:
         return
     if endpoint.response_model is None:
         raise SystemExit(
@@ -241,7 +247,9 @@ def request_schema(operation: dict[str, Any]) -> dict[str, Any] | None:
 
 def response_schema(operation: dict[str, Any]) -> dict[str, Any] | None:
     responses = operation.get("responses") or {}
-    for status in ("200", "201", "202", "default"):
+    for status in ("200", "201", "202", "204", "default"):
+        if status == "204" and status in responses:
+            return None
         response = responses.get(status)
         if not response:
             continue
@@ -304,7 +312,7 @@ def infer_function_name(method: str, path: str, resource: str, operation: dict[s
         return f"get_{singular(resource)}"
     if method == "post":
         return f"create_{singular(resource)}"
-    if method == "put":
+    if method in {"put", "patch"}:
         return f"update_{singular(resource)}"
     return f"{method}_{resource}"
 
