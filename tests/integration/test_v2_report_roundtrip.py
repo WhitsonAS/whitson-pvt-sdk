@@ -8,7 +8,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal
 from zipfile import ZipFile
 
 import pytest
@@ -56,10 +56,12 @@ def _native_archive_content(data: bytes) -> dict[str, Any]:
         return content
 
 
-def test_native_report_roundtrip(
+@pytest.mark.parametrize("archive_format", ["whitson_pvt", "osdu"])
+def test_report_roundtrip(
     client_v2: WhitsonPVTClientV2,
     require_id: Callable[[str], int],
     run_name: str,
+    archive_format: Literal["whitson_pvt", "osdu"],
 ):
     source_report_id = require_id("REPORT_ID")
     archive, filename = client_v2.reports.export(source_report_id, format="whitson_pvt")
@@ -69,10 +71,18 @@ def test_native_report_roundtrip(
     for section in ("wells", "samples", "experiments"):
         assert expected[section], f"Choose a source report with {section}"
 
+    if archive_format == "osdu":
+        archive, _ = client_v2.reports.export(
+            source_report_id,
+            format="osdu",
+            include_whitson_native_payload=True,
+            include_structured_experiments=True,
+        )
+
     # Export/validate first: a bad source must not create an unused test region.
     region = client_v2.regions.create(
         CreateRegionModel(
-            name=f"{run_name}-native-roundtrip",
+            name=f"{run_name}-{archive_format}-roundtrip",
             region_type="single_field",
             reservoir_type="Conventional",
             note=f"SDK round-trip copy of report {source_report_id}; retained for inspection.",
@@ -84,14 +94,18 @@ def test_native_report_roundtrip(
     assert client_v2.wells.list_all(region.id) == []
     session = client_v2.import_sessions.create(
         archive,
-        ImportSessionCreateOptionsModel(region_id=region.id, requested_source_format="whitson_pvt"),
+        ImportSessionCreateOptionsModel(
+            region_id=region.id,
+            requested_source_format=archive_format,
+            import_mode="whitson_high_fidelity" if archive_format == "osdu" else "auto",
+        ),
     )
     print(f"Round-trip import session: id={session.id}", flush=True)
     try:
         fetched = client_v2.import_sessions.get(session.id)
         assert fetched.origin == "external"
         assert fetched.region_id == region.id
-        assert fetched.source_format == "whitson_pvt"
+        assert fetched.source_format == archive_format
         assert fetched.status == "ready_for_review", fetched.model_dump()
         records = client_v2.import_sessions.list_records(session.id).records
         assert records
