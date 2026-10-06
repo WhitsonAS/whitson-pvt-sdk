@@ -42,7 +42,7 @@ token = client.get_access_token()
 
 The SDK retries transient read failures by default. `GET` requests are attempted up
 to 3 times for network timeouts/transport errors and HTTP `408`, `429`, `500`,
-`502`, `503`, and `504` responses. Mutating requests (`POST`, `PUT`, and
+`502`, `503`, and `504` responses. Mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`, and
 multipart uploads) are not retried by default, except on HTTP `429` (rate
 limiting). Token exchange follows the same retry timing and attempt policy.
 
@@ -112,6 +112,33 @@ page = client.regions.list(cursor=page.pagination.next_cursor)
 Limit defaults to the API default (usually 20) when omitted. `iterate()` and
 `list_all()` are available on all cursor-paginated v2 resources: `regions`,
 `wells`, `projects`, `fluid_models`, and `black_oil_tables`.
+
+All five resources also accept `name=` on `list()`, `iterate()`, and `list_all()`.
+This is a case-insensitive exact match; the API trims surrounding whitespace.
+
+### Staged imports and OSDU export (v2)
+
+`client.import_sessions` exposes archive upload, inspection, per-record resolution,
+selected-record commit, and deletion. `client.import_records` exposes the four
+single-record OSDU import endpoints.
+
+```python
+from pathlib import Path
+from whitson_pvt_sdk.v2.models import ImportSessionCreateOptionsModel
+
+session = client.import_sessions.create(
+    Path("archive.zip").read_bytes(),
+    ImportSessionCreateOptionsModel(region_id=123),
+)
+records = client.import_sessions.list_records(session.id)
+# Review records before calling update_resolution() and commit().
+```
+
+Export OSDU archives with `client.reports.export(report_id=123, format="osdu")`.
+The native archive format remains the default.
+
+See [Updating to the current external API v2](docs/api-v2-update.md) for changed model names,
+commit-selection semantics, and API deployment requirements.
 
 More runnable examples are available in [examples](https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/examples).
 
@@ -187,10 +214,35 @@ export WHITSON_INTEGRATION_CLIENT_SECRET=...
 just integration
 ```
 
+For local testing without real M2M credentials, the API supports
+`EXTERNAL_API_AUTH_BYPASS=true` with its local/debug safeguards. Restart the API
+using the Flask development CLI, bound to `127.0.0.1` with a local database, then
+use `local-sdk-test` as both integration client ID and secret. See
+`pvt-api/docs/local-m2m-testing.md` in the API repository. The flag belongs to the
+API process, not the SDK; do not enable it in deployments.
+
 Optional IDs enable project, fluid-model, calculation, black-oil-table, and report
 checks that cannot be backed by created fixtures: `WHITSON_INTEGRATION_PROJECT_ID`,
 `WHITSON_INTEGRATION_FLUID_MODEL_ID`, `WHITSON_INTEGRATION_BLACK_OIL_TABLE_ID`,
-and `WHITSON_INTEGRATION_REPORT_ID`.
+and `WHITSON_INTEGRATION_REPORT_ID`. The report ID enables both the staged-review
+skip test and a **real native archive round trip**. Choose a report with an available
+PDF, wells, samples, and experiments. The round-trip test uses only public SDK
+methods: export → create a unique region → upload → review → commit → read back →
+delete the staging session → re-export. It compares native data and file hashes,
+and checks that the source report is unchanged.
+
+The round trip leaves its region and imported entities behind (their IDs are logged);
+only the staging session can be deleted through the external API. Export failures
+are test failures, not skips, and occur before the round-trip region is created.
+Integration requests do not retry, so API errors remain visible. To run just this test:
+
+```bash
+uv run pytest tests/integration/test_v2_report_roundtrip.py -v -s -m integration -o addopts=''
+```
+
+OSDU high-fidelity/structured round trips and individual OSDU record imports are
+not covered by this native test. The OpenAPI/wiring test requires only
+`WHITSON_INTEGRATION_BASE_URL`, not credentials.
 
 ### Publishing
 

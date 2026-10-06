@@ -53,7 +53,7 @@ Do not use `client.authentication`; auth is not exposed as a resource.
 
 The SDK retries transient read failures by default. `GET` requests and downloads
 retry `408`, `429`, `500`, `502`, `503`, and `504`. Mutating requests (`POST`,
-`PUT`, and multipart uploads) are not retried by default, except for HTTP `429`
+`PUT`, `PATCH`, `DELETE`, and multipart uploads) are not retried by default, except for HTTP `429`
 rate-limit responses. Token exchange follows the same retry timing and attempt
 policy.
 
@@ -130,6 +130,8 @@ page2 = client.regions.list(cursor=page.pagination.next_cursor, limit=50)
 ```
 
 Passing `limit` sets the page size (1–250). When omitted, the API default applies (usually 20).
+All five resources support `name=` for a case-insensitive exact match, including
+`iterate()` and `list_all()`.
 
 ## Creating And Updating Data
 
@@ -163,7 +165,16 @@ Report export returns zip bytes and a synthetic filename:
 archive_data, filename = client.reports.export(report_id=123)
 ```
 
-Report import and preflight accept zip bytes. Pass `ImportArchiveOptions` when import options are needed:
+Prefer `client.import_sessions` for new archive workflows: `create`, `get`,
+`list_records`, `update_resolution`, `commit`, and `delete`. Creation accepts ZIP
+bytes and `ImportSessionCreateOptionsModel`. Review records before committing;
+pass explicit `selected_record_ids` in `ImportCommitRequestModel` to avoid committing
+all eligible records. Deleting a session does not undo committed native entities.
+Use `client.import_records` for individual OSDU records.
+
+Export OSDU archives with `client.reports.export(report_id=123, format="osdu")`.
+
+Legacy report import and preflight accept zip bytes. Pass `ImportArchiveOptions` when import options are needed:
 
 ```python
 from pathlib import Path
