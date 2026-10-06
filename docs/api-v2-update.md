@@ -84,6 +84,12 @@ VISCO stages, and swell-test viscosity.
 PATCH and DELETE follow the existing conservative write retry policy: no automatic
 retry for transport/server failures by default, but HTTP 429 may be retried.
 
+For full-fidelity OSDU round trips, export with `include_whitson_native_payload=True`
+and import with `import_mode="whitson_high_fidelity"`. RAFS-only archives preserve
+only their represented fields, not all native compositions, primary flags, or
+saturation-pressure classifications. File.Generic JSON-only imports are staged as
+unsupported because they carry no bytes. Use archives to transfer files.
+
 ## Verification before release
 
 Run `just test`, `just lint`, `just ty`, `just generate-check v2`, and `just build`.
@@ -96,9 +102,12 @@ WHITSON_INTEGRATION_BASE_URL=http://localhost:4000 \
 
 For authenticated verification, configure the integration credentials and IDs
 listed in the README and run `just integration` against a disposable environment.
-The native round-trip test exports the configured report, stages it in a unique
-region, commits real entities, reads them back through the SDK, and compares a
-re-export including metadata and file hashes. Staging sessions are deleted; native
+The native and OSDU high-fidelity round-trip tests export the configured report,
+stage it in a unique region, commit real entities, read them back through the SDK,
+and compare a re-export including metadata and file hashes. Structured OSDU tests
+compare RAFS-represented data; single-record tests exercise report/sample auto-commit,
+idempotent replay, reviewed experiment commit, and the JSON-only file limitation.
+Legacy archive preflight/import is also exercised. Staging sessions are deleted; native
 entities remain for inspection because the external API has no delete endpoints
 for them. The separate staged-review test also covers explicit empty selections
 and skip resolutions. Live calculation tests must assert successful result rows;

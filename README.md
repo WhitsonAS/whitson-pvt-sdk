@@ -224,12 +224,19 @@ API process, not the SDK; do not enable it in deployments.
 Optional IDs enable project, fluid-model, calculation, black-oil-table, and report
 checks that cannot be backed by created fixtures: `WHITSON_INTEGRATION_PROJECT_ID`,
 `WHITSON_INTEGRATION_FLUID_MODEL_ID`, `WHITSON_INTEGRATION_BLACK_OIL_TABLE_ID`,
-and `WHITSON_INTEGRATION_REPORT_ID`. The report ID enables both the staged-review
-skip test and a **real native archive round trip**. Choose a report with an available
-PDF, wells, samples, and experiments. The round-trip test uses only public SDK
-methods: export → create a unique region → upload → review → commit → read back →
-delete the staging session → re-export. It compares native data and file hashes,
-and checks that the source report is unchanged.
+`WHITSON_INTEGRATION_SAMPLE_ID`, and `WHITSON_INTEGRATION_REPORT_ID`. The sample ID
+must have an adjusted composition in the configured fluid model; conversion is
+separately tested with a created sample containing a characterized C7+ residue.
+Calculation errors fail tests rather than skipping the dependent endpoints.
+
+The report ID enables real native and OSDU archive round trips, legacy preflight/
+import, and all four single-record OSDU endpoints. Choose a report with an available
+PDF, wells, samples, and RAFS-supported experiments (CCE/CVD/DLE/MSS). The round-trip
+tests use only public SDK methods: export → create a unique region → upload → review
+→ commit → read back → delete the staging session → re-export. Native and OSDU
+high-fidelity tests compare native data and file hashes and check that the source
+report is unchanged. Structured OSDU tests compare the data actually represented in
+RAFS, not native-only fields.
 
 The round trip leaves its region and imported entities behind (their IDs are logged);
 only the staging session can be deleted through the external API. Export failures
@@ -240,9 +247,15 @@ Integration requests do not retry, so API errors remain visible. To run just thi
 uv run pytest tests/integration/test_v2_report_roundtrip.py -v -s -m integration -o addopts=''
 ```
 
-OSDU high-fidelity/structured round trips and individual OSDU record imports are
-not covered by this native test. The OpenAPI/wiring test requires only
-`WHITSON_INTEGRATION_BASE_URL`, not credentials.
+Use `include_whitson_native_payload=True` and `import_mode="whitson_high_fidelity"`
+for full native fidelity. RAFS-only archives do not preserve all native metadata,
+composition details, primary-experiment flags, or saturation-pressure classifications.
+JSON-only File.Generic import intentionally returns an unsupported record without
+committing file bytes; use archive import for files. Single-record analysis metadata
+needs a reviewed `resolved_payload` with experiment data before committing; set its
+`entity_type` discriminator explicitly.
+
+The OpenAPI/wiring test requires only `WHITSON_INTEGRATION_BASE_URL`, not credentials.
 
 ### Publishing
 
