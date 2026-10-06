@@ -93,6 +93,30 @@ def test_put_sends_json_body(transport, httpx_mock):
     assert result == {"id": 1}
 
 
+def test_patch_sends_json_body(transport, httpx_mock):
+    httpx_mock.add_response(method="PATCH", json={"status": "accepted"})
+    assert transport.patch("/resolution", body={"status": "accepted"}) == {"status": "accepted"}
+
+
+def test_delete_accepts_empty_204(transport, httpx_mock):
+    httpx_mock.add_response(method="DELETE", status_code=204)
+    assert transport.delete("/import-sessions/7") is None
+
+
+@pytest.mark.parametrize("method", ["patch", "delete"])
+@pytest.mark.parametrize(
+    "status,error", [(403, AuthError), (404, NotFoundError), (409, APIError), (500, APIError)]
+)
+def test_new_write_methods_propagate_errors_without_retry(
+    transport, httpx_mock, method, status, error
+):
+    httpx_mock.add_response(method=method.upper(), status_code=status, json={"message": "failed"})
+    with pytest.raises(error) as exc:
+        getattr(transport, method)("/test")
+    assert exc.value.status_code == status
+    assert len([req for req in httpx_mock.get_requests() if req.method == method.upper()]) == 1
+
+
 def test_get_bytes_returns_raw_bytes(transport, httpx_mock):
     httpx_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/reports/1/export",

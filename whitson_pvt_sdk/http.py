@@ -20,7 +20,7 @@ logger = logging.getLogger("whitson_pvt_sdk")
 
 JSONBody: TypeAlias = dict[str, Any] | list[dict[str, Any]] | None
 
-Params: TypeAlias = dict[str, str | int] | None
+Params: TypeAlias = dict[str, str | int | float | bool] | None
 
 _MIN_TOKEN_LIFETIME = 300
 
@@ -366,6 +366,12 @@ class HTTPTransport:
 
     def put(self, path: str, *, body: JSONBody = None) -> dict[str, Any]:
         return self._json(self._request("PUT", path, json=body))
+
+    def patch(self, path: str, *, body: JSONBody = None) -> dict[str, Any]:
+        return self._json(self._request("PATCH", path, json=body))
+
+    def delete(self, path: str) -> None:
+        self._raise_for_status(self._request("DELETE", path))
 
     def get_bytes(self, path: str, *, params: Params = None) -> bytes:
         return self._bytes(self._request("GET", path, params=params, timeout=self._file_timeout))
