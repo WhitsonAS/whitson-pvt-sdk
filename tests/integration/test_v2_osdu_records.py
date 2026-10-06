@@ -35,26 +35,35 @@ def test_osdu_single_records_commit_replay_and_file_limit(
             OSDURecordEnvelopeModel.model_validate_json(source.read(entry["path"]))
             for entry in manifest["records"]
         ]
-    report_record = next(r for r in records if ":work-product--SamplesAnalysesReport:" in r.kind)
+    report_record = next(
+        r for r in records if ":work-product-component--SamplesAnalysesReport:" in r.kind
+    )
     analysis_record = next(
         r for r in records if ":work-product-component--SamplesAnalysis:" in r.kind
     )
-    sample_record = next(
-        r for r in records if r.id == analysis_record.data["SampleIDs"][0].rstrip(":")
-    )
+    analysis_data = analysis_record.data
+    assert analysis_data is not None
+    sample_record = next(r for r in records if r.id == analysis_data["SampleIDs"][0].rstrip(":"))
     file_record = next(r for r in records if ":dataset--File.Generic:" in r.kind)
-    hints = sample_record.data["ExtensionProperties"]["whitson"]
+    sample_data = sample_record.data
+    assert sample_data is not None
+    hints = sample_data["ExtensionProperties"]["whitson"]
     experiment = next(
         item
         for item in experiments
-        if item["sample_name"] == sample_record.data["SampleName"]
+        if item["sample_name"] == sample_data["SampleName"]
         and item["well_name"] == hints["well_name"]
         and item["experiment"]["type"]
-        == analysis_record.data["ExtensionProperties"]["whitson"]["native_experiment_type"]
+        == analysis_data["ExtensionProperties"]["whitson"]["native_experiment_type"]
     )
 
     region = client_v2.regions.create(
-        CreateRegionModel(name=f"{run_name}-osdu-records", public=False)
+        CreateRegionModel(
+            name=f"{run_name}-osdu-records",
+            public=False,
+            region_type="single_field",
+            reservoir_type="Conventional",
+        )
     )
     well = client_v2.wells.create(CreateWellModel(name=hints["well_name"], region_id=region.id))
     print(f"OSDU record test region: id={region.id}, well={well.id}", flush=True)
@@ -96,7 +105,7 @@ def test_osdu_single_records_commit_replay_and_file_limit(
         assert sample_id is not None
         fetched_sample = client_v2.samples.get(sample_id)
         assert fetched_sample.well_id == well.id
-        assert fetched_sample.name == sample_record.data["SampleName"]
+        assert fetched_sample.name == sample_data["SampleName"]
 
         analysis = client_v2.import_records.import_osdu_sample_analysis(
             SingleRecordImportRequestModel(
@@ -119,7 +128,9 @@ def test_osdu_single_records_commit_replay_and_file_limit(
             ImportRecordResolutionModel(
                 action="create",
                 status="accepted",
-                resolved_payload=ExperimentImportPayloadModel.model_validate(experiment),
+                resolved_payload=ExperimentImportPayloadModel.model_validate(
+                    {"entity_type": "experiment", **experiment}
+                ),
             ),
         )
         committed = client_v2.import_sessions.commit(

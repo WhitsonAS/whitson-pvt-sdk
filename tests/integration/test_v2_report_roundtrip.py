@@ -14,6 +14,7 @@ from zipfile import ZipFile
 import pytest
 
 from whitson_pvt_sdk.errors import NotFoundError
+from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.models import (
     CreateRegionModel,
@@ -56,12 +57,27 @@ def _native_archive_content(data: bytes) -> dict[str, Any]:
         return content
 
 
-@pytest.mark.parametrize("archive_format", ["whitson_pvt", "osdu"])
+def _rafs_archive_content(data: bytes) -> list[dict[str, Any]]:
+    with ZipFile(BytesIO(data)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        payloads = [json.loads(archive.read(entry["path"])) for entry in manifest["rafs_payloads"]]
+    for payload in payloads:
+        # These references change when the report/sample receives a new database ID.
+        payload["data"].pop("SamplesAnalysisID", None)
+        payload["data"].pop("SampleID", None)
+    return sorted(payloads, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+@pytest.mark.parametrize(
+    ("archive_format", "import_mode"),
+    [("whitson_pvt", "auto"), ("osdu", "whitson_high_fidelity"), ("osdu", "osdu_structured")],
+)
 def test_report_roundtrip(
     client_v2: WhitsonPVTClientV2,
     require_id: Callable[[str], int],
     run_name: str,
     archive_format: Literal["whitson_pvt", "osdu"],
+    import_mode: Literal["auto", "whitson_high_fidelity", "osdu_structured"],
 ):
     source_report_id = require_id("REPORT_ID")
     archive, filename = client_v2.reports.export(source_report_id, format="whitson_pvt")
@@ -75,14 +91,14 @@ def test_report_roundtrip(
         archive, _ = client_v2.reports.export(
             source_report_id,
             format="osdu",
-            include_whitson_native_payload=True,
+            include_whitson_native_payload=import_mode == "whitson_high_fidelity",
             include_structured_experiments=True,
         )
 
     # Export/validate first: a bad source must not create an unused test region.
     region = client_v2.regions.create(
         CreateRegionModel(
-            name=f"{run_name}-{archive_format}-roundtrip",
+            name=f"{run_name}-{archive_format}-{import_mode}-roundtrip",
             region_type="single_field",
             reservoir_type="Conventional",
             note=f"SDK round-trip copy of report {source_report_id}; retained for inspection.",
@@ -97,7 +113,7 @@ def test_report_roundtrip(
         ImportSessionCreateOptionsModel(
             region_id=region.id,
             requested_source_format=archive_format,
-            import_mode="whitson_high_fidelity" if archive_format == "osdu" else "auto",
+            import_mode=import_mode,
         ),
     )
     print(f"Round-trip import session: id={session.id}", flush=True)
@@ -203,7 +219,58 @@ def test_report_roundtrip(
         client_v2.import_sessions.get(session.id)
     # Committed entities/files must survive deletion of their staging session.
     copied_archive, _ = client_v2.reports.export(imported_report_id, format="whitson_pvt")
-    assert _native_archive_content(copied_archive) == expected
+    actual = _native_archive_content(copied_archive)
+    if import_mode == "osdu_structured":
+        # WKS/RAFS is not a full native backup. Verify the supported scientific
+        # payload and files without claiming preservation of native-only fields.
+        for section in ("counts", "report", "report_file", "additional_files"):
+            assert actual[section] == expected[section], section
+        copied_osdu, _ = client_v2.reports.export(
+            imported_report_id,
+            format="osdu",
+            include_whitson_native_payload=False,
+            include_structured_experiments=True,
+        )
+        expected_rafs = _rafs_archive_content(archive)
+        assert expected_rafs, "Choose a report with RAFS-supported experiments"
+        assert _rafs_archive_content(copied_osdu) == expected_rafs
+    else:
+        assert actual == expected
     # The source report must remain unchanged as well.
     source_after, _ = client_v2.reports.export(source_report_id, format="whitson_pvt")
     assert _native_archive_content(source_after) == expected
+
+
+def test_legacy_report_archive_preflight_and_import(
+    client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int], run_name: str
+):
+    source_id = require_id("REPORT_ID")
+    archive, _ = client_v2.reports.export(source_id)
+    expected = _native_archive_content(archive)
+    region = client_v2.regions.create(
+        CreateRegionModel(
+            name=f"{run_name}-legacy-import",
+            region_type="single_field",
+            reservoir_type="Conventional",
+            public=False,
+        )
+    )
+    print(f"Legacy import region: id={region.id}", flush=True)
+    options = ImportArchiveOptions(region_id=region.id)
+    preflight = client_v2.reports.preflight_import(archive, options)
+    assert preflight.can_commit, preflight.model_dump()
+    assert not preflight.collisions
+    result = client_v2.reports.import_archive(archive, options)
+    print(f"Legacy import result: {result.model_dump_json()}", flush=True)
+    for entity, count in {"reports": 1, **expected["counts"]}.items():
+        assert result.created[entity] == count, result.model_dump()
+        assert result.reused[entity] == 0
+        assert result.skipped[entity] == 0
+    report_ids = list(result.id_map["reports"].values())
+    assert len(report_ids) == 1 and report_ids[0] != source_id
+    wells = client_v2.wells.list_all(region.id)
+    assert {well.id for well in wells} == set(result.id_map["wells"].values())
+    copied, _ = client_v2.reports.export(report_ids[0])
+    actual = _native_archive_content(copied)
+    for section in ("counts", "report", "report_file", "additional_files"):
+        assert actual[section] == expected[section], section
