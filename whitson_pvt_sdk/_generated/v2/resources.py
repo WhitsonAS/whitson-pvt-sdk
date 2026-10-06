@@ -9,6 +9,8 @@ from whitson_pvt_sdk.shared.models import PaginationParams
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
 
+from pydantic import BaseModel
+
 from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 from whitson_pvt_sdk.shared.pagination import Paginator
 from whitson_pvt_sdk.v2.models import (
@@ -31,8 +33,14 @@ from whitson_pvt_sdk.v2.models import (
     GetWellSimpleModel,
     GorRecombinationCalculationRequestModel,
     GorRecombinationCalculationResponseModel,
+    ImportCommitRequestModel,
     ImportCommitResultModel,
     ImportPreflightResultModel,
+    ImportRecordListModel,
+    ImportRecordModel,
+    ImportRecordResolutionModel,
+    ImportSessionCreateOptionsModel,
+    ImportSessionModel,
     PaginatedBlackOilTablesModel,
     PaginatedFluidModelsModel,
     PaginatedProjectsModel,
@@ -40,17 +48,22 @@ from whitson_pvt_sdk.v2.models import (
     PaginatedWellsModel,
     PhaseEnvelopeCalculationRequestModel,
     PhaseEnvelopeCalculationResponseModel,
+    ReportArchiveCommitResultModel,
     SampleToEosSlateConversionCalculationRequestModel,
     SampleToEosSlateConversionCalculationResponseModel,
     SaturationPressureCalculationRequestModel,
     SaturationPressureCalculationResponseModel,
     SeparatorProcessCalculationRequestModel,
     SeparatorProcessCalculationResponseModel,
+    SingleRecordImportRequestModel,
+    SingleRecordImportResponseModel,
     UpdateRegionModel,
     UpdateSampleListModel,
     UpdateSampleModel,
     UpdateWellModel,
     UpdateWellsListModel,
+    VolumetricToCompositionConversionCalculationRequestModel,
+    VolumetricToCompositionConversionCalculationResponseModel,
     WellsListModel,
 )
 
@@ -63,22 +76,27 @@ class Regions:
     def __init__(self, transport: HTTPTransport) -> None:
         self._transport = transport
 
-    def list(self, cursor: str | None = None, limit: int | None = None) -> PaginatedRegionsModel:
+    def list(
+        self, cursor: str | None = None, limit: int | None = None, name: str | None = None
+    ) -> PaginatedRegionsModel:
         body = self._transport.get(
             "/regions",
-            params=PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+            params={
+                **PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+                **{key: value for key, value in {"name": name}.items() if value is not None},
+            },
         )
         return PaginatedRegionsModel.model_validate(body)
 
     def iterate(
-        self, cursor: str | None = None, limit: int | None = None
+        self, cursor: str | None = None, limit: int | None = None, name: str | None = None
     ) -> Iterator[GetRegionModel]:
-        return Paginator.iterate(self.list, "regions", cursor=cursor, limit=limit)
+        return Paginator.iterate(self.list, "regions", cursor=cursor, limit=limit, name=name)
 
     def list_all(
-        self, cursor: str | None = None, limit: int | None = None
+        self, cursor: str | None = None, limit: int | None = None, name: str | None = None
     ) -> ListType[GetRegionModel]:
-        return Paginator.list_all(self.list, "regions", cursor=cursor, limit=limit)
+        return Paginator.list_all(self.list, "regions", cursor=cursor, limit=limit, name=name)
 
     def create(self, data: CreateRegionModel) -> GetRegionModel:
         body = self._transport.post("/regions", body=data.model_dump(exclude_unset=True))
@@ -102,26 +120,41 @@ class Wells:
         self._transport = transport
 
     def list(
-        self, region_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        region_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> PaginatedWellsModel:
         body = self._transport.get(
             f"/regions/{region_id}/wells",
-            params=PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+            params={
+                **PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+                **{key: value for key, value in {"name": name}.items() if value is not None},
+            },
         )
         return PaginatedWellsModel.model_validate(body)
 
     def iterate(
-        self, region_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        region_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> Iterator[GetWellSimpleModel]:
         return Paginator.iterate(
-            self.list, "wells", region_id=region_id, cursor=cursor, limit=limit
+            self.list, "wells", region_id=region_id, cursor=cursor, limit=limit, name=name
         )
 
     def list_all(
-        self, region_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        region_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> ListType[GetWellSimpleModel]:
         return Paginator.list_all(
-            self.list, "wells", region_id=region_id, cursor=cursor, limit=limit
+            self.list, "wells", region_id=region_id, cursor=cursor, limit=limit, name=name
         )
 
     def create(self, data: CreateWellModel) -> GetWellModel:
@@ -189,26 +222,41 @@ class Projects:
         return GetProjectWithFluidModelsModel.model_validate(body)
 
     def list(
-        self, region_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        region_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> PaginatedProjectsModel:
         body = self._transport.get(
             f"/regions/{region_id}/projects",
-            params=PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+            params={
+                **PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+                **{key: value for key, value in {"name": name}.items() if value is not None},
+            },
         )
         return PaginatedProjectsModel.model_validate(body)
 
     def iterate(
-        self, region_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        region_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> Iterator[GetProjectModel]:
         return Paginator.iterate(
-            self.list, "projects", region_id=region_id, cursor=cursor, limit=limit
+            self.list, "projects", region_id=region_id, cursor=cursor, limit=limit, name=name
         )
 
     def list_all(
-        self, region_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        region_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> ListType[GetProjectModel]:
         return Paginator.list_all(
-            self.list, "projects", region_id=region_id, cursor=cursor, limit=limit
+            self.list, "projects", region_id=region_id, cursor=cursor, limit=limit, name=name
         )
 
 
@@ -223,26 +271,41 @@ class FluidModels:
         return GetFluidModelModel.model_validate(body)
 
     def list(
-        self, project_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        project_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> PaginatedFluidModelsModel:
         body = self._transport.get(
             f"/projects/{project_id}/fluid-models",
-            params=PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+            params={
+                **PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+                **{key: value for key, value in {"name": name}.items() if value is not None},
+            },
         )
         return PaginatedFluidModelsModel.model_validate(body)
 
     def iterate(
-        self, project_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        project_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> Iterator[GetSimpleFluidModelModel]:
         return Paginator.iterate(
-            self.list, "fluid_models", project_id=project_id, cursor=cursor, limit=limit
+            self.list, "fluid_models", project_id=project_id, cursor=cursor, limit=limit, name=name
         )
 
     def list_all(
-        self, project_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        project_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> ListType[GetSimpleFluidModelModel]:
         return Paginator.list_all(
-            self.list, "fluid_models", project_id=project_id, cursor=cursor, limit=limit
+            self.list, "fluid_models", project_id=project_id, cursor=cursor, limit=limit, name=name
         )
 
 
@@ -257,26 +320,51 @@ class BlackOilTables:
         return GetBlackOilTableModel.model_validate(body)
 
     def list(
-        self, fluid_model_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        fluid_model_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> PaginatedBlackOilTablesModel:
         body = self._transport.get(
             f"/fluid-models/{fluid_model_id}/black-oil-tables",
-            params=PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+            params={
+                **PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True),
+                **{key: value for key, value in {"name": name}.items() if value is not None},
+            },
         )
         return PaginatedBlackOilTablesModel.model_validate(body)
 
     def iterate(
-        self, fluid_model_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        fluid_model_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> Iterator[GetSimpleBlackOilTableModel]:
         return Paginator.iterate(
-            self.list, "black_oil_tables", fluid_model_id=fluid_model_id, cursor=cursor, limit=limit
+            self.list,
+            "black_oil_tables",
+            fluid_model_id=fluid_model_id,
+            cursor=cursor,
+            limit=limit,
+            name=name,
         )
 
     def list_all(
-        self, fluid_model_id: int, cursor: str | None = None, limit: int | None = None
+        self,
+        fluid_model_id: int,
+        cursor: str | None = None,
+        limit: int | None = None,
+        name: str | None = None,
     ) -> ListType[GetSimpleBlackOilTableModel]:
         return Paginator.list_all(
-            self.list, "black_oil_tables", fluid_model_id=fluid_model_id, cursor=cursor, limit=limit
+            self.list,
+            "black_oil_tables",
+            fluid_model_id=fluid_model_id,
+            cursor=cursor,
+            limit=limit,
+            name=name,
         )
 
 
@@ -288,7 +376,7 @@ class Reports:
 
     def import_archive(
         self, archive_data: bytes, options: ImportArchiveOptions | None = None
-    ) -> ImportCommitResultModel:
+    ) -> ReportArchiveCommitResultModel:
         if options is None:
             options = ImportArchiveOptions()
 
@@ -297,7 +385,7 @@ class Reports:
             files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
             data=_meta_data(options),
         )
-        return ImportCommitResultModel.model_validate(body)
+        return ReportArchiveCommitResultModel.model_validate(body)
 
     def preflight_import(
         self, archive_data: bytes, options: ImportArchiveOptions | None = None
@@ -312,8 +400,25 @@ class Reports:
         )
         return ImportPreflightResultModel.model_validate(body)
 
-    def export(self, report_id: int) -> tuple[bytes, str]:
-        data = self._transport.get_bytes(f"/reports/{report_id}/export")
+    def export(
+        self,
+        report_id: int,
+        format: str | None = None,
+        include_whitson_native_payload: bool | None = None,
+        include_structured_experiments: bool | None = None,
+    ) -> tuple[bytes, str]:
+        data = self._transport.get_bytes(
+            f"/reports/{report_id}/export",
+            params={
+                key: value
+                for key, value in {
+                    "format": format,
+                    "include_whitson_native_payload": include_whitson_native_payload,
+                    "include_structured_experiments": include_structured_experiments,
+                }.items()
+                if value is not None
+            },
+        )
         filename = f"report_{report_id}_export.zip"
         return data, filename
 
@@ -368,8 +473,104 @@ class Calculations:
         )
         return SeparatorProcessCalculationResponseModel.model_validate(body)
 
+    def calculate_volumetric_to_composition_conversion(
+        self, data: VolumetricToCompositionConversionCalculationRequestModel
+    ) -> VolumetricToCompositionConversionCalculationResponseModel:
+        body = self._transport.post(
+            "/calculations/volumetric-to-composition-conversion",
+            body=data.model_dump(exclude_unset=True),
+        )
+        return VolumetricToCompositionConversionCalculationResponseModel.model_validate(body)
 
-def _meta_data(options: ImportArchiveOptions) -> dict | None:
+
+class ImportRecords:
+    _transport: HTTPTransport
+
+    def __init__(self, transport: HTTPTransport) -> None:
+        self._transport = transport
+
+    def import_osdu_file(
+        self, data: SingleRecordImportRequestModel
+    ) -> SingleRecordImportResponseModel:
+        body = self._transport.post(
+            "/import-records/files", body=data.model_dump(exclude_unset=True)
+        )
+        return SingleRecordImportResponseModel.model_validate(body)
+
+    def import_osdu_report(
+        self, data: SingleRecordImportRequestModel
+    ) -> SingleRecordImportResponseModel:
+        body = self._transport.post(
+            "/import-records/reports", body=data.model_dump(exclude_unset=True)
+        )
+        return SingleRecordImportResponseModel.model_validate(body)
+
+    def import_osdu_sample_analysis(
+        self, data: SingleRecordImportRequestModel
+    ) -> SingleRecordImportResponseModel:
+        body = self._transport.post(
+            "/import-records/sample-analyses", body=data.model_dump(exclude_unset=True)
+        )
+        return SingleRecordImportResponseModel.model_validate(body)
+
+    def import_osdu_sample(
+        self, data: SingleRecordImportRequestModel
+    ) -> SingleRecordImportResponseModel:
+        body = self._transport.post(
+            "/import-records/samples", body=data.model_dump(exclude_unset=True)
+        )
+        return SingleRecordImportResponseModel.model_validate(body)
+
+
+class ImportSessions:
+    _transport: HTTPTransport
+
+    def __init__(self, transport: HTTPTransport) -> None:
+        self._transport = transport
+
+    def create(
+        self, archive_data: bytes, options: ImportSessionCreateOptionsModel | None = None
+    ) -> ImportSessionModel:
+        if options is None:
+            options = ImportSessionCreateOptionsModel()
+
+        body = self._transport.post_multipart(
+            "/import-sessions",
+            files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},
+            data=_meta_data(options),
+        )
+        return ImportSessionModel.model_validate(body)
+
+    def delete(self, import_session_id: int) -> None:
+        self._transport.delete(f"/import-sessions/{import_session_id}")
+
+    def get(self, import_session_id: int) -> ImportSessionModel:
+        body = self._transport.get(f"/import-sessions/{import_session_id}")
+        return ImportSessionModel.model_validate(body)
+
+    def commit(
+        self, import_session_id: int, data: ImportCommitRequestModel
+    ) -> ImportCommitResultModel:
+        body = self._transport.post(
+            f"/import-sessions/{import_session_id}/commit", body=data.model_dump(exclude_unset=True)
+        )
+        return ImportCommitResultModel.model_validate(body)
+
+    def list_records(self, import_session_id: int) -> ImportRecordListModel:
+        body = self._transport.get(f"/import-sessions/{import_session_id}/records")
+        return ImportRecordListModel.model_validate(body)
+
+    def update_resolution(
+        self, import_session_id: int, import_record_id: int, data: ImportRecordResolutionModel
+    ) -> ImportRecordModel:
+        body = self._transport.patch(
+            f"/import-sessions/{import_session_id}/records/{import_record_id}/resolution",
+            body=data.model_dump(exclude_unset=True),
+        )
+        return ImportRecordModel.model_validate(body)
+
+
+def _meta_data(options: BaseModel) -> dict | None:
     dumped = options.model_dump(exclude_unset=True, exclude_defaults=True)
     if not dumped:
         return None

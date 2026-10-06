@@ -107,6 +107,22 @@ class CalculationCompositionEntryModel(BaseModel):
     molar_amount: Annotated[float, Field(ge=0.0)]
 
 
+BotGasComposition = TypeAliasType(
+    "BotGasComposition", Annotated[list[CalculationCompositionEntryModel], Field(min_length=1)]
+)
+"""
+Saturated gas at its dew point. Derived from bot_oil_composition when omitted.
+"""
+
+
+BotOilComposition = TypeAliasType(
+    "BotOilComposition", Annotated[list[CalculationCompositionEntryModel], Field(min_length=1)]
+)
+"""
+Saturated oil at its bubble point. Derived from bot_gas_composition when omitted.
+"""
+
+
 class CalculationErrorModel(BaseModel):
     code: Literal["calculation_failed"]
     message: str
@@ -118,15 +134,28 @@ class CalculationErrorResultModel(BaseModel):
 
 
 class CalculationOutputUnitsModel(BaseModel):
+    bulk_modulus: str
+    compressibility: str
     density: str
     gas_formation_volume_factor: str
     gas_volume: str
+    joule_thomson_coefficient: str
+    molar_enthalpy: str
+    molar_entropy: str
+    molar_heat_capacity: str
     oil_formation_volume_factor: str
     oil_volume: str
     pressure: str
     solution_gas_oil_ratio: str
     solution_oil_gas_ratio: str
+    specific_enthalpy: str
+    specific_entropy: str
+    specific_heat_capacity: str
+    speed_of_sound: str
     temperature: str
+    thermal_conductivity: str
+    thermal_expansion_coefficient: str
+    viscosibility: str
     viscosity: str
 
 
@@ -164,11 +193,23 @@ class CompositionComponentModel(BaseModel):
     name: ValidComponentName
 
 
+class CompositionImportPayloadModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    entity_type: Literal["composition"] = "composition"
+
+
 class CompositionModel(BaseModel):
     components: list[CompositionComponentModel]
 
 
 ConductivityUnit = TypeAliasType("ConductivityUnit", Literal["micro-S/cm"])
+
+
+class CreateImportSessionFormModel(BaseModel):
+    file: bytes
+    meta_data: ImportSessionCreateOptionsModel | None = None
 
 
 class CreateRegionModel(BaseModel):
@@ -221,6 +262,10 @@ class CreateSampleModel(BaseModel):
     pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
     pressure_when_sampled_unit: PressureUnit | None = None
+    primary_recombination_type: SampleRecombinationType | None = None
+    """
+    Recombination used for fluid analyses. Only applies to SEP samples; ignored for other sample types.
+    """
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
     recombined_fluid_contamination_unit: MudContaminationUnit | None = None
@@ -246,6 +291,23 @@ class CreateSampleModel(BaseModel):
     sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
     sep_temperature_unit: TemperatureUnit | None = None
+    ssf_flashed_gas_composition: CompositionModel | None = None
+    ssf_flashed_gas_mw: float | None = None
+    ssf_flashed_gas_specific_gravity: float | None = None
+    ssf_flashed_oil_composition: CompositionModel | None = None
+    ssf_flashed_oil_contamination: float | None = None
+    ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
+    ssf_flashed_oil_density: float | None = None
+    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_mw: float | None = None
+    ssf_flashed_oil_temperature: float | None = None
+    ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
+    ssf_recombined_fluid_composition: CompositionModel | None = None
+    ssf_recombined_fluid_contamination: float | None = None
+    ssf_recombined_fluid_contamination_unit: MudContaminationUnit | None = None
+    ssf_recombined_fluid_gor: float | None = None
+    ssf_recombined_fluid_gor_unit: GorUnit | None = None
+    ssf_recombined_fluid_mw: float | None = None
     temperature_at_lab: float | None = None
     temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
@@ -331,6 +393,10 @@ class CreateWellSampleModel(BaseModel):
     pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
     pressure_when_sampled_unit: PressureUnit | None = None
+    primary_recombination_type: SampleRecombinationType | None = None
+    """
+    Recombination used for fluid analyses. Only applies to SEP samples; ignored for other sample types.
+    """
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
     recombined_fluid_contamination_unit: MudContaminationUnit | None = None
@@ -356,6 +422,23 @@ class CreateWellSampleModel(BaseModel):
     sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
     sep_temperature_unit: TemperatureUnit | None = None
+    ssf_flashed_gas_composition: CompositionModel | None = None
+    ssf_flashed_gas_mw: float | None = None
+    ssf_flashed_gas_specific_gravity: float | None = None
+    ssf_flashed_oil_composition: CompositionModel | None = None
+    ssf_flashed_oil_contamination: float | None = None
+    ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
+    ssf_flashed_oil_density: float | None = None
+    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_mw: float | None = None
+    ssf_flashed_oil_temperature: float | None = None
+    ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
+    ssf_recombined_fluid_composition: CompositionModel | None = None
+    ssf_recombined_fluid_contamination: float | None = None
+    ssf_recombined_fluid_contamination_unit: MudContaminationUnit | None = None
+    ssf_recombined_fluid_gor: float | None = None
+    ssf_recombined_fluid_gor_unit: GorUnit | None = None
+    ssf_recombined_fluid_mw: float | None = None
     temperature_at_lab: float | None = None
     temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
@@ -423,6 +506,16 @@ class DLEStageModel(BaseModel):
     pressure: float
 
 
+class DuplicateImportSessionConflictResponseModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    import_session_id: int
+    message: str
+    status: Literal["Conflict"] = "Conflict"
+    status_code: Literal[409] = 409
+
+
 class EOSModelModel(BaseModel):
     binary_interaction_parameters: BinaryInteractionParameterModel
     boiling_point_temperature_unit: str
@@ -448,6 +541,43 @@ EOSType = TypeAliasType(
         "Peng-Robinson (1979)",
     ],
 )
+
+
+class ExperimentImportPayloadModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    entity_type: Literal["experiment"] = "experiment"
+    experiment_type: str | None = None
+    name: str | None = None
+    sample_name: str | None = None
+    type: str | None = None
+    well_name: str | None = None
+
+
+class ExtendedPhasePropertiesModel(BaseModel):
+    density: float
+    heat_capacity_ratio: float | None
+    isentropic_bulk_modulus: float | None
+    isothermal_bulk_modulus: float | None
+    isothermal_compressibility: float | None
+    joule_thomson_coefficient: float | None
+    molar_enthalpy: float
+    molar_entropy: float
+    molar_isobaric_heat_capacity: float | None
+    molar_isochoric_heat_capacity: float | None
+    molecular_weight: float
+    specific_enthalpy: float
+    specific_entropy: float
+    specific_isobaric_heat_capacity: float | None
+    specific_isochoric_heat_capacity: float | None
+    speed_of_sound: float | None
+    split_fraction: float
+    thermal_conductivity: float | None
+    thermal_expansion_coefficient: float | None
+    viscosibility: float | None
+    viscosity: float | None
+    z_factor: float
 
 
 ExternalCalculationResultModelExternalFlashCalculationResultModel = TypeAliasType(
@@ -541,6 +671,36 @@ ExternalCalculationResultModelExternalSeparatorProcessCalculationResultModel = T
 )
 
 
+class ExternalCalculationSuccessResultModelExternalVolumetricToCompositionConversionCalculationResultModel(
+    BaseModel
+):
+    result: VolumetricToCompositionConversionCalculationResultModel
+    status: Literal["success"]
+
+
+ExternalCalculationResultModelExternalVolumetricToCompositionConversionCalculationResultModel = TypeAliasType(
+    "ExternalCalculationResultModelExternalVolumetricToCompositionConversionCalculationResultModel",
+    Annotated[
+        ExternalCalculationSuccessResultModelExternalVolumetricToCompositionConversionCalculationResultModel
+        | CalculationErrorResultModel,
+        Field(discriminator="status"),
+    ],
+)
+
+
+class FileImportPayloadModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    archive_path: str | None = None
+    checksum: str | None = None
+    entity_type: Literal["file"] = "file"
+    file_target_type: ImportFileTargetType | None = "additional_file"
+    mime_type: str | None = None
+    original_filename: str | None = None
+    size_bytes: int | None = None
+
+
 class FlashCalculationInputModel(BaseModel):
     feed_composition: Annotated[list[CalculationCompositionEntryModel], Field(min_length=1)]
     pressure: float
@@ -572,15 +732,15 @@ class FlashCalculationResultModel(BaseModel):
     liquid_composition: list[CalculationCompositionEntryModel]
     liquid_mole_fractions: list[float]
     liquid_mole_numbers: list[float]
-    liquid_phase_properties: PhasePropertiesModel
+    liquid_phase_properties: ExtendedPhasePropertiesModel
     number_of_phases: int
-    overall_phase_properties: PhasePropertiesModel
+    overall_phase_properties: ExtendedPhasePropertiesModel
     pressure: float
     temperature: float
     vapor_composition: list[CalculationCompositionEntryModel]
     vapor_mole_fractions: list[float]
     vapor_mole_numbers: list[float]
-    vapor_phase_properties: PhasePropertiesModel
+    vapor_phase_properties: ExtendedPhasePropertiesModel
 
 
 FlashType = TypeAliasType("FlashType", Literal["positive", "negative"])
@@ -606,6 +766,9 @@ GasDensityUnit = TypeAliasType(
 
 
 GasExpansionFactorUnit = TypeAliasType("GasExpansionFactorUnit", Literal["Sm3/m3", "scf/bbl"])
+
+
+GasFvfUnit = TypeAliasType("GasFvfUnit", Literal["m3/Sm3", "bbl/scf"])
 
 
 class GetBlackOilTableModel(BaseModel):
@@ -659,7 +822,7 @@ class GetProjectModel(BaseModel):
     id: int
     name: str | None = None
     note: str | None = None
-    note_updated: AwareDatetime | None = None
+    note_updated: UtcDatetime | None = None
     owners: list[str] | None = None
     public: bool | None = None
     region_id: int | None = None
@@ -671,7 +834,7 @@ class GetProjectWithFluidModelsModel(BaseModel):
     id: int
     name: str | None = None
     note: str | None = None
-    note_updated: AwareDatetime | None = None
+    note_updated: UtcDatetime | None = None
     owners: list[str] | None = None
     public: bool | None = None
     region_id: int | None = None
@@ -733,6 +896,10 @@ class GetSampleModel(BaseModel):
     pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
     pressure_when_sampled_unit: PressureUnit | None = None
+    primary_recombination_type: SampleRecombinationType | None = None
+    """
+    Recombination used for fluid analyses. Only applies to SEP samples; ignored for other sample types.
+    """
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
     recombined_fluid_contamination_unit: MudContaminationUnit | None = None
@@ -758,6 +925,23 @@ class GetSampleModel(BaseModel):
     sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
     sep_temperature_unit: TemperatureUnit | None = None
+    ssf_flashed_gas_composition: CompositionModel | None = None
+    ssf_flashed_gas_mw: float | None = None
+    ssf_flashed_gas_specific_gravity: float | None = None
+    ssf_flashed_oil_composition: CompositionModel | None = None
+    ssf_flashed_oil_contamination: float | None = None
+    ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
+    ssf_flashed_oil_density: float | None = None
+    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_mw: float | None = None
+    ssf_flashed_oil_temperature: float | None = None
+    ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
+    ssf_recombined_fluid_composition: CompositionModel | None = None
+    ssf_recombined_fluid_contamination: float | None = None
+    ssf_recombined_fluid_contamination_unit: MudContaminationUnit | None = None
+    ssf_recombined_fluid_gor: float | None = None
+    ssf_recombined_fluid_gor_unit: GorUnit | None = None
+    ssf_recombined_fluid_mw: float | None = None
     temperature_at_lab: float | None = None
     temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
@@ -868,7 +1052,7 @@ class GorRecombinationCalculationRequestModel(BaseModel):
     ]
     recombination_type: RecombinationType
     remove_mud_components: bool | None = False
-    surface_process: SurfaceProcessModel
+    surface_process: SurfaceProcessInputModel
 
 
 class GorRecombinationCalculationResponseModel(BaseModel):
@@ -911,11 +1095,76 @@ class ImportCollisionModel(BaseModel):
     reason: str
 
 
+class ImportCommitRecordResultModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    action: ImportRecordAction
+    committed_entity_id: int | None = None
+    entity_type: ImportEntityType
+    errors: list[str] | None = []
+    import_record_id: int
+    status: ImportRecordStatus
+
+
+class ImportCommitRequestModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    selected_record_ids: list[int] | None = None
+
+
 class ImportCommitResultModel(BaseModel):
-    created: dict[str, int]
-    id_map: dict[str, dict[str, int]]
-    reused: dict[str, int]
-    skipped: dict[str, int]
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    import_session_id: int
+    records: Annotated[
+        list[ImportCommitRecordResultModel] | None, Field(validate_default=True)
+    ] = []
+    status: ImportSessionStatus
+
+
+ImportContextResolution = TypeAliasType(
+    "ImportContextResolution",
+    Literal[
+        "supplied_context",
+        "external_record_link",
+        "same_session_record",
+        "natural_key",
+        "unresolved",
+    ],
+)
+
+
+class ImportDiagnosticModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    code: str
+    detail: str | None = None
+    entity_type: ImportEntityType | None = None
+    message: str
+    record_id: int | None = None
+    severity: Literal["warning", "error"]
+
+
+ImportEntityType = TypeAliasType(
+    "ImportEntityType", Literal["report", "well", "sample", "experiment", "composition", "file"]
+)
+
+
+ImportFileTargetType = TypeAliasType("ImportFileTargetType", Literal["report", "additional_file"])
+
+
+ImportMatchConfidence = TypeAliasType(
+    "ImportMatchConfidence", Literal["exact", "suggested", "none", "conflict"]
+)
+
+
+ImportMode = TypeAliasType(
+    "ImportMode", Literal["auto", "whitson_high_fidelity", "osdu_structured", "osdu_metadata_only"]
+)
 
 
 class ImportPreflightResultModel(BaseModel):
@@ -926,12 +1175,211 @@ class ImportPreflightResultModel(BaseModel):
     summary: dict[str, int]
 
 
+ImportRecordAction = TypeAliasType(
+    "ImportRecordAction", Literal["create", "update", "link", "skip"]
+)
+
+
+class ImportRecordContextModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    resolved: ImportRecordResolvedContextModel | None = None
+    """
+    Native target context selected by the importer after validating supplied context, external links, and safe matches.
+    """
+    supplied: ImportRecordSuppliedContextModel | None = None
+    """
+    Native target context supplied by the import request. These values are hints and must not mutate the source record.
+    """
+
+
+class ImportRecordListModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    records: Annotated[list[ImportRecordModel] | None, Field(validate_default=True)] = []
+
+
+class ImportRecordModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    action: ImportRecordAction
+    committed_entity_id: int | None = None
+    context: ImportRecordContextModel | None = None
+    """
+    Native target context: supplied hints and importer-resolved IDs.
+    """
+    depends_on_record_ids: list[int] | None = []
+    entity_type: ImportEntityType
+    errors: list[str] | None = []
+    id: int | None = None
+    import_session_id: int | None = None
+    match_confidence: ImportMatchConfidence | None = "none"
+    match_reason: str | None = None
+    proposed_payload: ImportPayloadModel
+    resolved_payload: ImportPayloadModel | None = None
+    source_record: SourceRecordModel
+    status: ImportRecordStatus
+    target_entity_id: int | None = None
+    warnings: list[str] | None = []
+
+
+class ImportRecordResolutionModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    action: ImportRecordAction
+    resolved_payload: ImportPayloadModel | None = None
+    source_preference: ImportRecordSourcePreference | None = None
+    status: ImportReviewStatus | None = "pending_review"
+    target_entity_id: int | None = None
+
+
+class ImportRecordResolvedContextModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    region_id: int | None = None
+    report_id: int | None = None
+    report_import_record_id: int | None = None
+    report_resolution: ImportContextResolution | None = None
+    sample_id: int | None = None
+    sample_import_record_id: int | None = None
+    sample_resolution: ImportContextResolution | None = None
+    well_id: int | None = None
+    well_import_record_id: int | None = None
+    well_resolution: ImportContextResolution | None = None
+
+
+ImportRecordSourcePreference = TypeAliasType(
+    "ImportRecordSourcePreference", Literal["whitson_payload", "rafs", "wks"]
+)
+
+
+ImportRecordStatus = TypeAliasType(
+    "ImportRecordStatus",
+    Literal[
+        "pending_review",
+        "accepted",
+        "rejected",
+        "committing",
+        "committed",
+        "failed",
+        "unsupported",
+        "blocked",
+    ],
+)
+
+
+class ImportRecordSuppliedContextModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    region_id: int | None = None
+    report_id: int | None = None
+    sample_id: int | None = None
+    well_id: int | None = None
+
+
+ImportReviewStatus = TypeAliasType(
+    "ImportReviewStatus", Literal["pending_review", "accepted", "rejected"]
+)
+
+
+class ImportSessionConflictResponseModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    message: str
+    status: Literal["Conflict"] = "Conflict"
+    status_code: Literal[409] = 409
+
+
+class ImportSessionCreateOptionsModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    allow_rafs: bool | None = True
+    allow_whitson_payload: bool | None = True
+    import_mode: ImportMode | None = "auto"
+    region_id: int | None = None
+    requested_source_format: RequestedSourceFormat | None = "auto"
+    target_report_id: int | None = None
+
+
+class ImportSessionModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    archive_cloud_filename: str | None = None
+    archive_content_sha256: str | None = None
+    created_at: AwareDatetime | None = None
+    created_by: str | None = None
+    id: int
+    managed_by: ImportSessionOrigin | None = "internal"
+    options: ImportSessionOptionsModel
+    origin: ImportSessionOrigin | None = "internal"
+    original_filename: str | None = None
+    region_id: int | None = None
+    source_format: SourceFormat
+    status: ImportSessionStatus
+    summary: ImportSessionSummaryModel
+    target_report_id: int | None = None
+
+
+class ImportSessionOptionsModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    allow_rafs: bool | None = True
+    allow_whitson_payload: bool | None = True
+    import_mode: ImportMode | None = "auto"
+    region_id: int | None = None
+    source_format: SourceFormat
+    target_report_id: int | None = None
+
+
+ImportSessionOrigin = TypeAliasType("ImportSessionOrigin", Literal["internal", "external"])
+
+
+ImportSessionStatus = TypeAliasType(
+    "ImportSessionStatus",
+    Literal[
+        "uploaded",
+        "parsed",
+        "ready_for_review",
+        "committing",
+        "partially_committed",
+        "committed",
+        "failed",
+        "cancelled",
+    ],
+)
+
+
+class ImportSessionSummaryModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    diagnostics: Annotated[list[ImportDiagnosticModel] | None, Field(validate_default=True)] = []
+    records_by_entity_type: dict[str, int] | None = {}
+    records_by_status: dict[str, int] | None = {}
+    total_records: int | None = 0
+
+
 class ImportSuggestionModel(BaseModel):
     entity: ArchiveEntity
     import_parent_natural_key_id: str | None = None
     natural_key: dict[str, str | int | None]
     natural_key_id: str
     reason: str | None = "natural_key_match"
+
+
+InsituProductionType = TypeAliasType(
+    "InsituProductionType", Literal["single_phase_oil", "single_phase_gas", "two_phase_gas_oil"]
+)
 
 
 class IonDataModel(BaseModel):
@@ -1039,7 +1487,98 @@ MudBase = TypeAliasType("MudBase", Literal["Water", "Oil"])
 MudContaminationUnit = TypeAliasType("MudContaminationUnit", Literal["mass%", "mole%"])
 
 
+MultiContactDirection = TypeAliasType(
+    "MultiContactDirection", Literal["Forward Contact", "Backward Contact"]
+)
+
+
+class MultiContactExperimentModel(BaseModel):
+    density_unit: LiquidDensityUnit | None = "g/cm3"
+    direction: MultiContactDirection
+    equilibrium_volume_unit: LabVolumeUnit | None = "cm3"
+    fvf_gas_unit: GasFvfUnit | None = "m3/Sm3"
+    fvf_oil_unit: FvfUnit | None = "m3/Sm3"
+    gas_oil_ratio_unit: GorUnit | None = "Sm3/Sm3"
+    injection_gas_composition: CompositionModel | None = None
+    name: str
+    original_fluid_volume: OriginalFluidVolume | None = None
+    original_fluid_volume_unit: LabVolumeUnit | None = "cm3"
+    pressure: float
+    pressure_unit: PressureUnit
+    relative_equilibrium_moles_unit: AmountUnit | None = "%"
+    relative_equilibrium_volume_unit: AmountUnit | None = "%"
+    relative_moles_injected_unit: MolesInjectedUnit | None = "inj./total %"
+    relative_volume_injected_unit: MolesInjectedUnit | None = "inj./total %"
+    stages: list[MultiContactStageModel]
+    temperature: float
+    temperature_unit: TemperatureUnit
+    type: Literal["MultiContact"]
+    viscosity_unit: ViscosityUnit | None = "cP"
+    volume_injected_unit: LabVolumeUnit | None = "cm3"
+
+
+class MultiContactStageCCEDataModel(BaseModel):
+    pressure: float
+    relative_oil_volume: float | None = None
+    relative_total_volume: float | None = None
+    single_phase_density: float | None = None
+    single_phase_viscosity: float | None = None
+
+
+class MultiContactStageModel(BaseModel):
+    cce_data: Annotated[
+        list[MultiContactStageCCEDataModel] | None, Field(validate_default=True)
+    ] = []
+    density_gas: float | None = None
+    density_oil: float | None = None
+    equilibrium_moles_gas: float | None = None
+    equilibrium_moles_oil: float | None = None
+    equilibrium_volume_gas: float | None = None
+    equilibrium_volume_oil: float | None = None
+    flashed_oil_api_gas: float | None = None
+    flashed_oil_api_oil: float | None = None
+    fvf_gas: float | None = None
+    fvf_oil: float | None = None
+    gas_gravity_gas: float | None = None
+    gas_gravity_oil: float | None = None
+    gas_oil_ratio_gas: float | None = None
+    gas_oil_ratio_oil: float | None = None
+    lower_phase_composition: CompositionModel | None = None
+    moles_injected_gas: float | None = None
+    moles_injected_oil: float | None = None
+    pressure_unit: PressureUnit | None = "bara"
+    relative_equilibrium_moles_oil: float | None = None
+    relative_equilibrium_volume_oil: float | None = None
+    relative_moles_injected: float | None = None
+    relative_oil_volume_unit: RelativeOilVolumeBasis | None = "Vo/Vsat (%)"
+    relative_volume_injected: float | None = None
+    single_phase_density_unit: LiquidDensityUnit | None = "g/cm3"
+    single_phase_viscosity_unit: ViscosityUnit | None = "cP"
+    upper_phase_composition: CompositionModel | None = None
+    viscosity_gas: float | None = None
+    viscosity_oil: float | None = None
+    volume_injected_gas: float | None = None
+    volume_injected_oil: float | None = None
+
+
 Mw = TypeAliasType("Mw", Annotated[float, Field(gt=0.0)])
+
+
+NonEmptyLowerString = TypeAliasType("NonEmptyLowerString", Annotated[str, Field(min_length=1)])
+
+
+class OSDURecordEnvelopeModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    acl: dict[str, list[str]] | None = None
+    data: dict[str, Any] | None = {}
+    id: str
+    kind: str
+    legal: dict[str, Any] | None = None
+
+
+OriginalFluidVolume = TypeAliasType("OriginalFluidVolume", Annotated[float, Field(gt=0.0)])
 
 
 OutputUnitSystem = TypeAliasType("OutputUnitSystem", Literal["SI", "FIELD", "CANADA"])
@@ -1181,10 +1720,42 @@ RelativeTotalVolumeUnitType = TypeAliasType(
 )
 
 
+class ReportArchiveCommitResultModel(BaseModel):
+    created: dict[str, int]
+    id_map: dict[str, dict[str, int]]
+    reused: dict[str, int]
+    skipped: dict[str, int]
+
+
+class ReportImportPayloadModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    entity_type: Literal["report"] = "report"
+    name: str | None = None
+
+
+RequestedSourceFormat = TypeAliasType(
+    "RequestedSourceFormat", Literal["auto", "osdu", "whitson_pvt"]
+)
+
+
 ReservoirType = TypeAliasType("ReservoirType", Literal["Conventional", "Unconventional"])
 
 
 ResistivityUnit = TypeAliasType("ResistivityUnit", Literal["ohm-m"])
+
+
+class SampleImportPayloadModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    entity_type: Literal["sample"] = "sample"
+    name: str | None = None
+    well_name: str | None = None
+
+
+SampleRecombinationType = TypeAliasType("SampleRecombinationType", Literal["separator", "ssf"])
 
 
 class SampleToEosSlateConversionCalculationRequestModel(BaseModel):
@@ -1248,16 +1819,16 @@ class SaturationPressureCalculationResultModel(BaseModel):
     liquid_composition: list[CalculationCompositionEntryModel]
     liquid_mole_fractions: list[float]
     liquid_mole_numbers: list[float]
-    liquid_phase_properties: PhasePropertiesModel
+    liquid_phase_properties: ExtendedPhasePropertiesModel
     number_of_phases: int
-    overall_phase_properties: PhasePropertiesModel
+    overall_phase_properties: ExtendedPhasePropertiesModel
     saturation_point_type: SaturationPointType
     saturation_pressure: float
     temperature: float
     vapor_composition: list[CalculationCompositionEntryModel]
     vapor_mole_fractions: list[float]
     vapor_mole_numbers: list[float]
-    vapor_phase_properties: PhasePropertiesModel
+    vapor_phase_properties: ExtendedPhasePropertiesModel
 
 
 SaturationPressureDirection = TypeAliasType(
@@ -1278,7 +1849,7 @@ class SeparatorProcessCalculationRequestModel(BaseModel):
         list[SeparatorProcessCalculationInputModel], Field(max_length=10000, min_length=1)
     ]
     output_unit_system: OutputUnitSystem | None = "SI"
-    surface_process: SurfaceProcessModel
+    surface_process: SurfaceProcessInputModel
 
 
 class SeparatorProcessCalculationResponseModel(BaseModel):
@@ -1342,6 +1913,40 @@ class SeparatorProcessCalculationSurfacePropertiesModel(BaseModel):
     oil_composition: list[CalculationCompositionEntryModel] | None
 
 
+class SingleRecordImportRequestModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    auto_commit: bool | None = False
+    context: SingleRecordImportSuppliedContextModel | None = None
+    import_session_id: int | None = None
+    region_id: int | None = None
+    source_format: SourceFormat
+    source_record: OSDURecordEnvelopeModel
+
+
+class SingleRecordImportResponseModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    auto_commit_requested: bool | None = False
+    auto_commit_scope: Literal["appended_record_only"] | None = None
+    commit_result: ImportCommitResultModel | None = None
+    committed: bool | None = False
+    created: bool | None = True
+    import_session: ImportSessionModel
+    record: ImportRecordModel
+
+
+class SingleRecordImportSuppliedContextModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    report_id: int | None = None
+    sample_id: int | None = None
+    well_id: int | None = None
+
+
 class SlimtubeExperimentModel(BaseModel):
     average_pressure_unit: PressureUnit | None = "bara"
     final_recovery_unit: AmountUnit | None = "%"
@@ -1395,20 +2000,48 @@ class SlimtubeStageModel(BaseModel):
 SolutionCgrUnit = TypeAliasType("SolutionCgrUnit", Literal["Sm3/1e6-Sm3", "STB/MMscf"])
 
 
+SourceFormat = TypeAliasType("SourceFormat", Literal["osdu", "whitson_pvt"])
+
+
+class SourceRecordModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    external_id: str | None = None
+    kind: str
+    path: str | None = None
+    payload: dict[str, Any]
+    source_format: SourceFormat
+
+
 StocktankGorUnit = TypeAliasType(
     "StocktankGorUnit",
     Literal["Sm3/Sm3", "scf/STB", "1e6-Sm3/Sm3", "MMscf/STB", "1e3-Sm3/Sm3", "Mscf/STB"],
 )
 
 
-class SurfaceProcessModel(BaseModel):
+class SurfaceProcessInputModel(BaseModel):
     pressure_unit: PressureUnit
-    stages: Annotated[list[SurfaceProcessStageModel], Field(max_length=20, min_length=1)]
+    stages: Annotated[list[SurfaceProcessStageInputModel], Field(max_length=20, min_length=1)]
     temperature_unit: TemperatureUnit
+
+
+class SurfaceProcessModel(BaseModel):
+    id: int
+    pressure_unit: PressureUnit
+    stages: list[SurfaceProcessStageModel]
+    temperature_unit: TemperatureUnit
+
+
+class SurfaceProcessStageInputModel(BaseModel):
+    pressure: float
+    temperature: float
 
 
 class SurfaceProcessStageModel(BaseModel):
     pressure: float
+    stage_index: int
+    surface_process_id: int
     temperature: float
 
 
@@ -1431,6 +2064,7 @@ class SwellTestStageCCEDataModel(BaseModel):
     relative_oil_volume: float | None = None
     relative_total_volume: float | None = None
     single_phase_density: float | None = None
+    single_phase_viscosity: float | None = None
 
 
 class SwellTestStageModel(BaseModel):
@@ -1443,8 +2077,9 @@ class SwellTestStageModel(BaseModel):
     relative_oil_volume_unit: RelativeOilVolumeBasis | None = "Vo/Vsat (%)"
     relative_volume_at_saturation_pressure: float | None = None
     saturation_pressure: float
-    saturation_pressure_type: SaturationPressureType
+    saturation_pressure_type: SaturationPressureType | None = None
     single_phase_density_unit: LiquidDensityUnit | None = "g/cm3"
+    single_phase_viscosity_unit: ViscosityUnit | None = "cP"
 
 
 class TBPCutModel(BaseModel):
@@ -1534,6 +2169,10 @@ class UpdateSampleItemModel(BaseModel):
     pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
     pressure_when_sampled_unit: PressureUnit | None = None
+    primary_recombination_type: SampleRecombinationType | None = None
+    """
+    Recombination used for fluid analyses. Only applies to SEP samples; ignored for other sample types.
+    """
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
     recombined_fluid_contamination_unit: MudContaminationUnit | None = None
@@ -1559,6 +2198,23 @@ class UpdateSampleItemModel(BaseModel):
     sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
     sep_temperature_unit: TemperatureUnit | None = None
+    ssf_flashed_gas_composition: CompositionModel | None = None
+    ssf_flashed_gas_mw: float | None = None
+    ssf_flashed_gas_specific_gravity: float | None = None
+    ssf_flashed_oil_composition: CompositionModel | None = None
+    ssf_flashed_oil_contamination: float | None = None
+    ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
+    ssf_flashed_oil_density: float | None = None
+    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_mw: float | None = None
+    ssf_flashed_oil_temperature: float | None = None
+    ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
+    ssf_recombined_fluid_composition: CompositionModel | None = None
+    ssf_recombined_fluid_contamination: float | None = None
+    ssf_recombined_fluid_contamination_unit: MudContaminationUnit | None = None
+    ssf_recombined_fluid_gor: float | None = None
+    ssf_recombined_fluid_gor_unit: GorUnit | None = None
+    ssf_recombined_fluid_mw: float | None = None
     temperature_at_lab: float | None = None
     temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
@@ -1629,6 +2285,10 @@ class UpdateSampleModel(BaseModel):
     pressure_at_lab_unit: PressureUnit | None = None
     pressure_when_sampled: float | None = None
     pressure_when_sampled_unit: PressureUnit | None = None
+    primary_recombination_type: SampleRecombinationType | None = None
+    """
+    Recombination used for fluid analyses. Only applies to SEP samples; ignored for other sample types.
+    """
     recombined_fluid_composition: CompositionModel | None = None
     recombined_fluid_contamination: float | None = None
     recombined_fluid_contamination_unit: MudContaminationUnit | None = None
@@ -1654,6 +2314,23 @@ class UpdateSampleModel(BaseModel):
     sep_pressure_unit: PressureUnit | None = None
     sep_temperature: float | None = None
     sep_temperature_unit: TemperatureUnit | None = None
+    ssf_flashed_gas_composition: CompositionModel | None = None
+    ssf_flashed_gas_mw: float | None = None
+    ssf_flashed_gas_specific_gravity: float | None = None
+    ssf_flashed_oil_composition: CompositionModel | None = None
+    ssf_flashed_oil_contamination: float | None = None
+    ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
+    ssf_flashed_oil_density: float | None = None
+    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_mw: float | None = None
+    ssf_flashed_oil_temperature: float | None = None
+    ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
+    ssf_recombined_fluid_composition: CompositionModel | None = None
+    ssf_recombined_fluid_contamination: float | None = None
+    ssf_recombined_fluid_contamination_unit: MudContaminationUnit | None = None
+    ssf_recombined_fluid_gor: float | None = None
+    ssf_recombined_fluid_gor_unit: GorUnit | None = None
+    ssf_recombined_fluid_mw: float | None = None
     temperature_at_lab: float | None = None
     temperature_at_lab_unit: TemperatureUnit | None = None
     temperature_when_sampled: float | None = None
@@ -1711,11 +2388,17 @@ class UpdateWellsListModel(RootModel[list[UpdateWellItemModel]]):
     root: list[UpdateWellItemModel]
 
 
+UtcDatetime = TypeAliasType("UtcDatetime", AwareDatetime)
+
+
 class VISCOExperimentModel(BaseModel):
+    gas_density_unit: LiquidDensityUnit | None = "g/cm3"
     gas_viscosity_unit: ViscosityUnit | None = "cP"
     name: str
+    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
     oil_viscosity_unit: ViscosityUnit | None = "cP"
     pressure_unit: PressureUnit | None = "bara"
+    saturation_pressure_type: SaturationPressureType | None = None
     stages: list[VISCOStageModel]
     temperature: float
     temperature_unit: TemperatureUnit
@@ -1732,14 +2415,18 @@ Experiments = TypeAliasType(
         | TBPExperimentModel
         | VISCOExperimentModel
         | SlimtubeExperimentModel
-        | SwellTestExperimentModel,
+        | SwellTestExperimentModel
+        | MultiContactExperimentModel,
         Field(discriminator="type"),
     ],
 )
 
 
 class VISCOStageModel(BaseModel):
+    gas_density: float | None = None
     gas_viscosity: float | None = None
+    is_saturation_pressure: bool | None = False
+    oil_density: float | None = None
     oil_viscosity: float | None = None
     pressure: float
 
@@ -2052,6 +2739,115 @@ class ViscosityModelModel(BaseModel):
 
 
 ViscosityUnit = TypeAliasType("ViscosityUnit", Literal["cP", "micro-cP"])
+
+
+VolumeUnit = TypeAliasType(
+    "VolumeUnit", Literal["m3", "1e3-m3", "1e6-m3", "ft3", "Mft3", "MMft3", "bbl", "L", "mL", "cm3"]
+)
+
+
+class VolumetricToCompositionConversionCalculationRequestModel(BaseModel):
+    fluid: VolumetricToCompositionConversionFluidModel
+    fluid_model_id: int
+    gas_volume_unit: VolumeUnit
+    inputs: Annotated[
+        list[VolumetricToCompositionConversionInputModel], Field(max_length=10000, min_length=1)
+    ]
+    """
+    Rows succeed or fail independently.
+    """
+    oil_volume_unit: VolumeUnit
+    output_unit_system: OutputUnitSystem | None = "SI"
+    pressure_unit: PressureUnit
+    remove_mud_components: bool | None = False
+
+
+class VolumetricToCompositionConversionCalculationResponseModel(BaseModel):
+    component_names: list[str]
+    fluid_properties: VolumetricToCompositionConversionFluidPropertiesModel
+    output_unit_system: OutputUnitSystem
+    output_units: CalculationOutputUnitsModel
+    results: list[
+        ExternalCalculationResultModelExternalVolumetricToCompositionConversionCalculationResultModel
+    ]
+
+
+class VolumetricToCompositionConversionCalculationResultModel(BaseModel):
+    mole_numbers: list[float]
+    """
+    Component amounts in kmol, regardless of output_unit_system, ordered as component_names.
+    """
+    production_type: InsituProductionType
+    """
+    Reservoir phase state inferred for this row.
+    """
+
+
+class VolumetricToCompositionConversionFluidModel(BaseModel):
+    bot_gas_composition: BotGasComposition | None = None
+    """
+    Saturated gas at its dew point. Derived from bot_oil_composition when omitted.
+    """
+    bot_oil_composition: BotOilComposition | None = None
+    """
+    Saturated oil at its bubble point. Derived from bot_gas_composition when omitted.
+    """
+    bot_surface_process: SurfaceProcessInputModel
+    """
+    Separator train used to calculate GORs.
+    """
+    bot_temperature: float
+    bot_temperature_unit: TemperatureUnit
+
+
+class VolumetricToCompositionConversionFluidPropertiesModel(BaseModel):
+    gas_phase_gas_oil_ratio: float | None
+    """
+    GOR after bot_surface_process. Null when no surface oil forms.
+    """
+    gas_saturation_pressure: float
+    """
+    Gas dew-point pressure. Equals the oil bubble point when only one composition is given.
+    """
+    oil_phase_gas_oil_ratio: float | None
+    """
+    GOR after bot_surface_process. Null when no surface oil forms.
+    """
+    oil_saturation_pressure: float
+
+
+class VolumetricToCompositionConversionInputModel(BaseModel):
+    gas_volume: Annotated[float, Field(gt=0.0)]
+    """
+    Total surface gas volume at standard conditions.
+    """
+    oil_volume: Annotated[float, Field(ge=0.0)]
+    """
+    Oil volume at the last-stage conditions of bot_surface_process. Zero means gas-only production.
+    """
+    pressure: float
+
+
+class WellImportPayloadModel(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    entity_type: Literal["well"] = "well"
+    name: str | None = None
+
+
+ImportPayloadModel = TypeAliasType(
+    "ImportPayloadModel",
+    Annotated[
+        ReportImportPayloadModel
+        | WellImportPayloadModel
+        | SampleImportPayloadModel
+        | ExperimentImportPayloadModel
+        | CompositionImportPayloadModel
+        | FileImportPayloadModel,
+        Field(discriminator="entity_type"),
+    ],
+)
 
 
 class WellsListModel(BaseModel):

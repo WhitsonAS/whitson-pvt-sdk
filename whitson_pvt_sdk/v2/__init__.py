@@ -16,10 +16,14 @@ class WhitsonPVTClientV2(_BaseClient):
     black_oil_tables: resources.BlackOilTables
     reports: resources.Reports
     calculations: resources.Calculations
+    import_records: resources.ImportRecords
+    import_sessions: resources.ImportSessions
 
     def __init__(self, transport: "HTTPTransport") -> None:
         super().__init__(transport, resources)
         self.calculations = resources.Calculations(transport)
+        self.import_records = resources.ImportRecords(transport)
+        self.import_sessions = resources.ImportSessions(transport)
 
 
 __all__ = ["WhitsonPVTClientV2"]

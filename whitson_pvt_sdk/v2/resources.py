@@ -9,11 +9,13 @@ from whitson_pvt_sdk.v2.models import (
     GorUnit,
     RecombinationType,
     SampleToEosSlateConversionCalculationRequestModel,
-    SurfaceProcessModel,
+    SurfaceProcessInputModel,
 )
 
 BlackOilTables = generated_resources.BlackOilTables
 FluidModels = generated_resources.FluidModels
+ImportRecords = generated_resources.ImportRecords
+ImportSessions = generated_resources.ImportSessions
 Projects = generated_resources.Projects
 Regions = generated_resources.Regions
 Reports = generated_resources.Reports
@@ -70,7 +72,7 @@ class Calculations(generated_resources.Calculations):
         gor_values: dict[int, float],
         gor_unit: GorUnit,
         recombination_type: RecombinationType,
-        surface_process: SurfaceProcessModel,
+        surface_process: SurfaceProcessInputModel,
         *,
         remove_mud_components: bool = False,
         feed_compositions: dict[int, list[CalculationCompositionEntryModel]] | None = None,
@@ -115,7 +117,7 @@ class Calculations(generated_resources.Calculations):
         recombination_gor: float,
         gor_unit: GorUnit,
         recombination_type: RecombinationType,
-        surface_process: SurfaceProcessModel,
+        surface_process: SurfaceProcessInputModel,
         *,
         remove_mud_components: bool = False,
         feed_composition: list[CalculationCompositionEntryModel] | None = None,
@@ -151,6 +153,8 @@ __all__ = (
     "BlackOilTables",
     "Calculations",
     "FluidModels",
+    "ImportRecords",
+    "ImportSessions",
     "Projects",
     "Regions",
     "Reports",

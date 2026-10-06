@@ -16,8 +16,8 @@ from whitson_pvt_sdk.v2.models import (
     SaturationPressureCalculationRequestModel,
     SeparatorProcessCalculationInputModel,
     SeparatorProcessCalculationRequestModel,
-    SurfaceProcessModel,
-    SurfaceProcessStageModel,
+    SurfaceProcessInputModel,
+    SurfaceProcessStageInputModel,
 )
 
 
@@ -36,11 +36,11 @@ def feed_composition(
 
 
 @pytest.fixture(scope="session")
-def surface_process() -> SurfaceProcessModel:
-    return SurfaceProcessModel(
+def surface_process() -> SurfaceProcessInputModel:
+    return SurfaceProcessInputModel(
         pressure_unit="bara",
         temperature_unit="C",
-        stages=[SurfaceProcessStageModel(pressure=1.01325, temperature=15.0)],
+        stages=[SurfaceProcessStageInputModel(pressure=1.01325, temperature=15.0)],
     )
 
 
@@ -120,7 +120,7 @@ def test_gor_recombination_calculation(
     client_v2: WhitsonPVTClientV2,
     require_id: Callable[[str], int],
     feed_composition,
-    surface_process: SurfaceProcessModel,
+    surface_process: SurfaceProcessInputModel,
 ):
     result = client_v2.calculations.calculate_gor_recombination(
         GorRecombinationCalculationRequestModel(
@@ -143,7 +143,7 @@ def test_separator_process_calculation(
     client_v2: WhitsonPVTClientV2,
     require_id: Callable[[str], int],
     feed_composition,
-    surface_process: SurfaceProcessModel,
+    surface_process: SurfaceProcessInputModel,
 ):
     result = client_v2.calculations.calculate_separator_process(
         SeparatorProcessCalculationRequestModel(

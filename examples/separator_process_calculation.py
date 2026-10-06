@@ -16,8 +16,8 @@ from whitson_pvt_sdk.utils import print_json
 from whitson_pvt_sdk.v2.models import (
     SeparatorProcessCalculationInputModel,
     SeparatorProcessCalculationRequestModel,
-    SurfaceProcessModel,
-    SurfaceProcessStageModel,
+    SurfaceProcessInputModel,
+    SurfaceProcessStageInputModel,
 )
 
 
@@ -44,10 +44,10 @@ def main() -> None:
     separator_process = client.calculations.calculate_separator_process(
         SeparatorProcessCalculationRequestModel(
             fluid_model_id=fluid_model_id,
-            surface_process=SurfaceProcessModel(
+            surface_process=SurfaceProcessInputModel(
                 pressure_unit="bara",
                 temperature_unit="C",
-                stages=[SurfaceProcessStageModel(pressure=50.0, temperature=50.0)],
+                stages=[SurfaceProcessStageInputModel(pressure=50.0, temperature=50.0)],
             ),
             inputs=[SeparatorProcessCalculationInputModel(feed_composition=feed_composition)],
         )
