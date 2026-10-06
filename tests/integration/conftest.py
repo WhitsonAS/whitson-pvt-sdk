@@ -5,7 +5,7 @@ from collections.abc import Iterator
 import pytest
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials
+from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.models import (
     CCEExperimentModel,
@@ -92,6 +92,8 @@ def client_v2(
         credentials=integration_credentials,
         base_url=integration_base_url,
         version="v2",
+        # Surface the first live failure instead of hiding it behind retries/rate-limit waits.
+        retry_config=RetryConfig(max_attempts=1),
     )
     try:
         yield client
