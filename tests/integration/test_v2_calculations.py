@@ -2,9 +2,9 @@ from collections.abc import Callable
 
 import pytest
 
-from whitson_pvt_sdk.errors import CalculationError
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.models import (
+    CalculationErrorResultModel,
     FlashCalculationInputModel,
     FlashCalculationRequestModel,
     GorRecombinationCalculationInputModel,
@@ -18,21 +18,20 @@ from whitson_pvt_sdk.v2.models import (
     SeparatorProcessCalculationRequestModel,
     SurfaceProcessInputModel,
     SurfaceProcessStageInputModel,
+    VolumetricToCompositionConversionCalculationRequestModel,
+    VolumetricToCompositionConversionFluidModel,
+    VolumetricToCompositionConversionInputModel,
 )
 
 
 @pytest.fixture(scope="session")
-def feed_composition(
-    client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int], created_sample
-):
-    try:
-        return client_v2.calculations.get_sample_feed_composition(
-            fluid_model_id=require_id("FLUID_MODEL_ID"),
-            sample_id=created_sample.id,
-            source="slate_to_slate_converted",
-        )
-    except CalculationError as exc:
-        pytest.skip(f"Sample/feed composition is incompatible with fluid model: {exc}")
+def feed_composition(client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int]):
+    # Independent of conversion: one backend error must not skip six other endpoints.
+    return client_v2.calculations.get_sample_feed_composition(
+        fluid_model_id=require_id("FLUID_MODEL_ID"),
+        sample_id=require_id("SAMPLE_ID"),
+        source="adjusted_compositions",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -53,7 +52,11 @@ def test_sample_to_eos_slate_conversion(
             sample_ids=[created_sample.id],
         )
     )
-    assert result.results
+    assert len(result.results) == 1
+    row = result.results[0]
+    assert not isinstance(row, CalculationErrorResultModel), row.model_dump()
+    assert sum(row.result.mole_fractions) == pytest.approx(1.0)
+    assert sum(row.result.mass_fractions) == pytest.approx(1.0)
 
 
 def test_get_sample_feed_composition(feed_composition):
@@ -79,7 +82,11 @@ def test_flash_calculation(
             ],
         )
     )
-    assert result.results
+    assert len(result.results) == 1
+    row = result.results[0]
+    assert not isinstance(row, CalculationErrorResultModel), row.model_dump()
+    assert row.result.pressure == pytest.approx(50.0)
+    assert sum(row.result.feed_mole_fractions) == pytest.approx(1.0)
 
 
 def test_saturation_pressure_calculation(
@@ -99,7 +106,10 @@ def test_saturation_pressure_calculation(
             ],
         )
     )
-    assert result.results
+    assert len(result.results) == 1
+    row = result.results[0]
+    assert not isinstance(row, CalculationErrorResultModel), row.model_dump()
+    assert row.result.saturation_pressure > 0
 
 
 def test_phase_envelope_calculation(
@@ -113,7 +123,8 @@ def test_phase_envelope_calculation(
             inputs=[PhaseEnvelopeCalculationInputModel(feed_composition=feed_composition)],
         )
     )
-    assert result.results
+    assert len(result.results) == 1
+    assert result.results[0].status == "success", result.model_dump()
 
 
 def test_gor_recombination_calculation(
@@ -136,7 +147,10 @@ def test_gor_recombination_calculation(
             ],
         )
     )
-    assert result.results
+    assert len(result.results) == 1
+    row = result.results[0]
+    assert not isinstance(row, CalculationErrorResultModel), row.model_dump()
+    assert sum(row.result.mole_fractions) == pytest.approx(1.0)
 
 
 def test_separator_process_calculation(
@@ -152,4 +166,38 @@ def test_separator_process_calculation(
             inputs=[SeparatorProcessCalculationInputModel(feed_composition=feed_composition)],
         )
     )
-    assert result.results
+    assert len(result.results) == 1
+    assert result.results[0].status == "success", result.model_dump()
+
+
+def test_volumetric_to_composition_calculation(
+    client_v2: WhitsonPVTClientV2,
+    require_id: Callable[[str], int],
+    feed_composition,
+    surface_process: SurfaceProcessInputModel,
+):
+    result = client_v2.calculations.calculate_volumetric_to_composition_conversion(
+        VolumetricToCompositionConversionCalculationRequestModel(
+            fluid_model_id=require_id("FLUID_MODEL_ID"),
+            pressure_unit="bara",
+            oil_volume_unit="m3",
+            gas_volume_unit="m3",
+            fluid=VolumetricToCompositionConversionFluidModel(
+                bot_oil_composition=feed_composition,
+                bot_temperature=50.0,
+                bot_temperature_unit="C",
+                bot_surface_process=surface_process,
+            ),
+            inputs=[
+                VolumetricToCompositionConversionInputModel(
+                    pressure=100.0, oil_volume=1.0, gas_volume=100.0
+                )
+            ],
+        )
+    )
+    assert len(result.results) == 1
+    row = result.results[0]
+    assert not isinstance(row, CalculationErrorResultModel), row.model_dump()
+    assert len(row.result.mole_numbers) == len(result.component_names)
+    assert all(amount >= 0 for amount in row.result.mole_numbers)
+    assert sum(row.result.mole_numbers) > 0

@@ -41,8 +41,10 @@ def _sample_model(name: str, well_id: int) -> CreateSampleModel:
         well_id=well_id,
         recombined_fluid_composition=CompositionModel(
             components=[
-                CompositionComponentModel(name="C1", input_name="C1", molar_amount=0.8),
-                CompositionComponentModel(name="C2", input_name="C2", molar_amount=0.2),
+                CompositionComponentModel(name="C1", input_name="C1", molar_amount=0.6),
+                CompositionComponentModel(name="C2", input_name="C2", molar_amount=0.1),
+                # Slate conversion requires a characterized residue, not just light ends.
+                CompositionComponentModel(name="C7+", input_name="C7+", molar_amount=0.3, mw=200.0),
             ]
         ),
         experiments=[
@@ -110,6 +112,7 @@ def ids() -> dict[str, int]:
             "FLUID_MODEL_ID",
             "BLACK_OIL_TABLE_ID",
             "REPORT_ID",
+            "SAMPLE_ID",
         )
         if (value := _env_int(f"WHITSON_INTEGRATION_{name}")) is not None
     }
