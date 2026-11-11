@@ -477,12 +477,6 @@ def test_retry_config_max_attempts_one_disables_retries(credentials, base_url, h
     assert len(_requests_to(httpx_mock, url)) == 1
 
 
-def test_timeout_configures_default_http_timeout(credentials, base_url):
-    transport = HTTPTransport(credentials, base_url, version="v2", timeout=12.5)
-
-    assert transport._http.timeout.read == 12.5
-
-
 @pytest.mark.usefixtures("auth_mock")
 def test_file_timeout_configures_download_timeout(credentials, base_url, httpx_mock):
     transport = HTTPTransport(credentials, base_url, version="v2", file_timeout=19.5)

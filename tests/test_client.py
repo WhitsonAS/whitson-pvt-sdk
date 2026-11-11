@@ -118,9 +118,22 @@ def test_passes_retry_config(credentials, base_url):
     assert client._transport._retry_config is retry_config
 
 
-def test_passes_timeout_config(credentials, base_url):
+@pytest.mark.usefixtures("auth_mock")
+def test_passes_timeout_config(credentials, base_url, httpx_mock):
     client = WhitsonPVTClient(
         credentials=credentials, base_url=base_url, timeout=12.5, file_timeout=19.5
     )
-    assert client._transport._http.timeout.read == 12.5
-    assert client._transport._file_timeout == 19.5
+    regions_url = f"{base_url}/external/v2/regions"
+    export_url = f"{base_url}/external/v2/reports/1/export"
+    httpx_mock.add_response(
+        url=regions_url,
+        json={"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}},
+    )
+    httpx_mock.add_response(url=export_url, content=b"zip")
+    client.regions.list()
+    client.reports.export(report_id=1)
+    assert [
+        r.extensions["timeout"]["read"]
+        for r in httpx_mock.get_requests()
+        if str(r.url) in (regions_url, export_url)
+    ] == [12.5, 19.5]

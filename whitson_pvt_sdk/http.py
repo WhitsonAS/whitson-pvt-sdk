@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 from types import TracebackType
-from typing import Any, TypeAlias, cast
+from typing import Any, Literal, TypeAlias, cast
 
 import httpx
 
@@ -40,7 +40,7 @@ class HTTPTransport:
         credentials: ClientCredentials,
         base_url: str,
         *,
-        version: str = "v1",
+        version: Literal["v2"] = "v2",
         retry_config: RetryConfig | None = None,
         timeout: float = 30.0,
         file_timeout: float = 60.0,
@@ -268,11 +268,11 @@ class HTTPTransport:
         method: str,
         path: str,
         *,
+        timeout: httpx.Timeout | float,
         params: Params = None,
         json: JSONBody = None,
         files: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
-        timeout: float | None = None,
     ) -> httpx.Response:
         method = method.upper()
         for attempt in range(1, self._retry_config.max_attempts + 1):
@@ -359,19 +359,19 @@ class HTTPTransport:
         return rate_limit_reset_after(response)
 
     def get(self, path: str, *, params: Params = None) -> dict[str, Any]:
-        return self._json(self._request("GET", path, params=params))
+        return self._json(self._request("GET", path, params=params, timeout=self._http.timeout))
 
     def post(self, path: str, *, body: JSONBody = None) -> dict[str, Any]:
-        return self._json(self._request("POST", path, json=body))
+        return self._json(self._request("POST", path, json=body, timeout=self._http.timeout))
 
     def put(self, path: str, *, body: JSONBody = None) -> dict[str, Any]:
-        return self._json(self._request("PUT", path, json=body))
+        return self._json(self._request("PUT", path, json=body, timeout=self._http.timeout))
 
     def patch(self, path: str, *, body: JSONBody = None) -> dict[str, Any]:
-        return self._json(self._request("PATCH", path, json=body))
+        return self._json(self._request("PATCH", path, json=body, timeout=self._http.timeout))
 
     def delete(self, path: str) -> None:
-        self._raise_for_status(self._request("DELETE", path))
+        self._raise_for_status(self._request("DELETE", path, timeout=self._http.timeout))
 
     def get_bytes(self, path: str, *, params: Params = None) -> bytes:
         return self._bytes(self._request("GET", path, params=params, timeout=self._file_timeout))
