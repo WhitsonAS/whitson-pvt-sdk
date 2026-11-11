@@ -263,8 +263,10 @@ just ty                          # ty check
 just test                        # pytest
 just integration                 # opt-in tests against a real API
 just build                       # uv build
-just generate v2                 # regenerate v2 models and endpoint wrappers
+just generate v2                 # regenerate v2 models and endpoint wrappers from a live API
 just generate-all                # regenerate every supported version (v2)
+just generate-file v2 FILE       # regenerate v2 from an OpenAPI file, no API needed
+just generate-file-check v2 FILE # only show what would change
 just all                         # generate-all + lint/format + build
 ```
 
@@ -355,9 +357,12 @@ published. The GitHub CLI must be authenticated with release permissions; use
 
 ### Code generation
 
-Generated code comes from the live API's OpenAPI spec:
-
-This fetches `/external/{version}/docs/openapi.json` from the configured `BASE_URL`, runs `datamodel-code-generator` for Pydantic models, then uses the repo-specific generator in `scripts/sdk_generator/` for endpoint modules and resource facades.
+Generated code comes from the external API's OpenAPI document. `just generate`
+fetches `/external/{version}/docs/openapi.json` from the configured `BASE_URL`;
+`just generate-file` reads a saved document instead, so no API has to run. Both
+run `datamodel-code-generator` for Pydantic models, then the repo-specific
+generator in `scripts/sdk_generator/` for endpoint modules and resource facades.
+The `-check` recipes only print the diff.
 
 Generated outputs live under:
 
@@ -372,6 +377,33 @@ SDK-shaped method names such as `list`, `get`, `create`, `update`, `create_bulk`
 
 Authentication endpoints are intentionally excluded from generated resources;
 auth is infrastructure owned by `whitson_pvt_sdk.auth` and `HTTPTransport`.
+
+### Working in a whitsonPVT workspace
+
+The whitsonPVT app repository can add this repository to a development workspace
+as an optional `sdk/` worktree next to `app/` and `utils/`:
+
+```bash
+mise create NAME --sdk           # in the app repository; also adds it to an existing workspace
+```
+
+The SDK branch defaults to the app branch name and starts from `origin/main`.
+From the workspace's `app/`:
+
+```bash
+mise sdk:install                 # uv sync and the commit message hook
+mise sdk:check                   # just lint and just ty, without formatting
+mise sdk:test                    # just test
+mise sdk:generate                # regenerate from the workspace's API source
+mise sdk:generate:check          # only show the drift
+mise sdk:integration             # integration tests against the workspace API
+```
+
+`sdk:generate` writes the external v2 document from the API source, without a
+running API, and runs `just generate-file`'s command on it. `sdk:integration`
+uses the API's local bypass token on its loopback port; start the API with
+`EXTERNAL_API_AUTH_BYPASS=true mise api:dev` first. Commit and release from
+`sdk/` as usual.
 
 ### Package structure
 

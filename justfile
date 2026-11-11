@@ -16,6 +16,13 @@ generate-check version:
 generate-all:
     uv run python scripts/generate_sdk.py all --base-url {{BASE_URL}}
 
+# Generate from an OpenAPI file instead of a live API
+generate-file version file:
+    uv run python scripts/generate_sdk.py {{version}} --openapi {{file}}
+
+generate-file-check version file:
+    uv run python scripts/generate_sdk.py {{version}} --openapi {{file}} --check
+
 # ── lint & typecheck ──────────────────────────────────────────────
 install-hooks:
     uv run prek install --hook-type commit-msg
