@@ -1,6 +1,5 @@
 import pytest
 
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.models import PaginatedWellsModel
 from whitson_pvt_sdk.v2.resources import BlackOilTables, Regions, Wells
 
@@ -66,7 +65,7 @@ def test_regions_list_all_walks_all_pages(transport, httpx_mock):
     ],
 )
 @pytest.mark.parametrize("method", ["list", "iterate", "list_all"])
-def test_name_filter_is_sent_on_every_page(transport, httpx_mock, resource, path, args, method):
+def test_name_filter_is_sent_on_every_page(client, httpx_mock, resource, path, args, method):
     url = f"https://dev.pvt.whitson.com/external/v2{path}"
     pages = 1 if method == "list" else 2
     for index in range(pages):
@@ -84,7 +83,7 @@ def test_name_filter_is_sent_on_every_page(transport, httpx_mock, resource, path
                 },
             },
         )
-    facade = getattr(WhitsonPVTClientV2(transport), resource)
+    facade = getattr(client, resource)
     result = getattr(facade, method)(**args, name="Exact name", limit=2)
     if method != "list":
         assert list(result) == []

@@ -1,150 +1,52 @@
-import logging
-import threading
-import time
-import warnings
-from typing import Any
+import os
+from collections.abc import Generator
+from typing import Annotated
 
 import httpx
+from pydantic import AfterValidator, BaseModel, ConfigDict, SecretStr, ValidationError
 
-from ._retry import retry_delay
-from .errors import AuthError
-from .shared.models import ClientCredentials, RetryConfig, TokenData
+from whitson_pvt_sdk.errors import AuthError
 
-_MIN_TOKEN_LIFETIME = 300
-logger = logging.getLogger("whitson_pvt_sdk")
+TOKEN_ENV_VAR = "PVT_TOKEN"
 
 
-class TokenManager:
-    """Deprecated compatibility wrapper for direct token exchange.
-
-    Token management now lives on :class:`whitson_pvt_sdk.http.HTTPTransport`.
-    Prefer ``WhitsonPVTClient.get_access_token()`` for explicit token reuse.
-    """
-
-    def __init__(
-        self,
-        credentials: ClientCredentials,
-        *,
-        token_url: str,
-        retry_config: RetryConfig | None = None,
-    ) -> None:
-        warnings.warn(
-            "whitson_pvt_sdk.auth.TokenManager is deprecated, discouraged for new usage, "
-            "and will be removed in a future release. Token management is now handled by "
-            "HTTPTransport; use WhitsonPVTClient.get_access_token() for explicit token reuse.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self._credentials = credentials
-        self._token_url = token_url
-        self._retry_config = retry_config or RetryConfig()
-        self._cached_access_token: str | None = None
-        self._cached_expires_at: float = 0.0
-        self._lock = threading.Lock()
-
-    def get_token(self) -> str:
-        token = self._valid_cached_token()
-        if token is not None:
-            return token
-
-        with self._lock:
-            token = self._valid_cached_token()
-            if token is not None:
-                return token
-            return self._exchange()
-
-    def _valid_cached_token(self) -> str | None:
-        if (
-            self._cached_access_token
-            and self._cached_expires_at > time.time() + _MIN_TOKEN_LIFETIME
-        ):
-            return self._cached_access_token
-        return None
-
-    def _exchange(self) -> str:
-        for attempt in range(1, self._retry_config.max_attempts + 1):
-            try:
-                logger.debug("Requesting access token: attempt=%s", attempt)
-                response = httpx.post(
-                    self._token_url,
-                    json={
-                        "client_id": self._credentials.client_id,
-                        "client_secret": self._credentials.client_secret,
-                    },
-                    timeout=10,
-                )
-                if self._should_retry_response(response, attempt):
-                    self._sleep_before_retry(attempt, response)
-                    response.close()
-                    continue
-                response.raise_for_status()
-                token_data = TokenData.model_validate(response.json())
-                self._cached_access_token = token_data.access_token
-                self._cached_expires_at = time.time() + token_data.expires_in
-                logger.debug("Access token cached: expires_in=%s", token_data.expires_in)
-                return self._cached_access_token
-            except httpx.TimeoutException as e:
-                if self._has_attempt_remaining(attempt):
-                    self._sleep_before_retry(attempt)
-                    continue
-                logger.warning("Authentication request timed out")
-                raise AuthError("Authentication service timeout") from e
-            except httpx.HTTPStatusError as e:
-                self._raise_status_error(e)
-            except httpx.HTTPError as e:
-                if self._has_attempt_remaining(attempt):
-                    self._sleep_before_retry(attempt)
-                    continue
-                logger.warning("Authentication request failed: error=%s", e)
-                raise AuthError("Authentication service unavailable") from e
-
-        raise RuntimeError("Authentication retry loop exhausted without returning or raising")
-
-    def _should_retry_response(self, response: httpx.Response, attempt: int) -> bool:
-        return (
-            self._has_attempt_remaining(attempt)
-            and response.status_code in self._retry_config.statuses
-        )
-
-    def _has_attempt_remaining(self, attempt: int) -> bool:
-        return attempt < self._retry_config.max_attempts
-
-    def _sleep_before_retry(self, attempt: int, response: httpx.Response | None = None) -> None:
-        delay = retry_delay(response, self._retry_config, attempt)
-        logger.debug(
-            "Retrying authentication request: attempt=%s status=%s delay=%.3f",
-            attempt,
-            response.status_code if response is not None else None,
-            delay,
-        )
-        time.sleep(delay)
-
-    def _raise_status_error(self, error: httpx.HTTPStatusError) -> None:
-        response = error.response
-        if response.status_code >= 500:
-            logger.warning(
-                "Authentication service unavailable: status=%s",
-                response.status_code,
-            )
-            raise AuthError(
-                "Authentication service unavailable",
-                status_code=response.status_code,
-                response_body=response.text,
-                request_id=response.headers.get("x-request-id"),
-            ) from error
-        try:
-            body: Any = response.json()
-            detail = body.get("error_description") or body.get("error") or response.text
-        except ValueError:
-            body = response.text
-            detail = response.text
-        logger.warning("Authentication failed: status=%s", response.status_code)
-        raise AuthError(
-            f"Authentication failed: {detail}",
-            status_code=response.status_code,
-            response_body=body,
-            request_id=response.headers.get("x-request-id"),
-        ) from error
+def _not_blank(token: SecretStr) -> SecretStr:
+    if not token.get_secret_value().strip():
+        raise ValueError("token is blank")
+    return token
 
 
-__all__ = ["TokenManager"]
+class ApiToken(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    token: Annotated[SecretStr, AfterValidator(_not_blank)]
+
+
+def resolve_credential(token: str | None) -> ApiToken:
+    if token is not None:
+        return _api_token(token, empty_message="The token= argument is empty")
+    env_token = os.environ.get(TOKEN_ENV_VAR)
+    if env_token is not None:
+        return _api_token(env_token, empty_message=f"{TOKEN_ENV_VAR} is set but empty")
+    raise AuthError(
+        "No credentials configured. Provide one of: the token= argument, "
+        f"the {TOKEN_ENV_VAR} environment variable."
+    )
+
+
+def _api_token(value: str, *, empty_message: str) -> ApiToken:
+    try:
+        return ApiToken(token=SecretStr(value))
+    except ValidationError:
+        raise AuthError(empty_message) from None
+
+
+class CredentialAuth(httpx.Auth):
+    def __init__(self, credential: ApiToken) -> None:
+        self._credential = credential
+
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        match self._credential:
+            case ApiToken(token=token):
+                request.headers["Authorization"] = f"Bearer {token.get_secret_value()}"
+                yield request

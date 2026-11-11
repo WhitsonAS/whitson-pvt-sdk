@@ -100,7 +100,7 @@ WHITSON_INTEGRATION_BASE_URL=http://localhost:4000 \
   uv run pytest tests/integration/test_v2_openapi.py -v -m integration -o addopts=''
 ```
 
-For authenticated verification, configure the integration credentials and IDs
+For authenticated verification, configure the integration token and IDs
 listed in the README and run `just integration` against a disposable environment.
 The native and OSDU high-fidelity round-trip tests export the configured report,
 stage it in a unique region, commit real entities, read them back through the SDK,

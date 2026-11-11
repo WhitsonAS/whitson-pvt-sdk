@@ -13,9 +13,9 @@ from zipfile import ZipFile
 
 import pytest
 
+from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.errors import NotFoundError
 from whitson_pvt_sdk.shared.models import ImportArchiveOptions
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.models import (
     CreateRegionModel,
     ImportCommitRequestModel,
@@ -73,7 +73,7 @@ def _rafs_archive_content(data: bytes) -> list[dict[str, Any]]:
     [("whitson_pvt", "auto"), ("osdu", "whitson_high_fidelity"), ("osdu", "osdu_structured")],
 )
 def test_report_roundtrip(
-    client_v2: WhitsonPVTClientV2,
+    client_v2: WhitsonPVTClient,
     require_id: Callable[[str], int],
     run_name: str,
     archive_format: Literal["whitson_pvt", "osdu"],
@@ -242,7 +242,7 @@ def test_report_roundtrip(
 
 
 def test_legacy_report_archive_preflight_and_import(
-    client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int], run_name: str
+    client_v2: WhitsonPVTClient, require_id: Callable[[str], int], run_name: str
 ):
     source_id = require_id("REPORT_ID")
     archive, _ = client_v2.reports.export(source_id)

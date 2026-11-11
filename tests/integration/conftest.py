@@ -5,8 +5,7 @@ from collections.abc import Iterator
 import pytest
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
+from whitson_pvt_sdk.shared.models import RetryConfig
 from whitson_pvt_sdk.v2.models import (
     CCEExperimentModel,
     CCEStageModel,
@@ -75,25 +74,18 @@ def integration_base_url() -> str:
 
 
 @pytest.fixture(scope="session")
-def integration_credentials() -> ClientCredentials:
-    client_id = _env("WHITSON_INTEGRATION_CLIENT_ID")
-    client_secret = _env("WHITSON_INTEGRATION_CLIENT_SECRET")
-    if client_id is None or client_secret is None:
-        pytest.skip(
-            "Set WHITSON_INTEGRATION_CLIENT_ID and "
-            "WHITSON_INTEGRATION_CLIENT_SECRET to run integration tests"
-        )
-    return ClientCredentials(client_id=client_id, client_secret=client_secret)
+def integration_token() -> str:
+    token = _env("WHITSON_INTEGRATION_TOKEN")
+    if token is None:
+        pytest.skip("Set WHITSON_INTEGRATION_TOKEN to run integration tests")
+    return token
 
 
 @pytest.fixture(scope="session")
-def client_v2(
-    integration_base_url: str, integration_credentials: ClientCredentials
-) -> Iterator[WhitsonPVTClientV2]:
+def client_v2(integration_base_url: str, integration_token: str) -> Iterator[WhitsonPVTClient]:
     client = WhitsonPVTClient(
-        credentials=integration_credentials,
+        token=integration_token,
         base_url=integration_base_url,
-        version="v2",
         # Surface the first live failure instead of hiding it behind retries/rate-limit waits.
         retry_config=RetryConfig(max_attempts=1),
     )
@@ -134,7 +126,7 @@ def run_name() -> str:
 
 
 @pytest.fixture(scope="session")
-def created_region(client_v2: WhitsonPVTClientV2, run_name: str):
+def created_region(client_v2: WhitsonPVTClient, run_name: str):
     return client_v2.regions.create(
         CreateRegionModel(
             name=f"{run_name}-region",
@@ -147,7 +139,7 @@ def created_region(client_v2: WhitsonPVTClientV2, run_name: str):
 
 
 @pytest.fixture(scope="session")
-def created_well_result(client_v2: WhitsonPVTClientV2, created_region, run_name: str):
+def created_well_result(client_v2: WhitsonPVTClient, created_region, run_name: str):
     try:
         return client_v2.wells.create(
             CreateWellModel(
@@ -161,7 +153,7 @@ def created_well_result(client_v2: WhitsonPVTClientV2, created_region, run_name:
 
 
 @pytest.fixture(scope="session")
-def created_well(client_v2: WhitsonPVTClientV2, created_well_result, created_region, run_name: str):
+def created_well(client_v2: WhitsonPVTClient, created_well_result, created_region, run_name: str):
     if isinstance(created_well_result, Exception):
         body = {
             "name": f"{run_name}-well-setup",
@@ -177,7 +169,7 @@ def created_well(client_v2: WhitsonPVTClientV2, created_well_result, created_reg
 
 
 @pytest.fixture(scope="session")
-def created_sample_result(client_v2: WhitsonPVTClientV2, created_well, run_name: str):
+def created_sample_result(client_v2: WhitsonPVTClient, created_well, run_name: str):
     try:
         return client_v2.samples.create(_sample_model(f"{run_name}-sample", created_well.id))
     except Exception as exc:

@@ -3,7 +3,6 @@ from typing import Any
 
 import pytest
 
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
     CalculationErrorResultModel,
@@ -48,7 +47,7 @@ SURFACE_PROCESS = {
 ERROR_ROW = {"status": "error", "error": {"code": "calculation_failed", "message": "bad row"}}
 
 
-def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(transport, httpx_mock):
+def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(client, httpx_mock):
     payload = {
         "fluid_model_id": 1,
         "pressure_unit": "bara",
@@ -87,9 +86,7 @@ def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(transport,
             ],
         },
     )
-    result = WhitsonPVTClientV2(
-        transport
-    ).calculations.calculate_volumetric_to_composition_conversion(
+    result = client.calculations.calculate_volumetric_to_composition_conversion(
         VolumetricToCompositionConversionCalculationRequestModel.model_validate(payload)
     )
     assert json.loads(httpx_mock.get_requests()[-1].content) == payload
@@ -101,7 +98,7 @@ def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(transport,
     assert error.error.message == "bad row"
 
 
-def test_gor_helper_uses_input_surface_process_without_database_ids(transport, httpx_mock):
+def test_gor_helper_uses_input_surface_process_without_database_ids(client, httpx_mock):
     httpx_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/calculations/gor-recombination",
@@ -120,13 +117,13 @@ def test_gor_helper_uses_input_surface_process_without_database_ids(transport, h
         },
     )
     feed = [CalculationCompositionEntryModel(component_name="C1", molar_amount=1.0)]
-    result = WhitsonPVTClientV2(transport).calculations.get_gor_recombination_feed_composition(
+    result = client.calculations.get_gor_recombination_feed_composition(
         fluid_model_id=1,
         sample_id=2,
         recombination_gor=100,
         gor_unit="Sm3/m3",
         recombination_type="total_gor",
-        feed_composition=feed,
+        source=feed,
         surface_process=SurfaceProcessInputModel(
             pressure_unit="bara",
             temperature_unit="C",
@@ -138,7 +135,7 @@ def test_gor_helper_uses_input_surface_process_without_database_ids(transport, h
 
 
 @pytest.mark.parametrize("calculation", ["flash", "saturation-pressure"])
-def test_extended_phase_properties_and_nullable_values(transport, httpx_mock, calculation):
+def test_extended_phase_properties_and_nullable_values(client, httpx_mock, calculation):
     phase = {
         "density": 10.0,
         "molecular_weight": 16.0,
@@ -186,7 +183,6 @@ def test_extended_phase_properties_and_nullable_values(transport, httpx_mock, ca
             "results": [{"status": "success", "result": row}, ERROR_ROW],
         },
     )
-    client = WhitsonPVTClientV2(transport)
     payload = {
         "fluid_model_id": 1,
         "temperature_unit": "C",

@@ -1,14 +1,19 @@
-from typing import Any
-
 import pytest
+from pydantic import SecretStr
 
+from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk.auth import ApiToken
 from whitson_pvt_sdk.http import HTTPTransport
-from whitson_pvt_sdk.shared.models import ClientCredentials
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PVT_TOKEN", raising=False)
 
 
 @pytest.fixture
-def credentials() -> ClientCredentials:
-    return ClientCredentials(client_id="test-id", client_secret="test-secret")
+def credential() -> ApiToken:
+    return ApiToken(token=SecretStr("test-token"))
 
 
 @pytest.fixture
@@ -17,21 +22,10 @@ def base_url() -> str:
 
 
 @pytest.fixture
-def auth_mock(httpx_mock: Any) -> None:
-    httpx_mock.add_response(
-        method="POST",
-        url="https://dev.pvt.whitson.com/external/v2/auth/token",
-        json={
-            "access_token": "test-token",
-            "expires_in": 86400,
-            "token_type": "Bearer",
-        },
-    )
+def transport(credential: ApiToken, base_url: str) -> HTTPTransport:
+    return HTTPTransport(credential, base_url)
 
 
 @pytest.fixture
-def transport(
-    credentials: ClientCredentials, base_url: str, request: pytest.FixtureRequest
-) -> HTTPTransport:
-    request.getfixturevalue("auth_mock")
-    return HTTPTransport(credentials, base_url, version="v2")
+def client(base_url: str) -> WhitsonPVTClient:
+    return WhitsonPVTClient(token="test-token", base_url=base_url)

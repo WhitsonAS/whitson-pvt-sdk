@@ -3,7 +3,7 @@
 Demonstrates:
 - argparse-based CLI built on the SDK
 - Subcommands for different resource types
-- Environment variable credentials
+- API token from the PVT_TOKEN environment variable
 - Human-readable output
 
 Usage:
@@ -20,18 +20,12 @@ import sys
 from dotenv import load_dotenv
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 load_dotenv()
 
 
-def get_client() -> WhitsonPVTClientV2:
+def get_client() -> WhitsonPVTClient:
     return WhitsonPVTClient(
-        credentials=ClientCredentials(
-            client_id=os.environ["WHITSON_CLIENT_ID"],
-            client_secret=os.environ["WHITSON_CLIENT_SECRET"],
-        ),
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
     )
 

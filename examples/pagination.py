@@ -11,11 +11,9 @@ import os
 from dotenv import load_dotenv
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
 
-def print_region_summary(client: WhitsonPVTClientV2, limit: int = 100) -> None:
+def print_region_summary(client: WhitsonPVTClient, limit: int = 100) -> None:
     """Stream regions lazily, fetching one page at a time."""
     print("First regions:")
     for index, region in enumerate(client.regions.iterate(limit=limit), start=1):
@@ -24,7 +22,7 @@ def print_region_summary(client: WhitsonPVTClientV2, limit: int = 100) -> None:
             break
 
 
-def print_region_inventory(client: WhitsonPVTClientV2, limit: int = 100) -> None:
+def print_region_inventory(client: WhitsonPVTClient, limit: int = 100) -> None:
     """Collect regions eagerly, then collect related wells/projects per region."""
     regions = client.regions.list_all(limit=limit)
     print(f"Collected {len(regions)} regions total")
@@ -41,10 +39,6 @@ def main() -> None:
     load_dotenv()
 
     client = WhitsonPVTClient(
-        credentials=ClientCredentials(
-            client_id=os.environ["WHITSON_CLIENT_ID"],
-            client_secret=os.environ["WHITSON_CLIENT_SECRET"],
-        ),
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
     )
 

@@ -7,7 +7,7 @@ from zipfile import ZipFile
 
 from pydantic import TypeAdapter
 
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
+from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.v2.models import (
     CreateRegionModel,
     CreateWellModel,
@@ -22,7 +22,7 @@ from whitson_pvt_sdk.v2.models import (
 
 
 def test_osdu_single_records_commit_replay_and_file_limit(
-    client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int], run_name: str
+    client_v2: WhitsonPVTClient, require_id: Callable[[str], int], run_name: str
 ):
     report_id = require_id("REPORT_ID")
     archive, _ = client_v2.reports.export(report_id, format="osdu")

@@ -12,20 +12,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import (
-    ClientCredentials,
-    ImportArchiveOptions,
-)
+from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 
 
 def main() -> None:
     load_dotenv()
 
     client = WhitsonPVTClient(
-        credentials=ClientCredentials(
-            client_id=os.environ["WHITSON_CLIENT_ID"],
-            client_secret=os.environ["WHITSON_CLIENT_SECRET"],
-        ),
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
     )
 

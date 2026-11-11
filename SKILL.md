@@ -1,6 +1,6 @@
 ---
 name: whitson-pvt-sdk
-description: Install and use the Whitson PVT Python SDK from external Python projects. Use when configuring WhitsonPVTClient, authenticating with ClientCredentials, using v2 API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
+description: Install and use the Whitson PVT Python SDK from external Python projects. Use when configuring WhitsonPVTClient, authenticating with an API token (PVT_TOKEN), using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
 ---
 
 # Whitson PVT SDK
@@ -21,31 +21,21 @@ pip install whitson-pvt-sdk
 
 ## Create A Client
 
-Import the public client and credential model:
+Authenticate with an API token. Set `PVT_TOKEN` in the environment (or pass `token=`):
+
+```bash
+export PVT_TOKEN=whitson_pvt_...
+```
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials
 
-client = WhitsonPVTClient(
-    credentials=ClientCredentials(
-        client_id="...",
-        client_secret="...",
-    ),
-    base_url="https://internal.pvt.whitson.com",
-)
+client = WhitsonPVTClient(base_url="https://internal.pvt.whitson.com")
 ```
 
-The SDK targets external API v2 and defaults to `version="v2"`; do not pass `version`. External API v1 was removed in 1.4.0 and `version="v1"` raises `ValueError`; code that still needs v1 must stay on whitson-pvt-sdk 1.3.x.
+The token is sent directly as the bearer. `token=` takes precedence over `PVT_TOKEN`. With neither configured, or with the one in use empty, the client raises `AuthError`. Tokens start with `whitson_pvt_`; never print or log them.
 
-Authentication goes through the external API token endpoint by default. Do not pass provider-specific auth settings unless a non-standard deployment explicitly requires them.
-
-Authentication is handled automatically. If a caller needs the same bearer token
-for a non-SDK integration, use the explicit helper:
-
-```python
-token = client.get_access_token()
-```
+SDK 2.x has no client credentials, no `version=` argument and no v1 API. Code that passes `credentials=ClientCredentials(...)` or `version=` needs SDK 1.x.
 
 Do not use `client.authentication`; auth is not exposed as a resource.
 
@@ -54,8 +44,7 @@ Do not use `client.authentication`; auth is not exposed as a resource.
 The SDK retries transient read failures by default. `GET` requests and downloads
 retry `408`, `429`, `500`, `502`, `503`, and `504`. Mutating requests (`POST`,
 `PUT`, `PATCH`, `DELETE`, and multipart uploads) are not retried by default, except for HTTP `429`
-rate-limit responses. Token exchange follows the same retry timing and attempt
-policy.
+rate-limit responses.
 
 Retry timing honors `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
 headers when present.
@@ -64,10 +53,9 @@ Configure retries and timeouts on `WhitsonPVTClient`:
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+from whitson_pvt_sdk.shared.models import RetryConfig
 
 client = WhitsonPVTClient(
-    credentials=ClientCredentials(client_id="...", client_secret="..."),
     base_url="https://internal.pvt.whitson.com",
     retry_config=RetryConfig(max_attempts=3),
     timeout=30.0,
@@ -105,12 +93,12 @@ black_oil_tables = client.black_oil_tables.list(fluid_model_id=654, limit=100)
 black_oil_table = client.black_oil_tables.get(black_oil_table_id=987)
 ```
 
-For paginated v2 list endpoints, use `iterate()` for lazy traversal or
+For paginated list endpoints, use `iterate()` for lazy traversal or
 `list_all()` for eager collection. Pass `limit=<int>` to control page size.
 
 ## Pagination
 
-v2 list endpoints (regions, wells, projects, fluid models, black oil tables)
+List endpoints (regions, wells, projects, fluid models, black oil tables)
 return a `pagination: PaginationMeta` field with `next_cursor` and `prev_cursor`.
 Use the generated helpers for most callers:
 
@@ -135,7 +123,7 @@ All five resources support `name=` for a case-insensitive exact match, including
 
 ## Creating And Updating Data
 
-Use the generated Pydantic models from `whitson_pvt_sdk.v2.models` for create and update requests.
+Use generated Pydantic models from `whitson_pvt_sdk.v2.models` for create and update requests.
 
 ```python
 from whitson_pvt_sdk.v2.models import CreateRegionModel, UpdateRegionModel

@@ -11,7 +11,7 @@ from whitson_pvt_sdk.errors import (
     ValidationError,
 )
 from whitson_pvt_sdk.http import HTTPTransport
-from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+from whitson_pvt_sdk.shared.models import RetryConfig
 
 
 def _requests_to(httpx_mock, url: str):
@@ -30,14 +30,9 @@ def recorded_sleeps(monkeypatch):
     return sleeps
 
 
-@pytest.mark.usefixtures("auth_mock")
-def test_strips_trailing_slash_from_base_url(httpx_mock):
+def test_strips_trailing_slash_from_base_url(credential, httpx_mock):
     httpx_mock.add_response(url="https://dev.pvt.whitson.com/external/v2/test", json={})
-    t = HTTPTransport(
-        ClientCredentials(client_id="id", client_secret="secret"),
-        "https://dev.pvt.whitson.com/",
-        version="v2",
-    )
+    t = HTTPTransport(credential, "https://dev.pvt.whitson.com/")
     t.get("/test")
     req = httpx_mock.get_requests()[-1]
     assert str(req.url) == "https://dev.pvt.whitson.com/external/v2/test"
@@ -447,14 +442,8 @@ def test_get_bytes_retries_502_then_succeeds(transport, httpx_mock):
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-@pytest.mark.usefixtures("auth_mock")
-def test_retry_config_max_attempts_one_disables_retries(credentials, base_url, httpx_mock):
-    transport = HTTPTransport(
-        credentials,
-        base_url,
-        version="v2",
-        retry_config=RetryConfig(max_attempts=1),
-    )
+def test_retry_config_max_attempts_one_disables_retries(credential, base_url, httpx_mock):
+    transport = HTTPTransport(credential, base_url, retry_config=RetryConfig(max_attempts=1))
     url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx_mock.add_response(url=url, status_code=503, json={"message": "Unavailable"})
 
@@ -464,9 +453,16 @@ def test_retry_config_max_attempts_one_disables_retries(credentials, base_url, h
     assert len(_requests_to(httpx_mock, url)) == 1
 
 
-@pytest.mark.usefixtures("auth_mock")
-def test_file_timeout_configures_download_timeout(credentials, base_url, httpx_mock):
-    transport = HTTPTransport(credentials, base_url, version="v2", file_timeout=19.5)
+def test_timeout_configures_default_http_timeout(credential, base_url, httpx_mock):
+    transport = HTTPTransport(credential, base_url, timeout=12.5)
+    httpx_mock.add_response(url="https://dev.pvt.whitson.com/external/v2/regions", json={})
+
+    transport.get("/regions")
+    assert httpx_mock.get_requests()[-1].extensions["timeout"]["read"] == 12.5
+
+
+def test_file_timeout_configures_download_timeout(credential, base_url, httpx_mock):
+    transport = HTTPTransport(credential, base_url, file_timeout=19.5)
     httpx_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/reports/1/export",
         content=b"binary-data",
@@ -499,7 +495,7 @@ def test_falls_back_to_http_code_when_body_empty(transport, httpx_mock):
     assert exc.value.status_code == 502
 
 
-def test_context_manager_enter_exit(credentials):
-    t = HTTPTransport(credentials, "https://dev.pvt.whitson.com")
+def test_context_manager_enter_exit(credential):
+    t = HTTPTransport(credential, "https://dev.pvt.whitson.com")
     with t as transport:
         assert transport is t

@@ -23,7 +23,7 @@ pip install whitson-pvt-sdk
 ```
 
 The examples use `python-dotenv` as a local-development convenience. Install it
-if you want the scripts to read credentials from `.env` automatically:
+if you want the scripts to read `PVT_TOKEN` from `.env` automatically:
 
 ```bash
 uv add python-dotenv
@@ -35,7 +35,7 @@ If you cloned this repository instead of copying examples into another project,
 
 ## Configuration
 
-All examples load credentials from `.env` with `python-dotenv`, falling back to
+All examples load `PVT_TOKEN` from `.env` with `python-dotenv`, falling back to
 already-exported environment variables. Start from the example env file, edit the
 values, then run an example:
 
@@ -45,10 +45,10 @@ $EDITOR .env
 uv run examples/basic_connect.py
 ```
 
-You can also provide credentials any other way that sets process environment
+You can also provide the token any other way that sets process environment
 variables, such as your shell, CI/CD environment configuration, container
 runtime, or a secret manager. For production use, prefer managed environment
-configuration or a secret vault over storing credentials in local `.env` files.
+configuration or a secret vault over storing tokens in local `.env` files.
 
 Unix shell users who prefer exporting variables explicitly can also source `.env`
 before running examples:
@@ -75,9 +75,9 @@ uv run examples/basic_connect.py
 | `cli_list.py`                        | argparse CLI for listing resources                 | `uv run examples/cli_list.py regions`                |
 | `fastapi_demo.py`                    | FastAPI app with SDK-backed routes                 | `uv run examples/fastapi_demo.py`                    |
 
-## Pagination (v2)
+## Pagination
 
-v2 cursor-paginated resources expose `iterate()` for lazy traversal and
+Cursor-paginated resources expose `iterate()` for lazy traversal and
 `list_all()` for eager collection:
 
 ```python
@@ -104,7 +104,7 @@ page2 = client.regions.list(cursor=page.pagination.next_cursor, limit=50)
 ## Calculation Feed Compositions
 
 Calculation inputs such as flash, saturation pressure, and separator process need
-`feed_composition` values. Use the v2 calculation helpers to get them from sample
+`feed_composition` values. Use the calculation helpers to get them from sample
 ids instead of building component lists by hand:
 
 ```python
@@ -182,12 +182,9 @@ logging.getLogger("whitson_pvt_sdk").setLevel(logging.DEBUG)
 
 ## Authentication Token
 
-The SDK handles bearer auth automatically through the external API token endpoint.
-For integrations that need the same token outside SDK resource methods, use:
-
-```python
-token = client.get_access_token()
-```
+The SDK sends `PVT_TOKEN` (or the `token=` argument) as the bearer token on every
+request. Integrations that need the bearer outside SDK resource methods already hold
+it: read it from the same place you gave it to the client.
 
 Auth is not exposed as a resource like `client.authentication`; it is an SDK
 transport concern.
@@ -196,18 +193,16 @@ transport concern.
 
 The SDK retries transient read failures by default. `GET` requests and downloads
 retry transient failures. HTTP `429` rate-limit responses retry for every method;
-other write and multipart failures are not retried by default. Token exchange
-uses the same retry timing and attempt policy. Retry timing honors `Retry-After`,
+other write and multipart failures are not retried by default. Retry timing honors `Retry-After`,
 `retry-after-ms`, and `X-RateLimit-Reset` headers when present.
 
 Configure retry attempts and timeouts on the client:
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+from whitson_pvt_sdk.shared.models import RetryConfig
 
 client = WhitsonPVTClient(
-    credentials=ClientCredentials(client_id="...", client_secret="..."),
     base_url="https://internal.pvt.whitson.com",
     retry_config=RetryConfig(max_attempts=3),
     timeout=30.0,

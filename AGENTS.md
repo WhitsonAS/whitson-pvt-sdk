@@ -1,6 +1,6 @@
 # Agent Notes
 
-Start by reading the relevant existing module before changing behavior. Keep edits narrow and aligned with nearby v2 patterns.
+Start by reading the relevant existing module before changing behavior. Keep edits narrow and aligned with nearby patterns.
 
 ## Commands
 
@@ -25,8 +25,9 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 
 ## Architecture
 
-- Public entrypoint is `WhitsonPVTClient` in `whitson_pvt_sdk/__init__.py`; it wires `v2` resources, rejects `version="v1"` (removed in 1.4.0; 1.3.x still supports it), and exposes `get_access_token()` for explicit token reuse.
-- `HTTPTransport` owns the `base_url.rstrip('/') + /external/{version}` prefix, bearer auth, token caching, timeouts, conservative GET retries, retry timing from rate-limit headers, error mapping, JSON parsing, bytes downloads, and multipart uploads.
+- Public entrypoint is the `WhitsonPVTClient` class (`whitson_pvt_sdk/_client.py`, re-exported from `whitson_pvt_sdk`); it resolves the credential and wires the v2 resources. Only external API v2 is supported; v1 was removed in 2.0.
+- `whitson_pvt_sdk/auth.py` owns credentials: the `ApiToken` model (`SecretStr`), resolution from `token=` then `PVT_TOKEN`, and the `httpx.Auth` that writes the bearer. A new credential kind is a new model there plus one `match` arm in `CredentialAuth.auth_flow` and in `resolve_credential`. Never log, print or put a token in an error.
+- `HTTPTransport` owns the `base_url.rstrip('/') + /external/v2` prefix, timeouts, retries (decided by `_retry.retry_delay`), error mapping, JSON parsing, bytes downloads, and multipart uploads.
 - Public resource classes in `whitson_pvt_sdk/v2/resources.py` usually re-export generated facades from `whitson_pvt_sdk/_generated/v2/resources.py`; put manual SDK conveniences there by subclassing/wrapping generated classes.
 - Generated resource methods use SDK-shaped names (`list`, `get`, `create`, `update`, `create_bulk`, `update_bulk`) while lower-level generated module functions keep OpenAPI operation IDs.
 - v2 list endpoints use paginated models for regions/projects/fluid models/black oil tables/wells.
@@ -38,7 +39,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 For new endpoint wrappers or generator behavior:
 
 1. Prefer changing `scripts/sdk_generator/` and regenerating over hand-editing generated endpoint/resource files.
-2. Call `HTTPTransport.get`, `post`, `put`, `get_bytes`, or `post_multipart`.
+2. Call `HTTPTransport.get`, `post`, `put`, `patch`, `delete`, `get_bytes`, or `post_multipart`.
 3. Serialize Pydantic inputs with `model_dump(exclude_unset=True)`.
 4. Validate structured responses with the generated model's `model_validate`.
 5. Add or update the matching generated resource facade method through generator inference or `OVERRIDES` when the endpoint exists in OpenAPI.

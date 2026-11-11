@@ -23,15 +23,13 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.errors import AuthError, NotFoundError, SDKError
-from whitson_pvt_sdk.shared.models import ClientCredentials
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 
-_client: WhitsonPVTClientV2 | None = None
+_client: WhitsonPVTClient | None = None
 
 load_dotenv()
 
 
-def get_client() -> WhitsonPVTClientV2:
+def get_client() -> WhitsonPVTClient:
     assert _client is not None
     return _client
 
@@ -40,10 +38,6 @@ def get_client() -> WhitsonPVTClientV2:
 async def lifespan(app: FastAPI):
     global _client
     _client = WhitsonPVTClient(
-        credentials=ClientCredentials(
-            client_id=os.environ["WHITSON_CLIENT_ID"],
-            client_secret=os.environ["WHITSON_CLIENT_SECRET"],
-        ),
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
     )
     yield
@@ -55,7 +49,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/regions")
 def list_regions(
-    client: Annotated[WhitsonPVTClientV2, Depends(get_client)],
+    client: Annotated[WhitsonPVTClient, Depends(get_client)],
     cursor: str | None = Query(default=None),
     limit: int | None = Query(default=None),
 ):
@@ -71,7 +65,7 @@ def list_regions(
 
 
 @app.get("/regions/{region_id}")
-def get_region(region_id: int, client: Annotated[WhitsonPVTClientV2, Depends(get_client)]):
+def get_region(region_id: int, client: Annotated[WhitsonPVTClient, Depends(get_client)]):
     try:
         region = client.regions.get(region_id)
         return region.model_dump()
@@ -86,7 +80,7 @@ def get_region(region_id: int, client: Annotated[WhitsonPVTClientV2, Depends(get
 @app.get("/regions/{region_id}/wells")
 def list_wells(
     region_id: int,
-    client: Annotated[WhitsonPVTClientV2, Depends(get_client)],
+    client: Annotated[WhitsonPVTClient, Depends(get_client)],
     cursor: str | None = Query(default=None),
     limit: int | None = Query(default=None),
 ):
@@ -106,7 +100,7 @@ def list_wells(
 @app.get("/regions/{region_id}/projects")
 def list_projects(
     region_id: int,
-    client: Annotated[WhitsonPVTClientV2, Depends(get_client)],
+    client: Annotated[WhitsonPVTClient, Depends(get_client)],
     cursor: str | None = Query(default=None),
     limit: int | None = Query(default=None),
 ):

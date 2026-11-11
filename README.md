@@ -16,27 +16,53 @@ pip install whitson-pvt-sdk
 
 ## Quick start
 
+Authenticate with an API token. Set `PVT_TOKEN` in the environment, or pass
+`token=` explicitly:
+
+```bash
+export PVT_TOKEN=whitson_pvt_...
+```
+
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials
 
-client = WhitsonPVTClient(
-    credentials=ClientCredentials(client_id="...", client_secret="..."),
-    base_url="https://internal.pvt.whitson.com",
-)
+client = WhitsonPVTClient(base_url="https://internal.pvt.whitson.com")
+# or: WhitsonPVTClient(token="whitson_pvt_...", base_url="https://internal.pvt.whitson.com")
 
 regions = client.regions.list()
 well = client.wells.get(well_id=123)
 sample = client.samples.get(sample_id=456)
 ```
 
-Authentication is handled automatically through the external API token endpoint.
-If you need the same bearer token for an external integration,
-use the explicit token helper rather than an auth resource:
+Create an API token in whitson PVT under **Developer → Integrations**. Tokens start
+with `whitson_pvt_` and are shown once, when they are created.
 
-```python
-token = client.get_access_token()
-```
+The token is sent as the bearer token on every request. The `token=` argument takes
+precedence over `PVT_TOKEN`. The client raises `AuthError` when neither is set, or when
+the one in use is empty.
+
+### Upgrading from 1.x
+
+2.0 authenticates only with API tokens and talks only to external API v2.
+
+- Removed: `ClientCredentials`, the `credentials=` argument, the `/auth/token`
+  exchange, `client.get_access_token()`, `whitson_pvt_sdk.auth.TokenManager` and
+  `TokenData`. Pass `token=` or set `PVT_TOKEN` instead; the bearer is the token you
+  already hold.
+- Removed: `version=` and the v1 API (`whitson_pvt_sdk.v1`). API releases that accept
+  tokens no longer serve `/external/v1`.
+- `WhitsonPVTClient` is now the client class; `whitson_pvt_sdk.v2.WhitsonPVTClientV2`
+  is gone. Annotate with `WhitsonPVTClient`.
+- `HTTPTransport(credential, base_url, ...)` takes an `ApiToken` from
+  `whitson_pvt_sdk.auth` and has no `version` argument.
+- `calculations.get_gor_recombination_feed_composition(s)` take the feed composition(s)
+  through `source=` instead of `feed_composition(s)=`.
+- `RetryConfig` is immutable and its `methods` must be upper-case HTTP methods.
+- The unused multi-domain copy models (`DomainAuthConfig`, `MultiDomainCopyConfig`
+  and related) are removed from `whitson_pvt_sdk.shared.models`.
+
+1.x keeps working with client credentials until the server retires them. Pin
+`whitson-pvt-sdk<2` if you cannot switch to a token yet.
 
 ### API version
 
@@ -51,7 +77,7 @@ The SDK retries transient read failures by default. `GET` requests are attempted
 to 3 times for network timeouts/transport errors and HTTP `408`, `429`, `500`,
 `502`, `503`, and `504` responses. Mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`, and
 multipart uploads) are not retried by default, except on HTTP `429` (rate
-limiting). Token exchange follows the same retry timing and attempt policy.
+limiting).
 
 Retry delays honor `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
 headers when present. `X-RateLimit-Limit` and `X-RateLimit-Remaining` are left
@@ -67,10 +93,9 @@ Configure retries on the client:
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials, RetryConfig
+from whitson_pvt_sdk.shared.models import RetryConfig
 
 client = WhitsonPVTClient(
-    credentials=ClientCredentials(client_id="...", client_secret="..."),
     base_url="https://internal.pvt.whitson.com",
     retry_config=RetryConfig(max_attempts=1),  # disables retries
 )
@@ -81,16 +106,15 @@ Configure default request timeouts with `timeout`; downloads and uploads use
 
 ```python
 client = WhitsonPVTClient(
-    credentials=ClientCredentials(client_id="...", client_secret="..."),
     base_url="https://internal.pvt.whitson.com",
     timeout=30.0,
     file_timeout=60.0,
 )
 ```
 
-### Pagination (v2)
+### Pagination
 
-v2 list endpoints (regions, projects, fluid models, black oil tables, wells) are
+List endpoints (regions, projects, fluid models, black oil tables, wells) are
 cursor-paginated. Use `iterate()` for lazy traversal or `list_all()` for an eager
 list:
 
@@ -117,13 +141,13 @@ page = client.regions.list(cursor=page.pagination.next_cursor)
 ```
 
 Limit defaults to the API default (usually 20) when omitted. `iterate()` and
-`list_all()` are available on all cursor-paginated v2 resources: `regions`,
+`list_all()` are available on all cursor-paginated resources: `regions`,
 `wells`, `projects`, `fluid_models`, and `black_oil_tables`.
 
 All five resources also accept `name=` on `list()`, `iterate()`, and `list_all()`.
 This is a case-insensitive exact match; the API trims surrounding whitespace.
 
-### Staged imports and OSDU export (v2)
+### Staged imports and OSDU export
 
 `client.import_sessions` exposes archive upload, inspection, per-record resolution,
 selected-record commit, and deletion. `client.import_records` exposes the four
@@ -210,21 +234,20 @@ Integration tests are skipped by default. They create an isolated region, well,
 sample, and simple experiment for each run so existing staging data is not modified.
 The external API does not currently expose delete endpoints for these resources,
 so test data is left behind with unique `sdk-it-*` names.
-Run them against a real API by setting credentials:
+Run them against a real API by setting an API token:
 
 ```bash
 export WHITSON_INTEGRATION_BASE_URL=https://internal.pvt.whitson.com
-export WHITSON_INTEGRATION_CLIENT_ID=...
-export WHITSON_INTEGRATION_CLIENT_SECRET=...
+export WHITSON_INTEGRATION_TOKEN=whitson_pvt_...
 
 just integration
 ```
 
-For local testing without real M2M credentials, the API supports
+For local testing without a real token, the API supports
 `EXTERNAL_API_AUTH_BYPASS=true` with its local/debug safeguards. Restart the API
 using the Flask development CLI, bound to `127.0.0.1` with a local database, then
-use `local-sdk-test` as both integration client ID and secret. See
-`pvt-api/docs/local-m2m-testing.md` in the API repository. The flag belongs to the
+use `local-pvt-sdk-test-token` as the integration token. See "Local SDK Testing" in
+`api/pvt_api/external_api/AGENTS.md` in the API repository. The flag belongs to the
 API process, not the SDK; do not enable it in deployments.
 
 Optional IDs enable project, fluid-model, calculation, black-oil-table, and report
@@ -261,7 +284,7 @@ committing file bytes; use archive import for files. Single-record analysis meta
 needs a reviewed `resolved_payload` with experiment data before committing; set its
 `entity_type` discriminator explicitly.
 
-The OpenAPI/wiring test requires only `WHITSON_INTEGRATION_BASE_URL`, not credentials.
+The OpenAPI/wiring test requires only `WHITSON_INTEGRATION_BASE_URL`, not a token.
 
 ### Publishing
 
@@ -300,31 +323,30 @@ This fetches `/external/{version}/docs/openapi.json` from the configured `BASE_U
 
 Generated outputs live under:
 
-- `whitson_pvt_sdk/_generated/{version}/models.py`
-- `whitson_pvt_sdk/_generated/{version}/resources.py`
-- `whitson_pvt_sdk/_generated/shared/reports.py`
-- `whitson_pvt_sdk/{version}/models/__init__.py` re-exports generated models
-- `whitson_pvt_sdk/{version}/resources.py` re-exports public resource classes
+- `whitson_pvt_sdk/_generated/v2/models.py`
+- `whitson_pvt_sdk/_generated/v2/resources.py`
+- `whitson_pvt_sdk/v2/models/__init__.py` re-exports generated models
 
-Resource classes call `HTTPTransport` directly and expose SDK-shaped method
-names such as `list`, `get`, `create`, `update`, `create_bulk`, and
-`update_bulk`. Shared endpoint modules in `_generated/shared/` centralize
-implementation that spans versions (report import/export).
+`whitson_pvt_sdk/v2/resources.py` re-exports the public resource classes and adds
+hand-written conveniences. Resource classes call `HTTPTransport` directly and expose
+SDK-shaped method names such as `list`, `get`, `create`, `update`, `create_bulk`, and
+`update_bulk`.
 
 Authentication endpoints are intentionally excluded from generated resources;
-auth is infrastructure owned by `HTTPTransport`.
+auth is infrastructure owned by `whitson_pvt_sdk.auth` and `HTTPTransport`.
 
 ### Package structure
 
 ```
 whitson_pvt_sdk/
 ├── __init__.py              # WhitsonPVTClient
-├── http.py                  # HTTPTransport (httpx, auth, retries)
+├── auth.py                  # ApiToken and credential resolution
+├── http.py                  # HTTPTransport (httpx, retries, error mapping)
 ├── errors.py                # SDKError, NotFoundError, ...
 ├── shared/models.py         # hand-maintained shared models
 ├── shared/pagination.py     # Paginator utility
-├── _generated/              # generated models, resource facades, shared adapters
-└── v2/                      # public v2 client/resources/model re-exports
+├── _generated/              # generated models and resource facades
+└── v2/                      # public resources and model re-exports
 ```
 
 ## License

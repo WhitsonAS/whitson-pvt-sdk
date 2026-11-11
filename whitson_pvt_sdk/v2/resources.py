@@ -1,8 +1,15 @@
+from collections.abc import Sequence
+from typing import TypeAlias
+
 from whitson_pvt_sdk._generated.v2 import resources as generated_resources
+from whitson_pvt_sdk.errors import CalculationError
 from whitson_pvt_sdk.shared.models import CompositionSource
-from whitson_pvt_sdk.v2._helpers import calculations as calculation_helpers
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
+    CalculationErrorResultModel,
+    ExternalCalculationSuccessResultModelExternalGorRecombinationCalculationResultModel,
+    ExternalCalculationSuccessResultModelExternalSampleToEosSlateConversionCalculationResultModel,
+    GetFluidModelModel,
     GetSampleListModel,
     GorRecombinationCalculationInputModel,
     GorRecombinationCalculationRequestModel,
@@ -21,6 +28,8 @@ Regions = generated_resources.Regions
 Reports = generated_resources.Reports
 Wells = generated_resources.Wells
 
+FeedComposition = list[CalculationCompositionEntryModel]
+
 
 class Calculations(generated_resources.Calculations):
     def get_sample_feed_compositions(
@@ -28,7 +37,7 @@ class Calculations(generated_resources.Calculations):
         fluid_model_id: int,
         sample_ids: list[int],
         source: CompositionSource = "slate_to_slate_converted",
-    ) -> dict[int, list[CalculationCompositionEntryModel]]:
+    ) -> dict[int, FeedComposition]:
         """Return feed compositions for the given samples keyed by sample id.
 
         *source* controls where compositions are drawn from:
@@ -36,27 +45,24 @@ class Calculations(generated_resources.Calculations):
         ``"adjusted_compositions"`` reads from the fluid model's
         adjusted compositions.
         """
-        if source == "slate_to_slate_converted":
-            response = self.calculate_sample_to_eos_slate_conversion(
-                SampleToEosSlateConversionCalculationRequestModel(
-                    fluid_model_id=fluid_model_id,
-                    sample_ids=sample_ids,
+        match source:
+            case "slate_to_slate_converted":
+                response = self.calculate_sample_to_eos_slate_conversion(
+                    SampleToEosSlateConversionCalculationRequestModel(
+                        fluid_model_id=fluid_model_id,
+                        sample_ids=sample_ids,
+                    )
                 )
-            )
-            return calculation_helpers.slate_to_slate_converted_feed_compositions(
-                response, sample_ids
-            )
-
-        return calculation_helpers.adjusted_feed_compositions(
-            self._transport, fluid_model_id, sample_ids
-        )
+                return _feed_compositions(sample_ids, response.results)
+            case "adjusted_compositions":
+                return self._adjusted_feed_compositions(fluid_model_id, sample_ids)
 
     def get_sample_feed_composition(
         self,
         fluid_model_id: int,
         sample_id: int,
         source: CompositionSource = "slate_to_slate_converted",
-    ) -> list[CalculationCompositionEntryModel]:
+    ) -> FeedComposition:
         """Return feed composition for a single sample. See
         :meth:`get_sample_feed_compositions`.
         """
@@ -75,40 +81,38 @@ class Calculations(generated_resources.Calculations):
         surface_process: SurfaceProcessInputModel,
         *,
         remove_mud_components: bool = False,
-        feed_compositions: dict[int, list[CalculationCompositionEntryModel]] | None = None,
-        source: CompositionSource = "slate_to_slate_converted",
-    ) -> dict[int, list[CalculationCompositionEntryModel]]:
+        source: CompositionSource | dict[int, FeedComposition] = "slate_to_slate_converted",
+    ) -> dict[int, FeedComposition]:
         """Run GOR recombination and return feed compositions keyed by sample id.
 
-        When *feed_compositions* is provided the internal conversion is
-        skipped and *source* is ignored.
+        *source* is either a :data:`CompositionSource` to draw the input feed
+        compositions from, or the feed compositions themselves keyed by sample id.
         """
-        if feed_compositions is None:
-            feed_compositions = self.get_sample_feed_compositions(
-                fluid_model_id=fluid_model_id,
-                sample_ids=list(gor_values.keys()),
-                source=source,
-            )
-        inputs = [
-            GorRecombinationCalculationInputModel(
-                feed_composition=feed_compositions[sample_id],
-                recombination_gor=gor_value,
-            )
-            for sample_id, gor_value in gor_values.items()
-        ]
+        sample_ids = list(gor_values)
+        match source:
+            case dict():
+                feed_compositions = source
+            case _:
+                feed_compositions = self.get_sample_feed_compositions(
+                    fluid_model_id=fluid_model_id, sample_ids=sample_ids, source=source
+                )
         response = self.calculate_gor_recombination(
             GorRecombinationCalculationRequestModel(
                 fluid_model_id=fluid_model_id,
                 gor_unit=gor_unit,
-                inputs=inputs,
+                inputs=[
+                    GorRecombinationCalculationInputModel(
+                        feed_composition=feed_compositions[sample_id],
+                        recombination_gor=gor_value,
+                    )
+                    for sample_id, gor_value in gor_values.items()
+                ],
                 recombination_type=recombination_type,
                 remove_mud_components=remove_mud_components,
                 surface_process=surface_process,
             )
         )
-        return calculation_helpers.gor_recombination_feed_compositions(
-            response, list(gor_values.keys())
-        )
+        return _feed_compositions(sample_ids, response.results)
 
     def get_gor_recombination_feed_composition(
         self,
@@ -120,17 +124,13 @@ class Calculations(generated_resources.Calculations):
         surface_process: SurfaceProcessInputModel,
         *,
         remove_mud_components: bool = False,
-        feed_composition: list[CalculationCompositionEntryModel] | None = None,
-        source: CompositionSource = "slate_to_slate_converted",
-    ) -> list[CalculationCompositionEntryModel]:
+        source: CompositionSource | FeedComposition = "slate_to_slate_converted",
+    ) -> FeedComposition:
         """Run GOR recombination for a single sample and return its feed composition.
 
-        When *feed_composition* is provided the internal conversion is
-        skipped and *source* is ignored.
+        *source* is either a :data:`CompositionSource` or the sample's feed
+        composition itself.
         """
-        feed_compositions: dict[int, list[CalculationCompositionEntryModel]] | None = None
-        if feed_composition is not None:
-            feed_compositions = {sample_id: feed_composition}
         return self.get_gor_recombination_feed_compositions(
             fluid_model_id=fluid_model_id,
             gor_values={sample_id: recombination_gor},
@@ -138,9 +138,64 @@ class Calculations(generated_resources.Calculations):
             recombination_type=recombination_type,
             surface_process=surface_process,
             remove_mud_components=remove_mud_components,
-            feed_compositions=feed_compositions,
-            source=source,
+            source={sample_id: source} if isinstance(source, list) else source,
         )[sample_id]
+
+    def _adjusted_feed_compositions(
+        self, fluid_model_id: int, sample_ids: list[int]
+    ) -> dict[int, FeedComposition]:
+        fluid_model = GetFluidModelModel.model_validate(
+            self._transport.get(f"/fluid-models/{fluid_model_id}")
+        )
+        compositions_by_sample_id = {
+            composition.sample_id: composition
+            for composition in fluid_model.adjusted_compositions
+            if composition.sample_id is not None
+        }
+        missing_sample_ids = [
+            sample_id for sample_id in sample_ids if sample_id not in compositions_by_sample_id
+        ]
+        if missing_sample_ids:
+            raise ValueError(
+                "Missing adjusted compositions for sample ids: "
+                + ", ".join(str(sample_id) for sample_id in missing_sample_ids)
+            )
+        return {
+            sample_id: [
+                CalculationCompositionEntryModel(
+                    component_name=component.component_name,
+                    molar_amount=component.molar_amount,
+                )
+                for component in compositions_by_sample_id[sample_id].components
+            ]
+            for sample_id in sample_ids
+        }
+
+
+_CompositionResult: TypeAlias = (
+    CalculationErrorResultModel
+    | ExternalCalculationSuccessResultModelExternalSampleToEosSlateConversionCalculationResultModel
+    | ExternalCalculationSuccessResultModelExternalGorRecombinationCalculationResultModel
+)
+
+
+def _feed_compositions(
+    sample_ids: list[int], results: Sequence[_CompositionResult]
+) -> dict[int, FeedComposition]:
+    feed_compositions: dict[int, FeedComposition] = {}
+    for input_index, (sample_id, result) in enumerate(zip(sample_ids, results, strict=True)):
+        match result:
+            case CalculationErrorResultModel(error=error):
+                raise CalculationError(
+                    error.message,
+                    code=error.code,
+                    sample_id=sample_id,
+                    input_index=input_index,
+                    error=error,
+                )
+            case _:
+                feed_compositions[sample_id] = result.result.composition
+    return feed_compositions
 
 
 class Samples(generated_resources.Samples):

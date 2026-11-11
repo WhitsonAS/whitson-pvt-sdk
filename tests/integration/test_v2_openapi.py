@@ -4,7 +4,6 @@ from sdk_generator.config import EXCLUDED_RESOURCES
 from sdk_generator.openapi import load_openapi, parse_endpoints
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.shared.models import ClientCredentials
 
 
 def test_live_openapi_operations_are_exposed_on_client(integration_base_url):
@@ -21,7 +20,7 @@ def test_live_openapi_operations_are_exposed_on_client(integration_base_url):
     assert {(endpoint.http_method, endpoint.path) for endpoint in endpoints} == documented
 
     client = WhitsonPVTClient(
-        credentials=ClientCredentials(client_id="unused", client_secret="unused"),
+        token="unused",
         base_url=integration_base_url,
     )
     try:

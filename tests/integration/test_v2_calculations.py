@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import pytest
 
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
+from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.v2.models import (
     CalculationErrorResultModel,
     FlashCalculationInputModel,
@@ -25,7 +25,7 @@ from whitson_pvt_sdk.v2.models import (
 
 
 @pytest.fixture(scope="session")
-def feed_composition(client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int]):
+def feed_composition(client_v2: WhitsonPVTClient, require_id: Callable[[str], int]):
     # Independent of conversion: one backend error must not skip six other endpoints.
     return client_v2.calculations.get_sample_feed_composition(
         fluid_model_id=require_id("FLUID_MODEL_ID"),
@@ -44,7 +44,7 @@ def surface_process() -> SurfaceProcessInputModel:
 
 
 def test_sample_to_eos_slate_conversion(
-    client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int], created_sample
+    client_v2: WhitsonPVTClient, require_id: Callable[[str], int], created_sample
 ):
     result = client_v2.calculations.calculate_sample_to_eos_slate_conversion(
         SampleToEosSlateConversionCalculationRequestModel(
@@ -64,7 +64,7 @@ def test_get_sample_feed_composition(feed_composition):
 
 
 def test_flash_calculation(
-    client_v2: WhitsonPVTClientV2,
+    client_v2: WhitsonPVTClient,
     require_id: Callable[[str], int],
     feed_composition,
 ):
@@ -90,7 +90,7 @@ def test_flash_calculation(
 
 
 def test_saturation_pressure_calculation(
-    client_v2: WhitsonPVTClientV2,
+    client_v2: WhitsonPVTClient,
     require_id: Callable[[str], int],
     feed_composition,
 ):
@@ -113,7 +113,7 @@ def test_saturation_pressure_calculation(
 
 
 def test_phase_envelope_calculation(
-    client_v2: WhitsonPVTClientV2,
+    client_v2: WhitsonPVTClient,
     require_id: Callable[[str], int],
     feed_composition,
 ):
@@ -128,7 +128,7 @@ def test_phase_envelope_calculation(
 
 
 def test_gor_recombination_calculation(
-    client_v2: WhitsonPVTClientV2,
+    client_v2: WhitsonPVTClient,
     require_id: Callable[[str], int],
     feed_composition,
     surface_process: SurfaceProcessInputModel,
@@ -154,7 +154,7 @@ def test_gor_recombination_calculation(
 
 
 def test_separator_process_calculation(
-    client_v2: WhitsonPVTClientV2,
+    client_v2: WhitsonPVTClient,
     require_id: Callable[[str], int],
     feed_composition,
     surface_process: SurfaceProcessInputModel,
@@ -171,7 +171,7 @@ def test_separator_process_calculation(
 
 
 def test_volumetric_to_composition_calculation(
-    client_v2: WhitsonPVTClientV2,
+    client_v2: WhitsonPVTClient,
     require_id: Callable[[str], int],
     feed_composition,
     surface_process: SurfaceProcessInputModel,

@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
+from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.v2.models import (
     ImportCommitRequestModel,
     ImportRecordResolutionModel,
@@ -9,7 +9,7 @@ from whitson_pvt_sdk.v2.models import (
 
 
 def test_staged_archive_review_commit_and_cleanup(
-    client_v2: WhitsonPVTClientV2, require_id: Callable[[str], int], created_region
+    client_v2: WhitsonPVTClient, require_id: Callable[[str], int], created_region
 ):
     """Exercise the full workflow, committing only a skip (no native entity writes)."""
     archive, _ = client_v2.reports.export(require_id("REPORT_ID"), format="osdu")
@@ -41,7 +41,7 @@ def test_staged_archive_review_commit_and_cleanup(
         client_v2.import_sessions.delete(session.id)
 
 
-def test_region_name_filter(client_v2: WhitsonPVTClientV2, created_region, run_name):
+def test_region_name_filter(client_v2: WhitsonPVTClient, created_region, run_name):
     regions = client_v2.regions.list_all(name=created_region.name, limit=1)
     assert any(region.id == created_region.id for region in regions)
     assert client_v2.regions.list_all(name=f"{run_name}-does-not-exist") == []
