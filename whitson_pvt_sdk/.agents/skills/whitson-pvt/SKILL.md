@@ -1,6 +1,6 @@
 ---
 name: whitson-pvt
-description: Install and use the Whitson PVT Python SDK from external Python projects. Use when configuring WhitsonPVTClient, authenticating with an API token (WHITSON_PVT_TOKEN), using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
+description: Install and use the Whitson PVT Python SDK and its wpvt command from external Python projects. Use when configuring WhitsonPVTClient, authenticating with an API token (WHITSON_PVT_TOKEN) or a stored wpvt login, checking who is logged in with wpvt auth status, using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
 ---
 
 # Whitson PVT SDK
@@ -36,7 +36,18 @@ with WhitsonPVTClient(base_url="https://internal.pvt.whitson.com") as client:
 
 Leaving the `with` block closes the connections. A long-lived client (a module-level or app-lifetime one) calls `client.close()` at shutdown instead; never call `client._transport.close()`. Closing twice is harmless; a request on a closed client raises `RuntimeError`.
 
-The token is sent directly as the bearer. `token=` takes precedence over `WHITSON_PVT_TOKEN`. With neither configured, or with the one in use empty, creating the client raises `ConfigurationError`. Tokens start with `whitson_pvt_`; never print or log them.
+The deployment is `base_url=`, else `WHITSON_PVT_URL`, else the default `wpvt` login. The credential is `token=`, else `WHITSON_PVT_TOKEN`, else the login stored by `wpvt auth login` for that deployment. An API token always wins over a stored login. With none configured, or with the token in use empty, creating the client raises `ConfigurationError`; a stored login the server no longer accepts raises `LoginError`. Tokens start with `whitson_pvt_`; never print or log them, and never read or print the credentials file or keyring entries.
+
+`client.me.get()` returns who the credential belongs to: `kind` (`api_token`, `user_token` or `legacy_client`), `user_id`, `name`, `email`, `role` and `scopes`.
+
+## Logins And The wpvt Command
+
+`pip install "whitson-pvt-sdk[cli]"` adds the `wpvt` command.
+
+- In scripts, CI and agent sessions, authenticate with `WHITSON_PVT_TOKEN` (and `WHITSON_PVT_URL` for the deployment).
+- To check what is configured, run `wpvt auth status --json`. Exit code 0 prints `url`, `credential` (`kind`, `source`) and `identity`; 2 means nothing is configured, 3 means the login is no longer valid or the API rejected the credential, 4 means a network or server error. Errors arrive on stderr as JSON with `error` and `message`.
+- Never run `wpvt auth login` from a non-interactive host such as an agent's shell: it waits for a person in a browser. Ask the user to run `wpvt auth login --url <deployment>` in their own terminal (or with `--device` on a machine without a browser), then check again with `wpvt auth status --json`.
+- A stored login is bound to its deployment URL and is never sent to another one. It renews itself; when it cannot, the error says to log in again.
 
 SDK 2.x has no client credentials, no `version=` argument and no v1 API. Code that passes `credentials=ClientCredentials(...)` or `version=` needs SDK 1.x.
 

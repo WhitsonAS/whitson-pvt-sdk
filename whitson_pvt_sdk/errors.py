@@ -5,7 +5,11 @@ class SDKError(Exception):
 
 
 class ConfigurationError(SDKError):
-    """The client is not configured to make requests, such as a missing or empty token."""
+    """The client is not configured to make requests, such as a missing credential or URL."""
+
+
+class LoginError(SDKError):
+    """A login did not complete, or a stored login is no longer valid; run ``wpvt auth login``."""
 
 
 class NoResponseError(SDKError):

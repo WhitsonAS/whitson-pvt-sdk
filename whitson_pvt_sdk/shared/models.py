@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,3 +33,33 @@ class ImportArchiveOptions(BaseModel):
     region_id: int | None = None
     acknowledge_suggestions: bool = False
     resolutions: list[ImportResolutionModel] = Field(default_factory=list)
+
+
+# Hand-written until GET /external/v2/me is in the OpenAPI document; then replace with the
+# generated models.
+class _TokenIdentity(BaseModel):
+    user_id: int | str
+    name: str | None = None
+    email: str | None = None
+    role: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+
+
+class ApiTokenIdentity(_TokenIdentity):
+    kind: Literal["api_token"]
+
+
+class UserTokenIdentity(_TokenIdentity):
+    kind: Literal["user_token"]
+    client_id: str | None = None
+
+
+class LegacyClientIdentity(BaseModel):
+    kind: Literal["legacy_client"]
+    client_id: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+
+
+Identity = Annotated[
+    ApiTokenIdentity | UserTokenIdentity | LegacyClientIdentity, Field(discriminator="kind")
+]

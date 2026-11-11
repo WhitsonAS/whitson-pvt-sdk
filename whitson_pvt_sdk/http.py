@@ -5,7 +5,8 @@ from typing import Any, TypeAlias
 import httpx
 
 from whitson_pvt_sdk._retry import retry_after, retry_delay
-from whitson_pvt_sdk.auth import ApiToken, CredentialAuth
+from whitson_pvt_sdk.auth import CredentialAuth
+from whitson_pvt_sdk.credentials import Credential
 from whitson_pvt_sdk.errors import (
     APIError,
     AuthError,
@@ -26,7 +27,7 @@ Params: TypeAlias = dict[str, str | int | float | bool] | None
 class HTTPTransport:
     def __init__(
         self,
-        credential: ApiToken,
+        credential: Credential,
         base_url: str,
         *,
         retry_config: RetryConfig = RetryConfig(),

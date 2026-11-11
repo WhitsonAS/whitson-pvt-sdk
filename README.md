@@ -40,9 +40,19 @@ request on a closed client raises `RuntimeError`.
 Create an API token in whitson PVT under **Developer → Integrations**. Tokens start
 with `whitson_pvt_` and are shown once, when they are created.
 
-The token is sent as the bearer token on every request. The `token=` argument takes
-precedence over `WHITSON_PVT_TOKEN`. The client raises `ConfigurationError` when neither is set,
-or when the one in use is empty.
+The client resolves its deployment and credential in a fixed order:
+
+| | First | Then | Then | Otherwise |
+| --- | --- | --- | --- | --- |
+| Deployment | `base_url=` | `WHITSON_PVT_URL` | the default login from `wpvt auth login` | `ConfigurationError` |
+| Credential | `token=` | `WHITSON_PVT_TOKEN` | the stored login for that deployment | `ConfigurationError` naming all three and `wpvt auth login --url <url>` |
+
+An API token is sent as the bearer token on every request and wins even when a stored login
+exists for the same deployment. A set-but-empty `token=` or `WHITSON_PVT_TOKEN` is an error, not
+a fall-through. A stored login that the authorization server no longer accepts raises
+`LoginError`, which says to run `wpvt auth login` again.
+
+`client.me.get()` returns who the credential belongs to (kind, user, role and scopes).
 
 ### Upgrading from 1.x
 
@@ -59,8 +69,10 @@ or when the one in use is empty.
 - The package root exports only `WhitsonPVTClient`. Import `RetryConfig` from
   `whitson_pvt_sdk.shared.models` and `HTTPTransport` from `whitson_pvt_sdk.http`.
 - `retry_config=None` is no longer accepted; omit `retry_config` for the defaults.
-- `HTTPTransport(credential, base_url, ...)` takes an `ApiToken` from
-  `whitson_pvt_sdk.auth`, has no `version` argument and is no longer a context manager.
+- `HTTPTransport(credential, base_url, ...)` takes an `ApiToken` or `StoredLogin` from
+  `whitson_pvt_sdk.credentials`, has no `version` argument and is no longer a context manager.
+- `WhitsonPVTClient(base_url=...)` is optional: it falls back to `WHITSON_PVT_URL` and then to
+  the default login stored by `wpvt auth login`.
 - `calculations.get_gor_recombination_feed_composition(s)` take the feed composition(s)
   through `source=` instead of `feed_composition(s)=`.
 - A missing or empty token raises `ConfigurationError` when the client is created,
@@ -127,7 +139,8 @@ Everything the SDK raises derives from `SDKError` in `whitson_pvt_sdk.errors`:
 
 | Error | Raised when | Fields |
 | --- | --- | --- |
-| `ConfigurationError` | the client is created without a usable token | `message` |
+| `ConfigurationError` | the client is created without a usable URL or credential | `message` |
+| `LoginError` | a login did not complete, or the stored login is no longer valid | `message` |
 | `NoResponseError` | a request gets no response (connection error, timeout) after retries | `message` |
 | `ResponseError` | the API answers with an error status; base of the five below | `status_code`, `response_body`, `request_id` |
 | `AuthError` | HTTP 401 or 403 | as `ResponseError` |
@@ -210,6 +223,89 @@ See [Updating to the current external API v2](docs/api-v2-update.md) for changed
 commit-selection semantics, and API deployment requirements.
 
 More runnable examples are available in [examples](https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/examples).
+
+## Command line
+
+The `wpvt` command is an optional extra; the library itself keeps its two runtime dependencies
+(httpx and pydantic).
+
+```bash
+pip install "whitson-pvt-sdk[cli]"      # or: uv tool install "whitson-pvt-sdk[cli]"
+```
+
+Without the extra, `wpvt` prints this install command and exits with code 2.
+
+```console
+$ wpvt auth login --url https://example.pvt.whitson.com
+Opened a browser to log in. If it did not open, visit:
+https://login.example.com/authorize?...
+Logged in to https://example.pvt.whitson.com as Ada Lovelace <ada@example.com> (role: engineer). This login is now the default.
+
+$ wpvt auth status
+Deployment: https://example.pvt.whitson.com
+Credential: stored login (wpvt auth login)
+Identity:   Ada Lovelace <ada@example.com> (role: engineer)
+Scopes:     read:data, write:data
+
+$ wpvt auth logout
+Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
+```
+
+- `wpvt auth login [--url URL] [--device]` logs in with the authorization code flow and PKCE
+  through a one-off listener on `127.0.0.1`. It opens a browser only when attached to a
+  terminal; otherwise it prints the URL. `--device` logs in with a code entered on another
+  device, for SSH sessions, containers and sandboxes. The new login becomes the default.
+- `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
+  came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
+  API reports. It never prints a token.
+- `wpvt auth logout [--url URL | --all]` removes stored logins and revokes their refresh
+  tokens when the authorization server offers revocation.
+- `wpvt --version` prints the version.
+
+The URL comes from `--url`, else `WHITSON_PVT_URL`, else the default login. Every command takes
+`--json`: one JSON document on stdout, errors as one JSON document (`error`, `message`) on stderr.
+Progress messages (the login URL, the device code) go to stderr.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | Success |
+| 1 | Any other error |
+| 2 | Usage or configuration: a bad option, no URL or credential configured, login not enabled on the deployment, a credentials file with loose permissions, the `cli` extra missing |
+| 3 | Authentication: the login was refused or is no longer valid, or the API rejected the credential |
+| 4 | Network or server: no response, or an unexpected status from the API or the authorization server |
+
+Library code never starts a login. Scripts and agents should use `WHITSON_PVT_TOKEN`; a login
+made with `wpvt auth login` is for people at a terminal, and every SDK client on the machine then
+uses it for that deployment.
+
+### Where logins are stored
+
+Logins are profiles keyed by deployment URL, one of them the default. The file is
+`credentials.json` in `$XDG_CONFIG_HOME/whitson-pvt/` (default `~/.config/whitson-pvt/`) on
+Linux and macOS, and in `%APPDATA%\whitson-pvt\` on Windows. When the `keyring` package is
+installed and has a usable backend (macOS Keychain, Windows Credential Manager, Secret Service),
+the access and refresh tokens are kept in the OS keyring under the service `whitson-pvt`, and the
+file keeps only the non-secret facts: URL, issuer, client id, audience, scopes, expiry, whether
+the login is still valid, and the default. Without a usable keyring, or when the keyring refuses
+a write, the tokens are kept in the file. To keep tokens out of the keyring, set
+`PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`.
+
+### Security properties
+
+- **Host binding.** A stored login is only ever sent to the deployment it was issued for. The
+  transport compares the scheme, host and port of every request with the login's URL and refuses
+  to send it anywhere else, and the client only picks the login stored for its own URL.
+- **Private file.** `credentials.json` is created with mode `0600` in a `0700` directory and
+  replaced atomically, never widened. The SDK refuses to read a credentials file that other users
+  can read or that another user owns, and says how to fix it.
+- **Rotation-safe renewal.** The access token is renewed five minutes before it expires and once
+  after a 401. Renewal takes a lock on `credentials.lock` next to the file, re-reads the store
+  (another process may have renewed already), and saves the rotated refresh token before it lets
+  go, so a script and another `wpvt` process can share one login.
+- **No browser from library code.** Only `wpvt auth login`, or an explicit call to
+  `whitson_pvt_sdk.login.login`, starts a login. Login over plain HTTP is refused except to
+  `localhost`.
+- Tokens, refresh tokens, authorization codes and PKCE verifiers are never logged or printed.
 
 ## Development
 
@@ -410,7 +506,13 @@ uses the API's local bypass token on its loopback port; start the API with
 ```
 whitson_pvt_sdk/
 ├── __init__.py              # WhitsonPVTClient
-├── auth.py                  # ApiToken and credential resolution
+├── credentials.py           # ApiToken and StoredLogin, the two credential kinds
+├── auth.py                  # URL and credential resolution; the httpx.Auth that sends them
+├── login.py                 # login (browser with PKCE, or device) and logout
+├── _store.py                # the credential store: credentials.json, keyring, lock
+├── _refresh.py              # renewal of a stored login under the store lock
+├── _oauth.py                # OAuth/OIDC wire protocol: /auth/config, discovery, token requests
+├── cli/                     # the wpvt command (Typer; the cli extra)
 ├── http.py                  # HTTPTransport (httpx, retries, error mapping)
 ├── errors.py                # SDKError, ConfigurationError, ResponseError, ...
 ├── shared/models.py         # hand-maintained shared models

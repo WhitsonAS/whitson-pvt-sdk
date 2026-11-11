@@ -1,9 +1,11 @@
 from collections.abc import Sequence
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
+
+from pydantic import TypeAdapter
 
 from whitson_pvt_sdk._generated.v2 import resources as generated_resources
 from whitson_pvt_sdk.errors import CalculationError
-from whitson_pvt_sdk.shared.models import CompositionSource
+from whitson_pvt_sdk.shared.models import CompositionSource, Identity
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
     CalculationErrorResultModel,
@@ -27,7 +29,21 @@ Regions = generated_resources.Regions
 Reports = generated_resources.Reports
 Wells = generated_resources.Wells
 
+if TYPE_CHECKING:
+    from whitson_pvt_sdk.http import HTTPTransport
+
 FeedComposition: TypeAlias = list[CalculationCompositionEntryModel]
+
+
+_identity: TypeAdapter[Identity] = TypeAdapter(Identity)
+
+
+class Me:
+    def __init__(self, transport: "HTTPTransport") -> None:
+        self._transport = transport
+
+    def get(self) -> Identity:
+        return _identity.validate_python(self._transport.get("/me"))
 
 
 class Calculations(generated_resources.Calculations):
