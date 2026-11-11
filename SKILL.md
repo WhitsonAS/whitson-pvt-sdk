@@ -36,7 +36,7 @@ client = WhitsonPVTClient(
 )
 ```
 
-The SDK defaults to `version="v2"`. Do not pass `version` unless a different API version is explicitly needed. Use `version="v1"` only for legacy compatibility; v1 is deprecated and expected to be removed soon.
+The SDK targets external API v2 and defaults to `version="v2"`; do not pass `version`. External API v1 was removed in 1.4.0 and `version="v1"` raises `ValueError`; code that still needs v1 must stay on whitson-pvt-sdk 1.3.x.
 
 Authentication goes through the external API token endpoint by default. Do not pass provider-specific auth settings unless a non-standard deployment explicitly requires them.
 
@@ -135,7 +135,7 @@ All five resources support `name=` for a case-insensitive exact match, including
 
 ## Creating And Updating Data
 
-Use generated Pydantic models from the selected API version for create and update requests.
+Use the generated Pydantic models from `whitson_pvt_sdk.v2.models` for create and update requests.
 
 ```python
 from whitson_pvt_sdk.v2.models import CreateRegionModel, UpdateRegionModel
@@ -152,8 +152,6 @@ updated = client.regions.update(
     data=UpdateRegionModel(name="Renamed region"),
 )
 ```
-
-For legacy `version="v1"` usage, import request models from `whitson_pvt_sdk.v1.models`.
 
 Use the SDK methods instead of manually constructing HTTP requests. Returned values are Pydantic response models, so callers can use normal attribute access and `model_dump()` when they need dictionaries.
 

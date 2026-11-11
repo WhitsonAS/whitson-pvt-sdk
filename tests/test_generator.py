@@ -36,7 +36,7 @@ from sdk_generator.render import (
 def generate_models_source(tmp_path, schemas):
     target = tmp_path / "models.py"
     generate_model_file(
-        "v1",
+        "v2",
         {
             "openapi": "3.1.0",
             "info": {"title": "test", "version": "1"},
@@ -53,7 +53,7 @@ def generate_models_source(tmp_path, schemas):
 def import_generated_models(tmp_path, schemas) -> ModuleType:
     target = tmp_path / "models.py"
     generate_model_file(
-        "v1",
+        "v2",
         {
             "openapi": "3.1.0",
             "info": {"title": "test", "version": "1"},
@@ -532,7 +532,7 @@ def test_infer_endpoint_post_list_model():
 
 def test_override_reports_export():
     ep = Endpoint(
-        version="v1",
+        version="v2",
         resource="reports",
         function_name="get_report_export",
         public_method_name="get_report_export",
@@ -552,7 +552,7 @@ def test_override_reports_export():
 
 def test_override_wells_create_excludes_samples():
     ep = Endpoint(
-        version="v1",
+        version="v2",
         resource="wells",
         function_name="create_well",
         public_method_name="create",
@@ -571,7 +571,7 @@ def test_override_wells_create_excludes_samples():
 def test_detect_collisions_ok():
     endpoints = [
         Endpoint(
-            version="v1",
+            version="v2",
             resource="r",
             function_name="list_r",
             public_method_name="list",
@@ -585,7 +585,7 @@ def test_detect_collisions_ok():
 def test_detect_collisions_function_name():
     endpoints = [
         Endpoint(
-            version="v1",
+            version="v2",
             resource="r",
             function_name="foo",
             public_method_name="list",
@@ -593,7 +593,7 @@ def test_detect_collisions_function_name():
             path="/r",
         ),
         Endpoint(
-            version="v1",
+            version="v2",
             resource="r",
             function_name="foo",
             public_method_name="list2",
@@ -608,7 +608,7 @@ def test_detect_collisions_function_name():
 def test_detect_collisions_public_method():
     endpoints = [
         Endpoint(
-            version="v1",
+            version="v2",
             resource="r",
             function_name="foo",
             public_method_name="bar",
@@ -616,7 +616,7 @@ def test_detect_collisions_public_method():
             path="/r",
         ),
         Endpoint(
-            version="v1",
+            version="v2",
             resource="r",
             function_name="baz",
             public_method_name="bar",
@@ -659,7 +659,7 @@ def test_parse_endpoints_rejects_missing_response_schema():
     }
 
     with pytest.raises(SystemExit, match="No response schema for GET /widgets"):
-        parse_endpoints("v1", spec)
+        parse_endpoints("v2", spec)
 
 
 def test_parse_endpoints_allows_bytes_override_without_response_schema():
@@ -683,7 +683,7 @@ def test_parse_endpoints_allows_bytes_override_without_response_schema():
         }
     }
 
-    endpoints = parse_endpoints("v1", spec)
+    endpoints = parse_endpoints("v2", spec)
 
     assert endpoints[0].return_kind == "tuple_bytes_filename"
     assert endpoints[0].response_model is None
@@ -694,7 +694,7 @@ def test_parse_endpoints_allows_bytes_override_without_response_schema():
 
 def test_render_endpoint_strips_extra_newlines():
     ep = Endpoint(
-        version="v1",
+        version="v2",
         resource="regions",
         function_name="get_region",
         public_method_name="get",
@@ -723,7 +723,7 @@ def test_format_python_applies_ruff_fixes():
 
 def test_render_bytes_endpoint():
     ep = Endpoint(
-        version="v1",
+        version="v2",
         resource="reports",
         function_name="export_report",
         public_method_name="export",
@@ -777,7 +777,7 @@ def test_render_module_imports():
 
 def test_render_resources_output():
     ep = Endpoint(
-        version="v1",
+        version="v2",
         resource="regions",
         function_name="list_regions",
         public_method_name="list",
@@ -785,7 +785,7 @@ def test_render_resources_output():
         path="/regions",
         response_model="RegionsListModel",
     )
-    rendered = render_resources("v1", {"regions": [ep]})
+    rendered = render_resources("v2", {"regions": [ep]})
     assert "class Regions:" in rendered
     assert "    _transport: HTTPTransport" in rendered
     assert "def list(self" in rendered
@@ -861,7 +861,7 @@ def test_parse_endpoints_basic():
             }
         }
     }
-    endpoints = parse_endpoints("v1", spec)
+    endpoints = parse_endpoints("v2", spec)
     assert len(endpoints) == 1
     assert endpoints[0].function_name == "list_regions"
 
@@ -930,7 +930,7 @@ def test_parse_endpoints_applies_overrides():
             }
         }
     }
-    endpoints = parse_endpoints("v1", spec)
+    endpoints = parse_endpoints("v2", spec)
     assert endpoints[0].return_kind == "tuple_bytes_filename"
     assert endpoints[0].function_name == "export_report"
 
@@ -948,4 +948,4 @@ def test_parse_endpoints_excludes_authentication_resource():
         }
     }
 
-    assert parse_endpoints("v1", spec) == []
+    assert parse_endpoints("v2", spec) == []

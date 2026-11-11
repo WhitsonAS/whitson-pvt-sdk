@@ -38,6 +38,13 @@ use the explicit token helper rather than an auth resource:
 token = client.get_access_token()
 ```
 
+### API version
+
+The client targets external API v2, the only version the server provides.
+`version="v2"` is the default and can still be passed. Support for external API v1
+was removed in 1.4.0, and `version="v1"` now raises `ValueError`; if you still need
+v1, stay on 1.3.x (`pip install "whitson-pvt-sdk<1.4"`).
+
 ### Retries
 
 The SDK retries transient read failures by default. `GET` requests are attempted up
@@ -194,9 +201,8 @@ just ty                          # ty check
 just test                        # pytest
 just integration                 # opt-in tests against a real API
 just build                       # uv build
-just generate v1                 # regenerate v1 models and endpoint wrappers
 just generate v2                 # regenerate v2 models and endpoint wrappers
-just generate-all                # regenerate both v1 and v2
+just generate-all                # regenerate every supported version (v2)
 just all                         # generate-all + lint/format + build
 ```
 
@@ -318,7 +324,6 @@ whitson_pvt_sdk/
 ├── shared/models.py         # hand-maintained shared models
 ├── shared/pagination.py     # Paginator utility
 ├── _generated/              # generated models, resource facades, shared adapters
-├── v1/                      # public v1 client/resources/model re-exports
 └── v2/                      # public v2 client/resources/model re-exports
 ```
 

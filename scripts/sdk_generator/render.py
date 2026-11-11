@@ -142,7 +142,7 @@ def render_params_expr(endpoint: Endpoint) -> str:
     names = {param.python_name for param in endpoint.query_params}
     params = endpoint.query_params
     pagination = None
-    if endpoint.version == "v2" and {"cursor", "limit"}.issubset(names):
+    if {"cursor", "limit"}.issubset(names):
         pagination = "PaginationParams(cursor=cursor, limit=limit).model_dump(exclude_none=True)"
         params = [param for param in params if param.python_name not in {"cursor", "limit"}]
         if not params:
@@ -354,7 +354,6 @@ def _render_inline_resource_method(endpoint: Endpoint) -> str:
 
 def needs_pagination(endpoints: list[Endpoint]) -> bool:
     return any(
-        endpoint.version == "v2"
-        and {"cursor", "limit"}.issubset({param.python_name for param in endpoint.query_params})
+        {"cursor", "limit"}.issubset({param.python_name for param in endpoint.query_params})
         for endpoint in endpoints
     )

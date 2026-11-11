@@ -1,13 +1,14 @@
 from pathlib import Path
+from typing import get_args
 
-from sdk_generator.models import EndpointOverride
+from sdk_generator.models import EndpointOverride, Version
 
 ROOT = Path(__file__).resolve().parents[2]
 SDK_DIR = ROOT / "whitson_pvt_sdk"
 GENERATED_DIR = SDK_DIR / "_generated"
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
-SUPPORTED_VERSIONS = ("v1", "v2")
+SUPPORTED_VERSIONS: tuple[Version, ...] = get_args(Version)
 EXCLUDED_RESOURCES = {"authentication"}
 
 OVERRIDES: dict[tuple[str, str, str], EndpointOverride] = {

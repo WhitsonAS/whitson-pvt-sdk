@@ -1,34 +1,7 @@
-import warnings
-
 import pytest
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk._generated.v1.resources import (
-    Samples as GeneratedV1Samples,
-)
 from whitson_pvt_sdk.shared.models import RetryConfig
-from whitson_pvt_sdk.v1 import WhitsonPVTClientV1
-from whitson_pvt_sdk.v1.resources import (
-    BlackOilTables as V1BlackOilTables,
-)
-from whitson_pvt_sdk.v1.resources import (
-    FluidModels as V1FluidModels,
-)
-from whitson_pvt_sdk.v1.resources import (
-    Projects as V1Projects,
-)
-from whitson_pvt_sdk.v1.resources import (
-    Regions as V1Regions,
-)
-from whitson_pvt_sdk.v1.resources import (
-    Reports as V1Reports,
-)
-from whitson_pvt_sdk.v1.resources import (
-    Samples as V1Samples,
-)
-from whitson_pvt_sdk.v1.resources import (
-    Wells as V1Wells,
-)
 from whitson_pvt_sdk.v2 import WhitsonPVTClientV2
 from whitson_pvt_sdk.v2.resources import (
     BlackOilTables as V2BlackOilTables,
@@ -65,33 +38,16 @@ def test_defaults_to_v2(credentials, base_url):
     assert isinstance(client.reports, V2Reports)
 
 
-def test_v1_loads_v1_resources(credentials, base_url):
-    with warnings.catch_warnings(record=True):
-        warnings.simplefilter("always")
-        client = WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v1")
-    assert isinstance(client, WhitsonPVTClientV1)
-    assert isinstance(client.regions, V1Regions)
-    assert isinstance(client.wells, V1Wells)
-    assert isinstance(client.samples, V1Samples)
-    assert type(client.samples) is not GeneratedV1Samples
-    assert isinstance(client.projects, V1Projects)
-    assert isinstance(client.fluid_models, V1FluidModels)
-    assert isinstance(client.black_oil_tables, V1BlackOilTables)
-    assert isinstance(client.reports, V1Reports)
-
-
-def test_v1_emits_deprecation_warning(credentials, base_url):
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v1")
-    deprecations = [x for x in w if issubclass(x.category, DeprecationWarning)]
-    assert len(deprecations) == 1
-    assert "deprecated" in str(deprecations[0].message)
-
-
-def test_unknown_version_raises_value_error(credentials, base_url):
-    with pytest.raises(ValueError, match="Unknown version"):
-        WhitsonPVTClient(credentials=credentials, base_url=base_url, version="v3")
+@pytest.mark.parametrize(
+    ("version", "message"),
+    [
+        ("v1", r"v1 was removed in whitson-pvt-sdk 1\.4\.0.*1\.3\.x still supports v1"),
+        ("v3", "Unknown version"),
+    ],
+)
+def test_unsupported_version_raises_value_error(credentials, base_url, version, message):
+    with pytest.raises(ValueError, match=message):
+        WhitsonPVTClient(credentials=credentials, base_url=base_url, version=version)
 
 
 def test_passes_api_token_url_by_default(credentials, base_url):

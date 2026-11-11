@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Version = Literal["v1", "v2"]
+Version = Literal["v2"]
 HTTPMethod = Literal["get", "post", "put", "patch", "delete"]
 ParamLocation = Literal["path", "query"]
 BodyKind = Literal["none", "model", "root_list", "multipart"]

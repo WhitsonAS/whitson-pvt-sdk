@@ -43,19 +43,6 @@ def test_strips_trailing_slash_from_base_url(httpx_mock):
     assert str(req.url) == "https://dev.pvt.whitson.com/external/v2/test"
 
 
-@pytest.mark.usefixtures("auth_mock_v1")
-def test_includes_version_in_base_url(httpx_mock):
-    httpx_mock.add_response(url="https://dev.pvt.whitson.com/external/v1/test", json={})
-    t = HTTPTransport(
-        ClientCredentials(client_id="id", client_secret="secret"),
-        "https://dev.pvt.whitson.com",
-        version="v1",
-    )
-    t.get("/test")
-    req = httpx_mock.get_requests()[-1]
-    assert str(req.url) == "https://dev.pvt.whitson.com/external/v1/test"
-
-
 def test_get_returns_parsed_json(transport, httpx_mock):
     httpx_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions",

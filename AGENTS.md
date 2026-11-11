@@ -1,6 +1,6 @@
 # Agent Notes
 
-Start by reading the relevant existing module before changing behavior. Keep edits narrow and aligned with nearby v1/v2 patterns.
+Start by reading the relevant existing module before changing behavior. Keep edits narrow and aligned with nearby v2 patterns.
 
 ## Commands
 
@@ -17,19 +17,19 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 
 ## Codegen
 
-- Treat `whitson_pvt_sdk/_generated/**` and `whitson_pvt_sdk/{v1,v2}/models/__init__.py` as generated output.
-- Regenerate only when a live local API is available at `http://localhost:4000`; use `just generate v1`, `just generate v2`, or `just generate-all`, which fetch `http://localhost:4000/external/{version}/docs/openapi.json`.
+- Treat `whitson_pvt_sdk/_generated/**` and `whitson_pvt_sdk/v2/models/__init__.py` as generated output.
+- Regenerate only when a live local API is available at `http://localhost:4000`; use `just generate v2` or `just generate-all`, which fetch `http://localhost:4000/external/{version}/docs/openapi.json`.
 - The repo-specific generator lives in `scripts/sdk_generator/`. It runs `ruff check --fix --select I,F401` and `ruff format` on rendered endpoint/resource files, so generated files should not require a second formatting pass.
 - Put hand-maintained shared models in `whitson_pvt_sdk/shared/models.py`; avoid hand-editing generated files unless intentionally patching generated output when the API spec is unavailable.
 - Authentication is excluded from generated resources via `EXCLUDED_RESOURCES`; keep auth as transport infrastructure, not as `client.authentication`.
 
 ## Architecture
 
-- Public entrypoint is `WhitsonPVTClient` in `whitson_pvt_sdk/__init__.py`; it wires `v1` or `v2` resources and exposes `get_access_token()` for explicit token reuse.
+- Public entrypoint is `WhitsonPVTClient` in `whitson_pvt_sdk/__init__.py`; it wires `v2` resources, rejects `version="v1"` (removed in 1.4.0; 1.3.x still supports it), and exposes `get_access_token()` for explicit token reuse.
 - `HTTPTransport` owns the `base_url.rstrip('/') + /external/{version}` prefix, bearer auth, token caching, timeouts, conservative GET retries, retry timing from rate-limit headers, error mapping, JSON parsing, bytes downloads, and multipart uploads.
-- Public resource classes in `whitson_pvt_sdk/v1/resources.py` and `v2/resources.py` usually re-export generated facades from `whitson_pvt_sdk/_generated/{version}/resources.py`; put manual SDK conveniences there by subclassing/wrapping generated classes.
+- Public resource classes in `whitson_pvt_sdk/v2/resources.py` usually re-export generated facades from `whitson_pvt_sdk/_generated/v2/resources.py`; put manual SDK conveniences there by subclassing/wrapping generated classes.
 - Generated resource methods use SDK-shaped names (`list`, `get`, `create`, `update`, `create_bulk`, `update_bulk`) while lower-level generated module functions keep OpenAPI operation IDs.
-- Keep v1/v2 behavior aligned unless generated models intentionally differ; v2 list endpoints use paginated models for regions/projects/fluid models/black oil tables/wells.
+- v2 list endpoints use paginated models for regions/projects/fluid models/black oil tables/wells.
 - Report import/export is special: export returns raw zip bytes plus a synthetic filename, and import/preflight upload `archive.zip` with optional `meta_data` serialized from `ImportArchiveOptions`.
 - Configure retries and timeouts on `WhitsonPVTClient(...)` with `RetryConfig`, `timeout`, and `file_timeout`; default retries apply only to `GET`/downloads and retry `408`, `429`, `500`, `502`, `503`, and `504`.
 
@@ -42,9 +42,8 @@ For new endpoint wrappers or generator behavior:
 3. Serialize Pydantic inputs with `model_dump(exclude_unset=True)`.
 4. Validate structured responses with the generated model's `model_validate`.
 5. Add or update the matching generated resource facade method through generator inference or `OVERRIDES` when the endpoint exists in OpenAPI.
-6. Keep v1 and v2 behavior aligned unless generated models intentionally differ.
 
-For SDK-only conveniences or compatibility shims that are not OpenAPI-derived, add them to `whitson_pvt_sdk/{version}/resources.py`, not `_generated/**`.
+For SDK-only conveniences or compatibility shims that are not OpenAPI-derived, add them to `whitson_pvt_sdk/v2/resources.py`, not `_generated/**`.
 
 ## Final Checks
 
