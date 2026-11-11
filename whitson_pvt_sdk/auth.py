@@ -7,7 +7,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, SecretStr, Validatio
 
 from whitson_pvt_sdk.errors import ConfigurationError
 
-TOKEN_ENV_VAR = "PVT_TOKEN"
+TOKEN_ENV_VAR = "WHITSON_PVT_TOKEN"
 
 
 def _not_blank(token: SecretStr) -> SecretStr:

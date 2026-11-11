@@ -1,6 +1,6 @@
 ---
 name: whitson-pvt
-description: Install and use the Whitson PVT Python SDK from external Python projects. Use when configuring WhitsonPVTClient, authenticating with an API token (PVT_TOKEN), using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
+description: Install and use the Whitson PVT Python SDK from external Python projects. Use when configuring WhitsonPVTClient, authenticating with an API token (WHITSON_PVT_TOKEN), using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
 ---
 
 # Whitson PVT SDK
@@ -21,10 +21,10 @@ pip install whitson-pvt-sdk
 
 ## Create A Client
 
-Authenticate with an API token. Set `PVT_TOKEN` in the environment (or pass `token=`):
+Authenticate with an API token. Set `WHITSON_PVT_TOKEN` in the environment (or pass `token=`):
 
 ```bash
-export PVT_TOKEN=whitson_pvt_...
+export WHITSON_PVT_TOKEN=whitson_pvt_...
 ```
 
 ```python
@@ -36,7 +36,7 @@ with WhitsonPVTClient(base_url="https://internal.pvt.whitson.com") as client:
 
 Leaving the `with` block closes the connections. A long-lived client (a module-level or app-lifetime one) calls `client.close()` at shutdown instead; never call `client._transport.close()`. Closing twice is harmless; a request on a closed client raises `RuntimeError`.
 
-The token is sent directly as the bearer. `token=` takes precedence over `PVT_TOKEN`. With neither configured, or with the one in use empty, creating the client raises `ConfigurationError`. Tokens start with `whitson_pvt_`; never print or log them.
+The token is sent directly as the bearer. `token=` takes precedence over `WHITSON_PVT_TOKEN`. With neither configured, or with the one in use empty, creating the client raises `ConfigurationError`. Tokens start with `whitson_pvt_`; never print or log them.
 
 SDK 2.x has no client credentials, no `version=` argument and no v1 API. Code that passes `credentials=ClientCredentials(...)` or `version=` needs SDK 1.x.
 

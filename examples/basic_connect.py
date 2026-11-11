@@ -1,7 +1,7 @@
 """Basic connect and list example.
 
 Demonstrates:
-- Reading the API token from the PVT_TOKEN environment variable
+- Reading the API token from the WHITSON_PVT_TOKEN environment variable
 - Creating a WhitsonPVTClient
 - Listing regions
 - Iterating v2 pagination with the lazy iterate() helper
@@ -18,7 +18,7 @@ def main() -> None:
     load_dotenv()
 
     with WhitsonPVTClient(
-        base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
+        base_url=os.environ.get("WHITSON_PVT_URL", "https://internal.pvt.whitson.com"),
     ) as client:
         print("Regions:")
         for region in client.regions.iterate(limit=50):

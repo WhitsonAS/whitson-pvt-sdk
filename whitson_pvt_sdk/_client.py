@@ -7,7 +7,7 @@ from whitson_pvt_sdk.v2 import resources
 class WhitsonPVTClient:
     """Client for the whitson PVT external API.
 
-    The bearer token is the ``token=`` argument, or the ``PVT_TOKEN`` environment
+    The bearer token is the ``token=`` argument, or the ``WHITSON_PVT_TOKEN`` environment
     variable when ``token`` is omitted.
 
     Usage::

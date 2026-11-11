@@ -42,7 +42,7 @@ ENV_TOKEN = "whitson_pvt_from_env"
 )
 def test_token_is_sent_as_the_bearer(base_url, httpx_mock, monkeypatch, explicit, env, expected):
     if env is not None:
-        monkeypatch.setenv("PVT_TOKEN", env)
+        monkeypatch.setenv("WHITSON_PVT_TOKEN", env)
     httpx_mock.add_response(
         url=f"{base_url}/external/v2/regions",
         json={"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}},
@@ -58,15 +58,15 @@ def test_token_is_sent_as_the_bearer(base_url, httpx_mock, monkeypatch, explicit
     [
         (None, None, "No credentials configured"),
         ("", None, "token= argument is empty"),
-        (None, "", "PVT_TOKEN is set but empty"),
-        (None, "  ", "PVT_TOKEN is set but empty"),
+        (None, "", "WHITSON_PVT_TOKEN is set but empty"),
+        (None, "  ", "WHITSON_PVT_TOKEN is set but empty"),
         ("", ENV_TOKEN, "token= argument is empty"),
     ],
     ids=["none", "empty-token", "empty-env", "blank-env", "empty-token-over-env"],
 )
 def test_unusable_authentication_is_rejected(base_url, monkeypatch, explicit, env, source):
     if env is not None:
-        monkeypatch.setenv("PVT_TOKEN", env)
+        monkeypatch.setenv("WHITSON_PVT_TOKEN", env)
     with pytest.raises(ConfigurationError, match=source):
         WhitsonPVTClient(token=explicit, base_url=base_url)
 

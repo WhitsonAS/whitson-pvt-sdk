@@ -16,11 +16,11 @@ pip install whitson-pvt-sdk
 
 ## Quick start
 
-Authenticate with an API token. Set `PVT_TOKEN` in the environment, or pass
+Authenticate with an API token. Set `WHITSON_PVT_TOKEN` in the environment, or pass
 `token=` explicitly:
 
 ```bash
-export PVT_TOKEN=whitson_pvt_...
+export WHITSON_PVT_TOKEN=whitson_pvt_...
 ```
 
 ```python
@@ -41,7 +41,7 @@ Create an API token in whitson PVT under **Developer → Integrations**. Tokens 
 with `whitson_pvt_` and are shown once, when they are created.
 
 The token is sent as the bearer token on every request. The `token=` argument takes
-precedence over `PVT_TOKEN`. The client raises `ConfigurationError` when neither is set,
+precedence over `WHITSON_PVT_TOKEN`. The client raises `ConfigurationError` when neither is set,
 or when the one in use is empty.
 
 ### Upgrading from 1.x
@@ -50,7 +50,7 @@ or when the one in use is empty.
 
 - Removed: `ClientCredentials`, the `credentials=` argument, the `/auth/token`
   exchange, `client.get_access_token()`, `whitson_pvt_sdk.auth.TokenManager` and
-  `TokenData`. Pass `token=` or set `PVT_TOKEN` instead; the bearer is the token you
+  `TokenData`. Pass `token=` or set `WHITSON_PVT_TOKEN` instead; the bearer is the token you
   already hold.
 - Removed: `version=` and the v1 API (`whitson_pvt_sdk.v1`). API releases that accept
   tokens no longer serve `/external/v1`.

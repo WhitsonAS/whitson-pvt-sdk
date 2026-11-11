@@ -3,7 +3,7 @@
 Demonstrates:
 - argparse-based CLI built on the SDK
 - Subcommands for different resource types
-- API token from the PVT_TOKEN environment variable
+- API token from the WHITSON_PVT_TOKEN environment variable
 - Human-readable output
 
 Usage:
@@ -85,7 +85,7 @@ def main() -> None:
 
     try:
         with WhitsonPVTClient(
-            base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
+            base_url=os.environ.get("WHITSON_PVT_URL", "https://internal.pvt.whitson.com"),
         ) as client:
             {
                 "regions": cmd_regions,

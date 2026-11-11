@@ -8,7 +8,7 @@ from whitson_pvt_sdk.http import HTTPTransport
 
 @pytest.fixture(autouse=True)
 def _no_ambient_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("PVT_TOKEN", raising=False)
+    monkeypatch.delenv("WHITSON_PVT_TOKEN", raising=False)
 
 
 @pytest.fixture

@@ -23,7 +23,7 @@ pip install whitson-pvt-sdk
 ```
 
 The examples use `python-dotenv` as a local-development convenience. Install it
-if you want the scripts to read `PVT_TOKEN` from `.env` automatically:
+if you want the scripts to read `WHITSON_PVT_TOKEN` from `.env` automatically:
 
 ```bash
 uv add python-dotenv
@@ -35,7 +35,7 @@ If you cloned this repository instead of copying examples into another project,
 
 ## Configuration
 
-All examples load `PVT_TOKEN` from `.env` with `python-dotenv`, falling back to
+All examples load `WHITSON_PVT_TOKEN` from `.env` with `python-dotenv`, falling back to
 already-exported environment variables. Start from the example env file, edit the
 values, then run an example:
 
@@ -185,7 +185,7 @@ logging.getLogger("whitson_pvt_sdk").setLevel(logging.DEBUG)
 
 ## Authentication Token
 
-The SDK sends `PVT_TOKEN` (or the `token=` argument) as the bearer token on every
+The SDK sends `WHITSON_PVT_TOKEN` (or the `token=` argument) as the bearer token on every
 request. Integrations that need the bearer outside SDK resource methods already hold
 it: read it from the same place you gave it to the client.
 
