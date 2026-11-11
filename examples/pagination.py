@@ -38,12 +38,11 @@ def print_region_inventory(client: WhitsonPVTClient, limit: int = 100) -> None:
 def main() -> None:
     load_dotenv()
 
-    client = WhitsonPVTClient(
+    with WhitsonPVTClient(
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
-    )
-
-    print_region_summary(client)
-    print_region_inventory(client)
+    ) as client:
+        print_region_summary(client)
+        print_region_inventory(client)
 
 
 if __name__ == "__main__":

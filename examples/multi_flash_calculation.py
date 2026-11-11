@@ -21,39 +21,38 @@ from whitson_pvt_sdk.v2.models import (
 def main() -> None:
     load_dotenv()
 
-    client = WhitsonPVTClient(
+    with WhitsonPVTClient(
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
-    )
+    ) as client:
+        fluid_model_id = 123
+        sample_ids = [456, 789]
 
-    fluid_model_id = 123
-    sample_ids = [456, 789]
-
-    feed_compositions = client.calculations.get_sample_feed_compositions(
-        fluid_model_id=fluid_model_id,
-        sample_ids=sample_ids,
-        source="slate_to_slate_converted",
-    )
-
-    flash = client.calculations.calculate_flash(
-        FlashCalculationRequestModel(
+        feed_compositions = client.calculations.get_sample_feed_compositions(
             fluid_model_id=fluid_model_id,
-            pressure_unit="bara",
-            temperature_unit="C",
-            inputs=[
-                FlashCalculationInputModel(
-                    pressure=50.0,
-                    temperature=50.0,
-                    feed_composition=feed_compositions[456],
-                ),
-                FlashCalculationInputModel(
-                    pressure=50.0,
-                    temperature=50.0,
-                    feed_composition=feed_compositions[789],
-                ),
-            ],
+            sample_ids=sample_ids,
+            source="slate_to_slate_converted",
         )
-    )
-    write_json(flash, "multi_flash_results.json")
+
+        flash = client.calculations.calculate_flash(
+            FlashCalculationRequestModel(
+                fluid_model_id=fluid_model_id,
+                pressure_unit="bara",
+                temperature_unit="C",
+                inputs=[
+                    FlashCalculationInputModel(
+                        pressure=50.0,
+                        temperature=50.0,
+                        feed_composition=feed_compositions[456],
+                    ),
+                    FlashCalculationInputModel(
+                        pressure=50.0,
+                        temperature=50.0,
+                        feed_composition=feed_compositions[789],
+                    ),
+                ],
+            )
+        )
+        write_json(flash, "multi_flash_results.json")
 
 
 if __name__ == "__main__":

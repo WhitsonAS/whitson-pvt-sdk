@@ -1,7 +1,7 @@
 # Updating to the current external API v2
 
 This update targets the current external API **v2**. The SDK package version and
-API version are independent: continue using `version="v2"` (the default).
+API version are independent; SDK 2.x talks only to v2.
 The release version has not yet been bumped.
 
 ## Calculation surface-process inputs

@@ -1,6 +1,5 @@
 import logging
 import time
-from types import TracebackType
 from typing import Any, TypeAlias
 
 import httpx
@@ -10,6 +9,7 @@ from whitson_pvt_sdk.auth import ApiToken, CredentialAuth
 from whitson_pvt_sdk.errors import (
     APIError,
     AuthError,
+    NoResponseError,
     NotFoundError,
     RateLimitError,
     ValidationError,
@@ -40,18 +40,6 @@ class HTTPTransport:
             base_url=f"{base_url.rstrip('/')}/external/v2",
             timeout=timeout,
         )
-
-    def __enter__(self) -> "HTTPTransport":
-        self._http.__enter__()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        self._http.__exit__(exc_type, exc_value, tb)
 
     def close(self) -> None:
         self._http.close()
@@ -110,7 +98,7 @@ class HTTPTransport:
                     path,
                     outcome,
                 )
-                raise APIError(f"Request failed: {outcome}") from outcome
+                raise NoResponseError(f"Request failed: {outcome}") from outcome
 
     def get(self, path: str, *, params: Params = None) -> dict[str, Any]:
         return self._request("GET", path, params=params, timeout=self._http.timeout).json()

@@ -1,5 +1,5 @@
 ---
-name: whitson-pvt-sdk
+name: whitson-pvt
 description: Install and use the Whitson PVT Python SDK from external Python projects. Use when configuring WhitsonPVTClient, authenticating with an API token (PVT_TOKEN), using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
 ---
 
@@ -30,10 +30,13 @@ export PVT_TOKEN=whitson_pvt_...
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
 
-client = WhitsonPVTClient(base_url="https://internal.pvt.whitson.com")
+with WhitsonPVTClient(base_url="https://internal.pvt.whitson.com") as client:
+    regions = client.regions.list()
 ```
 
-The token is sent directly as the bearer. `token=` takes precedence over `PVT_TOKEN`. With neither configured, or with the one in use empty, the client raises `AuthError`. Tokens start with `whitson_pvt_`; never print or log them.
+Leaving the `with` block closes the connections. A long-lived client (a module-level or app-lifetime one) calls `client.close()` at shutdown instead; never call `client._transport.close()`. Closing twice is harmless; a request on a closed client raises `RuntimeError`.
+
+The token is sent directly as the bearer. `token=` takes precedence over `PVT_TOKEN`. With neither configured, or with the one in use empty, creating the client raises `ConfigurationError`. Tokens start with `whitson_pvt_`; never print or log them.
 
 SDK 2.x has no client credentials, no `version=` argument and no v1 API. Code that passes `credentials=ClientCredentials(...)` or `version=` needs SDK 1.x.
 
@@ -68,6 +71,17 @@ the first request. `RetryConfig.methods` controls non-429 retries only; remove
 `429` from `RetryConfig.statuses` to disable all-method rate-limit retries. If
 all retries are exhausted on HTTP `429`, the SDK raises `RateLimitError` with
 `retry_after_seconds` when retry timing headers are present.
+
+## Errors
+
+Everything the SDK raises derives from `SDKError`; import the classes from `whitson_pvt_sdk.errors`.
+
+- `ConfigurationError`: no usable token when the client is created. No HTTP fields.
+- `NoResponseError`: the request got no response (connection error, timeout) after retries. No HTTP fields.
+- `ResponseError`: the API answered with an error status; always has `status_code: int`, plus `response_body` and `request_id`. Subclasses: `AuthError` (401/403), `NotFoundError` (404), `ValidationError` (400/422), `RateLimitError` (429, with `retry_after_seconds`) and `APIError` (any other status).
+- `CalculationError`: a calculation returned a failed result (`code`, `sample_id`, `input_index`, `error`).
+
+Catch `AuthError` only for a rejected token; a missing token is `ConfigurationError`.
 
 ## Common Resource Calls
 

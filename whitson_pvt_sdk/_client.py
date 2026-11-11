@@ -14,9 +14,12 @@ class WhitsonPVTClient:
 
         from whitson_pvt_sdk import WhitsonPVTClient
 
-        client = WhitsonPVTClient(base_url="https://internal.pvt.whitson.com")
-        regions = client.regions.list()
-        well = client.wells.get(well_id=123)
+        with WhitsonPVTClient(base_url="https://internal.pvt.whitson.com") as client:
+            regions = client.regions.list()
+            well = client.wells.get(well_id=123)
+
+    ``close()`` releases the connections; the ``with`` block calls it on exit.
+    Calling it again is harmless, and a request after it raises ``RuntimeError``.
     """
 
     def __init__(
@@ -46,3 +49,12 @@ class WhitsonPVTClient:
         self.calculations = resources.Calculations(transport)
         self.import_records = resources.ImportRecords(transport)
         self.import_sessions = resources.ImportSessions(transport)
+
+    def close(self) -> None:
+        self._transport.close()
+
+    def __enter__(self) -> "WhitsonPVTClient":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()

@@ -18,35 +18,34 @@ from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 def main() -> None:
     load_dotenv()
 
-    client = WhitsonPVTClient(
+    with WhitsonPVTClient(
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
-    )
+    ) as client:
+        report_id = int(os.environ.get("WHITSON_REPORT_ID", "1"))
 
-    report_id = int(os.environ.get("WHITSON_REPORT_ID", "1"))
+        data, filename = client.reports.export(report_id=report_id)
+        Path(filename).write_bytes(data)
+        print(f"Exported report {report_id} to {filename} ({len(data)} bytes)")
 
-    data, filename = client.reports.export(report_id=report_id)
-    Path(filename).write_bytes(data)
-    print(f"Exported report {report_id} to {filename} ({len(data)} bytes)")
+        archive_data = Path(filename).read_bytes()
 
-    archive_data = Path(filename).read_bytes()
+        preflight = client.reports.preflight_import(
+            archive_data,
+            options=ImportArchiveOptions(region_id=1),
+        )
+        print(f"Preflight: can_commit={preflight.can_commit}")
+        print(f"  summary: {preflight.summary}")
+        print(f"  suggestions: {len(preflight.suggestions)}")
+        print(f"  collisions: {len(preflight.collisions)}")
 
-    preflight = client.reports.preflight_import(
-        archive_data,
-        options=ImportArchiveOptions(region_id=1),
-    )
-    print(f"Preflight: can_commit={preflight.can_commit}")
-    print(f"  summary: {preflight.summary}")
-    print(f"  suggestions: {len(preflight.suggestions)}")
-    print(f"  collisions: {len(preflight.collisions)}")
-
-    result = client.reports.import_archive(
-        archive_data,
-        options=ImportArchiveOptions(
-            region_id=1,
-            acknowledge_suggestions=True,
-        ),
-    )
-    print(f"Import result: created={result.created}, reused={result.reused}")
+        result = client.reports.import_archive(
+            archive_data,
+            options=ImportArchiveOptions(
+                region_id=1,
+                acknowledge_suggestions=True,
+            ),
+        )
+        print(f"Import result: created={result.created}, reused={result.reused}")
 
 
 if __name__ == "__main__":

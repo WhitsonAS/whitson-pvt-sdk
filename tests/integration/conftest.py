@@ -83,16 +83,13 @@ def integration_token() -> str:
 
 @pytest.fixture(scope="session")
 def client_v2(integration_base_url: str, integration_token: str) -> Iterator[WhitsonPVTClient]:
-    client = WhitsonPVTClient(
+    with WhitsonPVTClient(
         token=integration_token,
         base_url=integration_base_url,
         # Surface the first live failure instead of hiding it behind retries/rate-limit waits.
         retry_config=RetryConfig(max_attempts=1),
-    )
-    try:
+    ) as client:
         yield client
-    finally:
-        client._transport.close()
 
 
 @pytest.fixture(scope="session")

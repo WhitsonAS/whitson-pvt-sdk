@@ -151,8 +151,11 @@ write_json(response, "flash_response.json", overwrite=True)
 
 ## Errors And Logging
 
-All SDK exceptions inherit from `SDKError`. HTTP failures include structured
-metadata when available: `status_code`, `response_body`, and `request_id`.
+All SDK exceptions inherit from `SDKError`. API error responses raise an
+`ResponseError` subclass with `status_code`, `response_body`, and `request_id`.
+A missing or empty token raises `ConfigurationError` when the client is created, and
+a request that gets no response (connection error, timeout) raises
+`NoResponseError`; neither has HTTP fields.
 Calculation result failures raised by SDK helpers use `CalculationError`, which
 includes `code`, `sample_id`, `input_index`, and the original API error model.
 

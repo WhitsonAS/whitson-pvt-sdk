@@ -6,6 +6,7 @@ import pytest
 from whitson_pvt_sdk.errors import (
     APIError,
     AuthError,
+    NoResponseError,
     NotFoundError,
     RateLimitError,
     ValidationError,
@@ -386,6 +387,18 @@ def test_get_retries_timeout_then_succeeds(transport, httpx_mock):
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
+def test_get_final_timeout_raises_no_response_error(transport, httpx_mock):
+    url = "https://dev.pvt.whitson.com/external/v2/test"
+    for _ in range(3):
+        httpx_mock.add_exception(httpx.ConnectTimeout("Timed out"), url=url)
+
+    with pytest.raises(NoResponseError, match="Timed out"):
+        transport.get("/test")
+
+    assert len(_requests_to(httpx_mock, url)) == 3
+
+
+@pytest.mark.usefixtures("no_retry_sleep")
 def test_get_final_retryable_status_raises_api_error(transport, httpx_mock):
     url = "https://dev.pvt.whitson.com/external/v2/test"
     for _ in range(3):
@@ -493,9 +506,3 @@ def test_falls_back_to_http_code_when_body_empty(transport, httpx_mock):
     with pytest.raises(APIError, match="HTTP 502") as exc:
         transport.get("/test")
     assert exc.value.status_code == 502
-
-
-def test_context_manager_enter_exit(credential):
-    t = HTTPTransport(credential, "https://dev.pvt.whitson.com")
-    with t as transport:
-        assert transport is t

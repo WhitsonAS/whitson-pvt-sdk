@@ -17,13 +17,12 @@ from whitson_pvt_sdk import WhitsonPVTClient
 def main() -> None:
     load_dotenv()
 
-    client = WhitsonPVTClient(
+    with WhitsonPVTClient(
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
-    )
-
-    print("Regions:")
-    for region in client.regions.iterate(limit=50):
-        print(f"  - {region.name} (id={region.id})")
+    ) as client:
+        print("Regions:")
+        for region in client.regions.iterate(limit=50):
+            print(f"  - {region.name} (id={region.id})")
 
 
 if __name__ == "__main__":

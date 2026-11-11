@@ -37,10 +37,11 @@ def get_client() -> WhitsonPVTClient:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _client
-    _client = WhitsonPVTClient(
+    with WhitsonPVTClient(
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
-    )
-    yield
+    ) as client:
+        _client = client
+        yield
     _client = None
 
 

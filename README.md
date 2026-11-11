@@ -26,20 +26,23 @@ export PVT_TOKEN=whitson_pvt_...
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
 
-client = WhitsonPVTClient(base_url="https://internal.pvt.whitson.com")
-# or: WhitsonPVTClient(token="whitson_pvt_...", base_url="https://internal.pvt.whitson.com")
-
-regions = client.regions.list()
-well = client.wells.get(well_id=123)
-sample = client.samples.get(sample_id=456)
+with WhitsonPVTClient(base_url="https://internal.pvt.whitson.com") as client:
+    # or: WhitsonPVTClient(token="whitson_pvt_...", base_url="https://internal.pvt.whitson.com")
+    regions = client.regions.list()
+    well = client.wells.get(well_id=123)
+    sample = client.samples.get(sample_id=456)
 ```
+
+Leaving the `with` block closes the client's connections. A client kept for the life
+of a process can call `client.close()` instead; closing twice is harmless, and a
+request on a closed client raises `RuntimeError`.
 
 Create an API token in whitson PVT under **Developer → Integrations**. Tokens start
 with `whitson_pvt_` and are shown once, when they are created.
 
 The token is sent as the bearer token on every request. The `token=` argument takes
-precedence over `PVT_TOKEN`. The client raises `AuthError` when neither is set, or when
-the one in use is empty.
+precedence over `PVT_TOKEN`. The client raises `ConfigurationError` when neither is set,
+or when the one in use is empty.
 
 ### Upgrading from 1.x
 
@@ -53,23 +56,29 @@ the one in use is empty.
   tokens no longer serve `/external/v1`.
 - `WhitsonPVTClient` is now the client class; `whitson_pvt_sdk.v2.WhitsonPVTClientV2`
   is gone. Annotate with `WhitsonPVTClient`.
+- The package root exports only `WhitsonPVTClient`. Import `RetryConfig` from
+  `whitson_pvt_sdk.shared.models` and `HTTPTransport` from `whitson_pvt_sdk.http`.
+- `retry_config=None` is no longer accepted; omit `retry_config` for the defaults.
 - `HTTPTransport(credential, base_url, ...)` takes an `ApiToken` from
-  `whitson_pvt_sdk.auth` and has no `version` argument.
+  `whitson_pvt_sdk.auth`, has no `version` argument and is no longer a context manager.
 - `calculations.get_gor_recombination_feed_composition(s)` take the feed composition(s)
   through `source=` instead of `feed_composition(s)=`.
+- A missing or empty token raises `ConfigurationError` when the client is created,
+  not `AuthError`. `AuthError` now means only that the API answered 401 or 403.
+- A request that gets no response (connection error, timeout) raises
+  `NoResponseError` instead of `APIError` with `status_code=None`. Every
+  `ResponseError` (`AuthError`, `NotFoundError`, `ValidationError`, `RateLimitError`,
+  `APIError`) now carries an integer `status_code`.
+- `WhitsonPVTClient` has `close()` and works as a context manager; replace any
+  `client._transport.close()` with `client.close()` or a `with` block.
 - `RetryConfig` is immutable and its `methods` must be upper-case HTTP methods.
+- `whitson_pvt_sdk.utils.write_json(data, path=None)` is no longer accepted; omit
+  `path` for `output.json`.
 - The unused multi-domain copy models (`DomainAuthConfig`, `MultiDomainCopyConfig`
   and related) are removed from `whitson_pvt_sdk.shared.models`.
 
 1.x keeps working with client credentials until the server retires them. Pin
 `whitson-pvt-sdk<2` if you cannot switch to a token yet.
-
-### API version
-
-The client targets external API v2, the only version the server provides.
-`version="v2"` is the default and can still be passed. Support for external API v1
-was removed in 1.4.0, and `version="v1"` now raises `ValueError`; if you still need
-v1, stay on 1.3.x (`pip install "whitson-pvt-sdk<1.4"`).
 
 ### Retries
 
@@ -110,6 +119,35 @@ client = WhitsonPVTClient(
     timeout=30.0,
     file_timeout=60.0,
 )
+```
+
+### Errors
+
+Everything the SDK raises derives from `SDKError` in `whitson_pvt_sdk.errors`:
+
+| Error | Raised when | Fields |
+| --- | --- | --- |
+| `ConfigurationError` | the client is created without a usable token | `message` |
+| `NoResponseError` | a request gets no response (connection error, timeout) after retries | `message` |
+| `ResponseError` | the API answers with an error status; base of the five below | `status_code`, `response_body`, `request_id` |
+| `AuthError` | HTTP 401 or 403 | as `ResponseError` |
+| `NotFoundError` | HTTP 404 | as `ResponseError` |
+| `ValidationError` | HTTP 400 or 422 | as `ResponseError` |
+| `RateLimitError` | HTTP 429 after retries | also `retry_after_seconds` |
+| `APIError` | any other error status | as `ResponseError` |
+| `CalculationError` | a calculation returns a failed result | `code`, `sample_id`, `input_index`, `error` |
+
+```python
+from whitson_pvt_sdk.errors import AuthError, NoResponseError, ResponseError
+
+try:
+    region = client.regions.get(region_id=1)
+except AuthError:
+    ...  # the token was rejected or lacks access
+except ResponseError as exc:
+    print(exc.status_code, exc.request_id)
+except NoResponseError:
+    ...  # no response; a write may still have reached the API
 ```
 
 ### Pagination
@@ -342,7 +380,7 @@ whitson_pvt_sdk/
 ├── __init__.py              # WhitsonPVTClient
 ├── auth.py                  # ApiToken and credential resolution
 ├── http.py                  # HTTPTransport (httpx, retries, error mapping)
-├── errors.py                # SDKError, NotFoundError, ...
+├── errors.py                # SDKError, ConfigurationError, ResponseError, ...
 ├── shared/models.py         # hand-maintained shared models
 ├── shared/pagination.py     # Paginator utility
 ├── _generated/              # generated models and resource facades

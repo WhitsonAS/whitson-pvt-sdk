@@ -9,7 +9,6 @@ from whitson_pvt_sdk.v2.models import (
     CalculationErrorResultModel,
     ExternalCalculationSuccessResultModelExternalGorRecombinationCalculationResultModel,
     ExternalCalculationSuccessResultModelExternalSampleToEosSlateConversionCalculationResultModel,
-    GetFluidModelModel,
     GetSampleListModel,
     GorRecombinationCalculationInputModel,
     GorRecombinationCalculationRequestModel,
@@ -28,7 +27,7 @@ Regions = generated_resources.Regions
 Reports = generated_resources.Reports
 Wells = generated_resources.Wells
 
-FeedComposition = list[CalculationCompositionEntryModel]
+FeedComposition: TypeAlias = list[CalculationCompositionEntryModel]
 
 
 class Calculations(generated_resources.Calculations):
@@ -144,9 +143,7 @@ class Calculations(generated_resources.Calculations):
     def _adjusted_feed_compositions(
         self, fluid_model_id: int, sample_ids: list[int]
     ) -> dict[int, FeedComposition]:
-        fluid_model = GetFluidModelModel.model_validate(
-            self._transport.get(f"/fluid-models/{fluid_model_id}")
-        )
+        fluid_model = generated_resources.FluidModels(self._transport).get(fluid_model_id)
         compositions_by_sample_id = {
             composition.sample_id: composition
             for composition in fluid_model.adjusted_compositions

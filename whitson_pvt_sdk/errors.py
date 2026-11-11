@@ -4,13 +4,21 @@ class SDKError(Exception):
         super().__init__(message)
 
 
-class HTTPStatusError(SDKError):
+class ConfigurationError(SDKError):
+    """The client is not configured to make requests, such as a missing or empty token."""
+
+
+class NoResponseError(SDKError):
+    """The request got no response, such as a connection error or a timeout."""
+
+
+class ResponseError(SDKError):
     """The upstream API returned an unsuccessful HTTP response."""
 
     def __init__(
         self,
         message: str,
-        status_code: int | None = None,
+        status_code: int,
         *,
         response_body: object | None = None,
         request_id: str | None = None,
@@ -21,29 +29,29 @@ class HTTPStatusError(SDKError):
         super().__init__(message)
 
 
-class NotFoundError(HTTPStatusError):
+class NotFoundError(ResponseError):
     """A requested resource was not found."""
 
 
-class AuthError(HTTPStatusError):
-    """Authentication failed."""
+class AuthError(ResponseError):
+    """The API rejected the credential (HTTP 401 or 403)."""
 
 
-class ValidationError(HTTPStatusError):
+class ValidationError(ResponseError):
     """Request validation failed."""
 
 
-class APIError(HTTPStatusError):
+class APIError(ResponseError):
     """The upstream API returned an error."""
 
 
-class RateLimitError(HTTPStatusError):
+class RateLimitError(ResponseError):
     """The upstream API rejected the request due to rate limiting."""
 
     def __init__(
         self,
         message: str,
-        status_code: int | None = 429,
+        status_code: int = 429,
         *,
         response_body: object | None = None,
         request_id: str | None = None,

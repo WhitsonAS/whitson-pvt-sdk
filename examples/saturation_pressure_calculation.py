@@ -21,33 +21,32 @@ from whitson_pvt_sdk.v2.models import (
 def main() -> None:
     load_dotenv()
 
-    client = WhitsonPVTClient(
+    with WhitsonPVTClient(
         base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
-    )
+    ) as client:
+        fluid_model_id = 123
+        sample_id = 456
 
-    fluid_model_id = 123
-    sample_id = 456
-
-    feed_composition = client.calculations.get_sample_feed_composition(
-        fluid_model_id=fluid_model_id,
-        sample_id=sample_id,
-        source="slate_to_slate_converted",
-    )
-
-    saturation_pressure = client.calculations.calculate_saturation_pressure(
-        SaturationPressureCalculationRequestModel(
+        feed_composition = client.calculations.get_sample_feed_composition(
             fluid_model_id=fluid_model_id,
-            temperature_unit="C",
-            inputs=[
-                SaturationPressureCalculationInputModel(
-                    temperature=50.0,
-                    feed_composition=feed_composition,
-                )
-            ],
+            sample_id=sample_id,
+            source="slate_to_slate_converted",
         )
-    )
 
-    print_json(saturation_pressure)
+        saturation_pressure = client.calculations.calculate_saturation_pressure(
+            SaturationPressureCalculationRequestModel(
+                fluid_model_id=fluid_model_id,
+                temperature_unit="C",
+                inputs=[
+                    SaturationPressureCalculationInputModel(
+                        temperature=50.0,
+                        feed_composition=feed_composition,
+                    )
+                ],
+            )
+        )
+
+        print_json(saturation_pressure)
 
 
 if __name__ == "__main__":

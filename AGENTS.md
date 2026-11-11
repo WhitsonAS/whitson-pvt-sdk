@@ -32,6 +32,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 - Generated resource methods use SDK-shaped names (`list`, `get`, `create`, `update`, `create_bulk`, `update_bulk`) while lower-level generated module functions keep OpenAPI operation IDs.
 - v2 list endpoints use paginated models for regions/projects/fluid models/black oil tables/wells.
 - Report import/export is special: export returns raw zip bytes plus a synthetic filename, and import/preflight upload `archive.zip` with optional `meta_data` serialized from `ImportArchiveOptions`.
+- The agent skill ships in the wheel at `whitson_pvt_sdk/.agents/skills/whitson-pvt/SKILL.md` (Library Skills layout); keep it in step with the public API.
 - Configure retries and timeouts on `WhitsonPVTClient(...)` with `RetryConfig`, `timeout`, and `file_timeout`; default retries apply only to `GET`/downloads and retry `408`, `429`, `500`, `502`, `503`, and `504`.
 
 ## Endpoint Wrappers

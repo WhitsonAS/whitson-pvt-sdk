@@ -5,7 +5,7 @@ from typing import Annotated
 import httpx
 from pydantic import AfterValidator, BaseModel, ConfigDict, SecretStr, ValidationError
 
-from whitson_pvt_sdk.errors import AuthError
+from whitson_pvt_sdk.errors import ConfigurationError
 
 TOKEN_ENV_VAR = "PVT_TOKEN"
 
@@ -28,7 +28,7 @@ def resolve_credential(token: str | None) -> ApiToken:
     env_token = os.environ.get(TOKEN_ENV_VAR)
     if env_token is not None:
         return _api_token(env_token, empty_message=f"{TOKEN_ENV_VAR} is set but empty")
-    raise AuthError(
+    raise ConfigurationError(
         "No credentials configured. Provide one of: the token= argument, "
         f"the {TOKEN_ENV_VAR} environment variable."
     )
@@ -38,7 +38,7 @@ def _api_token(value: str, *, empty_message: str) -> ApiToken:
     try:
         return ApiToken(token=SecretStr(value))
     except ValidationError:
-        raise AuthError(empty_message) from None
+        raise ConfigurationError(empty_message) from None
 
 
 class CredentialAuth(httpx.Auth):

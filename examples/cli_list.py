@@ -24,21 +24,13 @@ from whitson_pvt_sdk import WhitsonPVTClient
 load_dotenv()
 
 
-def get_client() -> WhitsonPVTClient:
-    return WhitsonPVTClient(
-        base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
-    )
-
-
-def cmd_regions(args: argparse.Namespace) -> None:
-    client = get_client()
+def cmd_regions(client: WhitsonPVTClient, args: argparse.Namespace) -> None:
     page = client.regions.list(limit=args.limit)
     for region in page.regions:
         print(f"{region.id:>6}  {region.name}")
 
 
-def cmd_wells(args: argparse.Namespace) -> None:
-    client = get_client()
+def cmd_wells(client: WhitsonPVTClient, args: argparse.Namespace) -> None:
     page = client.wells.list(region_id=args.region_id, limit=args.limit)
     for well in page.wells:
         print(f"{well.id:>6}  {well.name}")
@@ -46,15 +38,13 @@ def cmd_wells(args: argparse.Namespace) -> None:
         print(f"next_cursor={page.pagination.next_cursor}")
 
 
-def cmd_projects(args: argparse.Namespace) -> None:
-    client = get_client()
+def cmd_projects(client: WhitsonPVTClient, args: argparse.Namespace) -> None:
     page = client.projects.list(region_id=args.region_id, limit=args.limit)
     for project in page.projects:
         print(f"{project.id:>6}  {project.name}")
 
 
-def cmd_samples(args: argparse.Namespace) -> None:
-    client = get_client()
+def cmd_samples(client: WhitsonPVTClient, args: argparse.Namespace) -> None:
     samples = client.samples.list(well_id=args.well_id)
     for sample in samples.samples:
         assert sample.id is not None
@@ -62,8 +52,7 @@ def cmd_samples(args: argparse.Namespace) -> None:
         print(f"{sample.id:>6}  {sample.name:30s}  experiments={experiment_count}")
 
 
-def cmd_fluid_models(args: argparse.Namespace) -> None:
-    client = get_client()
+def cmd_fluid_models(client: WhitsonPVTClient, args: argparse.Namespace) -> None:
     page = client.fluid_models.list(project_id=args.project_id, limit=args.limit)
     for fm in page.fluid_models:
         print(f"{fm.id:>6}  {fm.name}")
@@ -95,13 +84,16 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        {
-            "regions": cmd_regions,
-            "wells": cmd_wells,
-            "projects": cmd_projects,
-            "samples": cmd_samples,
-            "fluid-models": cmd_fluid_models,
-        }[args.command](args)
+        with WhitsonPVTClient(
+            base_url=os.environ.get("WHITSON_BASE_URL", "https://internal.pvt.whitson.com"),
+        ) as client:
+            {
+                "regions": cmd_regions,
+                "wells": cmd_wells,
+                "projects": cmd_projects,
+                "samples": cmd_samples,
+                "fluid-models": cmd_fluid_models,
+            }[args.command](client, args)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

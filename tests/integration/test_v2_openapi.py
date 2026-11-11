@@ -19,11 +19,7 @@ def test_live_openapi_operations_are_exposed_on_client(integration_base_url):
     }
     assert {(endpoint.http_method, endpoint.path) for endpoint in endpoints} == documented
 
-    client = WhitsonPVTClient(
-        token="unused",
-        base_url=integration_base_url,
-    )
-    try:
+    with WhitsonPVTClient(token="unused", base_url=integration_base_url) as client:
         for endpoint in endpoints:
             resource = getattr(client, endpoint.resource)
             method = getattr(resource, endpoint.public_method_name)
@@ -34,5 +30,3 @@ def test_live_openapi_operations_are_exposed_on_client(integration_base_url):
             elif endpoint.request_model:
                 expected.add("data")
             assert expected == set(signature.parameters), endpoint.path
-    finally:
-        client._transport.close()
