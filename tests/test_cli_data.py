@@ -37,13 +37,19 @@ def _page(field, items, next_cursor=None):
         (["projects", "--region", "3"], "/regions/3/projects", "projects", {}),
         (["fluid-models", "--project", "4"], "/projects/4/fluid-models", "fluid_models", {}),
         (
+            ["bot", "--fluid-model", "5"],
+            "/fluid-models/5/black-oil-tables",
+            "black_oil_tables",
+            TABLE_UNITS,
+        ),
+        (
             ["black-oil-tables", "--fluid-model", "5"],
             "/fluid-models/5/black-oil-tables",
             "black_oil_tables",
             TABLE_UNITS,
         ),
     ],
-    ids=["regions", "wells", "projects", "fluid-models", "black-oil-tables"],
+    ids=["regions", "wells", "projects", "fluid-models", "bot", "bot-alias"],
 )
 def test_list_all_follows_the_pages_and_prints_one_document(httpx_mock, args, route, field, item):
     httpx_mock.add_response(
@@ -246,9 +252,7 @@ def test_black_oil_table_export_writes_every_row_as_csv_with_units(httpx_mock, t
     httpx_mock.add_response(url=f"{API}/black-oil-tables/5", json=BLACK_OIL_TABLE)
     out = tmp_path / "table.csv"
 
-    result = runner.invoke(
-        app, ["black-oil-tables", "export", "5", "--out", str(out), "--format", "csv"]
-    )
+    result = runner.invoke(app, ["bot", "export", "5", "--out", str(out), "--format", "csv"])
 
     assert result.exit_code == 0, result.stderr
     header, *rows = out.read_text().splitlines()

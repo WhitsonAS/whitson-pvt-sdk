@@ -67,6 +67,8 @@ jobs:
         run: uv run --python 3.11 pytest tests/
         env:
           UV_PROJECT_ENVIRONMENT: .venv-3.11
+          # The generator tests shell out to `uv run ruff`, which would otherwise rebuild this environment on the default Python.
+          UV_PYTHON: "3.11"
 
       - name: Commit release version
         run: |

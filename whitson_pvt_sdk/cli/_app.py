@@ -9,6 +9,14 @@ from whitson_pvt_sdk.cli._calc import calc_app
 from whitson_pvt_sdk.cli._output import reporting
 from whitson_pvt_sdk.cli._reports import reports_app
 from whitson_pvt_sdk.cli._resources import RESOURCES, resource_app
+from whitson_pvt_sdk.errors import ConfigurationError
+
+MCP_INSTALL_HINT = (
+    "wpvt mcp needs the mcp extra. Install it with:\n"
+    '  pip install "whitson-pvt-sdk[mcp]"\n'
+    'or: uv tool install "whitson-pvt-sdk[mcp]"'
+)
+MCP_MODULES = frozenset({"fastmcp", "httpx2"})
 
 app = typer.Typer(
     name="wpvt",
@@ -18,7 +26,10 @@ app = typer.Typer(
 )
 app.add_typer(auth_app, name="auth")
 for resource in RESOURCES:
-    app.add_typer(resource_app(resource), name=resource.name)
+    group = resource_app(resource)
+    app.add_typer(group, name=resource.name)
+    for alias in resource.aliases:
+        app.add_typer(group, name=alias, hidden=True)
 app.add_typer(reports_app, name="reports")
 app.add_typer(calc_app, name="calc")
 app.command("api")(api_command)
@@ -37,8 +48,12 @@ def mcp_command(
     It never starts a login: run `wpvt auth login` first.
     """
     with reporting(json_output=False):
-        from whitson_pvt_sdk.cli._mcp import serve
-
+        try:
+            from whitson_pvt_sdk.cli._mcp import serve
+        except ModuleNotFoundError as exc:
+            if (exc.name or "").partition(".")[0] not in MCP_MODULES:
+                raise
+            raise ConfigurationError(MCP_INSTALL_HINT) from None
         serve(url, verbose=verbose)
 
 

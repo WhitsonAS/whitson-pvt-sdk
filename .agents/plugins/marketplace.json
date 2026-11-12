@@ -1,0 +1,20 @@
+{
+  "name": "whitson-pvt",
+  "interface": {
+    "displayName": "whitson PVT"
+  },
+  "plugins": [
+    {
+      "name": "wpvt",
+      "source": {
+        "source": "local",
+        "path": "./plugins/wpvt"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

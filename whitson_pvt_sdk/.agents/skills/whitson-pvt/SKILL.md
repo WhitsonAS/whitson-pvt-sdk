@@ -1,6 +1,6 @@
 ---
 name: whitson-pvt
-description: Install and use the Whitson PVT Python SDK and its wpvt command from external Python projects and agent shells. Use when configuring WhitsonPVTClient, connecting an agent to whitson PVT with wpvt mcp, fetching full data that an MCP tool result paged, downsampled or omitted (wpvt api, wpvt samples export), authenticating with an API token (WHITSON_PVT_TOKEN) or a stored wpvt login, checking who is logged in with wpvt auth status, using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
+description: Install and use the Whitson PVT Python SDK and its wpvt command from external Python projects and agent shells. Use when configuring WhitsonPVTClient, connecting an agent to whitson PVT with wpvt mcp, fetching full data that an MCP tool result paged, downsampled or omitted (wpvt api, wpvt samples export), authenticating with an API token (WHITSON_PVT_TOKEN) or a stored wpvt login, checking who is logged in with wpvt auth status, using the API resources, calling regions/wells/samples/projects/fluid models/black-oil tables (BOT)/reports, or working with the SDK's Pydantic request and response models.
 ---
 
 # Whitson PVT SDK
@@ -42,7 +42,7 @@ The deployment is `base_url=`, else `WHITSON_PVT_URL`, else the default `wpvt` l
 
 ## Logins And The wpvt Command
 
-`pip install "whitson-pvt-sdk[cli]"` adds the `wpvt` command.
+`pip install "whitson-pvt-sdk[cli]"` (or `uv tool install "whitson-pvt-sdk[cli]"`) adds the `wpvt` command; the `mcp` extra, `"whitson-pvt-sdk[mcp]"`, adds `wpvt mcp` as well.
 
 - In scripts, CI and agent sessions, authenticate with `WHITSON_PVT_TOKEN` (and `WHITSON_PVT_URL` for the deployment).
 - To check what is configured, run `wpvt auth status --json`. Exit code 0 prints `url`, `credential` (`kind`, `source`) and `identity`; 2 means nothing is configured, 3 means the login is no longer valid or the API rejected the credential, 4 means a network or server error. Errors arrive on stderr as JSON with `error` and `message`.
@@ -53,14 +53,21 @@ The deployment is `base_url=`, else `WHITSON_PVT_URL`, else the default `wpvt` l
 
 ## Data From The Command Line And MCP
 
-`wpvt mcp` connects an agent host to the deployment's MCP tools over stdio with the user's `wpvt` login (`claude mcp add wpvt -- wpvt mcp`, `codex mcp add wpvt -- wpvt mcp`). MCP needs `wpvt auth login`; it refuses API tokens for now. If `wpvt mcp` fails to start, show the user its stderr message and let them run the command it names.
+The whitson PVT MCP tools come from `wpvt mcp`, a local stdio server that forwards to the deployment's MCP endpoint with the user's `wpvt` login. The `wpvt` plugin for Claude Code or Codex registers it; without the plugin it is added with `claude mcp add wpvt -- wpvt mcp` or `codex mcp add wpvt -- wpvt mcp`. MCP needs `wpvt auth login`; it refuses API tokens for now.
+
+When the tools are missing or the server failed to start, ask the user to run `wpvt mcp` in a terminal and show you its stderr message (or run `wpvt auth status --json` yourself). The usual causes:
+
+- `wpvt` is not installed or not on `PATH`: the user installs it with `uv tool install "whitson-pvt-sdk[mcp]"`; `wpvt mcp` saying the `mcp` extra is missing needs the same command.
+- Not logged in, or the login is no longer valid (`wpvt auth status` exits 2 or 3): ask the user to run `wpvt auth login --url <their deployment>` in their own terminal, then reconnect the server. Never run it yourself.
+
+Working with the data:
 
 - Prefer the MCP tools for lookups and small answers.
-- When a tool result says the data was paged, downsampled or omitted and carries `full_data` (`{"available_through": "whitsonpvt_cli_and_python_sdk", "method": ..., "path": ...}`), fetch the full data to a file and work on the file (grep, page, script), instead of calling the tool again: `wpvt api METHOD PATH --out FILE` with that exact method and path, or the matching command: `wpvt samples export ID --out DIR` (one directory per sample: `index.json` first, then `sample.json`, `compositions/`, `experiments/`), `wpvt black-oil-tables export ID --out FILE [--format csv]`.
+- Bulk or full data goes to files through the command line, not through repeated tool calls. When a tool result says the data was paged, downsampled or omitted and carries `full_data` (`{"available_through": "whitsonpvt_cli_and_python_sdk", "method": ..., "path": ...}`), fetch it to a file and work on the file (grep, page, script): `wpvt api METHOD PATH --out FILE` with that exact method and path, or the matching command: `wpvt samples export ID --out DIR` (one directory per sample: `index.json` first, then `sample.json`, `compositions/`, `experiments/`), `wpvt bot export ID --out FILE [--format csv]` for a black-oil table.
 - Discover routes with `wpvt api --list --json` and `wpvt api --describe METHOD PATH --json` instead of guessing paths. PATH is relative to `/external/v2`. Add `--paginate` on a paged GET to get every page in one document, `-q KEY=VALUE` for query parameters and `-d @FILE` (or inline JSON, or `-`) for a body; METHOD defaults to GET, or POST with `-d`. Use `jq` on the output; there is no built-in query flag.
-- Lists: `wpvt regions list`, `wpvt wells list --region ID`, `wpvt samples list --well ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt black-oil-tables list --fluid-model ID`, each with `--all --json`; `wpvt <resource> get ID` prints one as JSON.
+- Lists: `wpvt regions list`, `wpvt wells list --region ID`, `wpvt samples list --well ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt bot list --fluid-model ID` (`bot` is black-oil tables; `black-oil-tables` is an alias), each with `--all --json`; `wpvt <resource> get ID` prints one as JSON.
 - Calculations: `wpvt calc flash|saturation-pressure|phase-envelope --input request.json --out result.json`; with `--sample ID --fluid-model ID` the feed comes from the stored sample and the input file leaves out `fluid_model_id` and `feed_composition`.
-- Never print, log or paste tokens, and never read the credentials file. Never run `wpvt auth login` yourself: ask the user to run it in their own terminal.
+- Never print, log or paste tokens, and never read the credentials file. Never run `wpvt auth login` yourself, and never pass `--trust-host` or `--yes` on your own.
 - Exit codes: 2 usage or configuration, 3 authentication, 4 network or server; errors are on stderr.
 
 In Python, `client.request(method, path, params=..., body=...)` calls any route the same way and returns `status_code`, `headers` and `content`.

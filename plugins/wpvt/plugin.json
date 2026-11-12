@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "wpvt",
+  "description": "whitson PVT for agents: the deployment's MCP tools through `wpvt mcp` and the whitson-pvt skill. Needs the wpvt command installed with the mcp extra and a `wpvt auth login`.",
+  "author": {
+    "name": "Whitson AS"
+  },
+  "homepage": "https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/plugins",
+  "repository": "https://github.com/WhitsonAS/whitson-pvt-sdk",
+  "license": "Apache-2.0",
+  "keywords": ["whitson", "pvt", "mcp", "reservoir", "fluids"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "whitson PVT",
+        "shortDescription": "whitson PVT MCP tools and skill through the wpvt command",
+        "developerName": "Whitson AS",
+        "category": "Productivity",
+        "websiteURL": "https://github.com/WhitsonAS/whitson-pvt-sdk"
+      }
+    }
+  }
+}

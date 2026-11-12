@@ -239,14 +239,21 @@ More runnable examples are available in [examples](https://github.com/WhitsonAS/
 
 ## Command line
 
-The `wpvt` command is an optional extra (Typer, keyring and FastMCP); the library itself keeps
-its two runtime dependencies (httpx and pydantic).
+The `wpvt` command comes in two optional extras; the library itself keeps its two runtime
+dependencies (httpx and pydantic).
+
+| Extra | Adds | For |
+| --- | --- | --- |
+| `cli` | Typer and keyring | `wpvt auth`, the data commands and `wpvt api` |
+| `mcp` | The `cli` extra plus FastMCP | Everything above and `wpvt mcp`, for agent hosts |
 
 ```bash
-pip install "whitson-pvt-sdk[cli]"      # or: uv tool install "whitson-pvt-sdk[cli]"
+uv tool install "whitson-pvt-sdk[cli]"   # or: pip install "whitson-pvt-sdk[cli]"
+uv tool install "whitson-pvt-sdk[mcp]"   # or: pip install "whitson-pvt-sdk[mcp]"
 ```
 
-Without the extra, `wpvt` prints this install command and exits with code 2.
+Without the `cli` extra, `wpvt` prints its install command and exits with code 2; without the
+`mcp` extra, so does `wpvt mcp`.
 
 ```console
 $ wpvt auth login --url https://example.pvt.whitson.com
@@ -290,11 +297,11 @@ own.
 
 | Command | Does |
 | --- | --- |
-| `wpvt regions list`, `wpvt wells list --region ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt black-oil-tables list --fluid-model ID` | One page (`--limit`, `--cursor`), or every page with `--all`; `id` and `name` per line, or `{"items": [...], "next_cursor": ...}` with `--json` |
+| `wpvt regions list`, `wpvt wells list --region ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt bot list --fluid-model ID` | One page (`--limit`, `--cursor`), or every page with `--all`; `id` and `name` per line, or `{"items": [...], "next_cursor": ...}` with `--json` |
 | `wpvt samples list --well ID` | Every sample of a well |
 | `wpvt <resource> get ID` | The resource as JSON |
 | `wpvt samples export ID... --out DIR` | One directory per sample, see below |
-| `wpvt black-oil-tables export ID --out FILE [--format csv]` | The whole table as JSON, or its rows as CSV with units in the header |
+| `wpvt bot export ID --out FILE [--format csv]` | The whole black-oil table as JSON, or its rows as CSV with units in the header |
 | `wpvt reports export REPORT_ID --out FILE` | The report archive (`--format osdu`, `--native-payload`, `--structured-experiments`) |
 | `wpvt reports import FILE [--region ID] [--acknowledge-suggestions] [--preflight]` | Import an archive, or only check it; prints the result |
 | `wpvt calc flash\|saturation-pressure\|phase-envelope --input FILE [--out FILE]` | Validate the request with the SDK's model and run it; `-` reads stdin |
@@ -307,6 +314,8 @@ Wrote sample 345 to samples/345
 Wrote sample 346 to samples/346
 $ wpvt calc flash --sample 345 --fluid-model 78 --input conditions.json --out flash.json
 ```
+
+`wpvt bot` covers black-oil tables (BOT); `wpvt black-oil-tables` is an alias for it.
 
 `samples export` writes `DIR/<sample id>/` with `index.json` (layout, units convention, SDK and API
 version), `sample.json` (the sample without its compositions and experiments),
@@ -352,7 +361,7 @@ $ wpvt api /calculations/phase-envelope -d @request.json
 
 `wpvt mcp` serves the deployment's MCP tools over stdio for an agent host, using the same login
 as the rest of `wpvt`. It is a proxy to `<deployment>/mcp`: the tools are defined by the server,
-not by the SDK.
+not by the SDK. It needs the `mcp` extra.
 
 ```bash
 claude mcp add wpvt -- wpvt mcp
@@ -375,9 +384,27 @@ codex mcp add wpvt -- wpvt mcp
 | --- | --- |
 | 0 | Success |
 | 1 | Any other error |
-| 2 | Usage or configuration: a bad option, no URL or credential configured, login not enabled on the deployment, a credentials file with loose permissions, the `cli` extra missing |
+| 2 | Usage or configuration: a bad option, no URL or credential configured, login not enabled on the deployment, a credentials file with loose permissions, the `cli` extra (or for `wpvt mcp`, the `mcp` extra) missing |
 | 3 | Authentication: the login was refused or is no longer valid, or the API rejected the credential |
 | 4 | Network or server: no response, or an unexpected status from the API or the authorization server |
+
+### Use with Claude Code and Codex
+
+The `wpvt` plugin in this repository registers `wpvt mcp` as an MCP server and adds the
+`whitson-pvt` agent skill. Install the command with the `mcp` extra and log in first; the plugin
+holds no URL or token and uses your default login.
+
+```bash
+uv tool install "whitson-pvt-sdk[mcp]"
+wpvt auth login --url https://<your deployment>
+
+claude plugin marketplace add WhitsonAS/whitson-pvt-sdk && claude plugin install wpvt@whitson-pvt
+codex plugin marketplace add WhitsonAS/whitson-pvt-sdk && codex plugin add wpvt@whitson-pvt
+```
+
+Without plugins: `claude mcp add wpvt -- wpvt mcp` or `codex mcp add wpvt -- wpvt mcp`. See
+[plugins/README.md](https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/plugins) for details
+and troubleshooting.
 
 ### Which deployments a login trusts
 
@@ -486,7 +513,7 @@ a write, the tokens are kept in the file. To keep tokens out of the keyring, set
 ### Setup
 
 ```bash
-uv sync                           # installs Python deps + dev tools
+uv sync                           # installs Python deps + dev tools, and the cli and mcp extras' packages
 uv tool install rust-just         # installs just (command runner) globally
 just install-hooks                # installs the commit message hook
 ```
@@ -525,6 +552,7 @@ just ty                          # ty check
 just test                        # pytest
 just integration                 # opt-in tests against a real API
 just build                       # uv build
+just plugins-sync                # copy the packaged skill into plugins/wpvt (just lint checks it)
 just generate v2                 # regenerate v2 models and endpoint wrappers from a live API
 just generate-all                # regenerate every supported version (v2)
 just generate-file v2 FILE       # regenerate v2 from an OpenAPI file, no API needed

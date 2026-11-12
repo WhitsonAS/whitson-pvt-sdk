@@ -301,13 +301,18 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
     _no_secrets(result)
 
 
-def test_wpvt_without_typer_prints_the_install_command():
+@pytest.mark.parametrize(
+    ("missing", "argv", "extra"),
+    [("typer", ["wpvt", "--version"], "cli"), ("fastmcp", ["wpvt", "mcp"], "mcp")],
+    ids=["cli", "mcp"],
+)
+def test_wpvt_without_an_extra_prints_the_install_command(missing, argv, extra):
     result = subprocess.run(
         [
             sys.executable,
             "-c",
-            "import sys; sys.modules['typer'] = None; "
-            "sys.argv = ['wpvt', '--version']; "
+            f"import sys; sys.modules[{missing!r}] = None; "
+            f"sys.argv = {argv!r}; "
             "from whitson_pvt_sdk.cli import main; main()",
         ],
         capture_output=True,
@@ -316,5 +321,5 @@ def test_wpvt_without_typer_prints_the_install_command():
     )
 
     assert result.returncode == 2
-    assert 'pip install "whitson-pvt-sdk[cli]"' in result.stderr
+    assert f'pip install "whitson-pvt-sdk[{extra}]"' in result.stderr
     assert "Traceback" not in result.stderr

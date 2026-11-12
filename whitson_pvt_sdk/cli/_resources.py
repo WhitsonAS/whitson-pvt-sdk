@@ -49,7 +49,9 @@ class Resource(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
+    plural: str
     noun: str
+    aliases: tuple[str, ...] = ()
     listing: TopLevel | Nested | Unpaged
     get: Callable[[WhitsonPVTClient, int], BaseModel]
     export: Callable[..., None] | None = None
@@ -58,6 +60,7 @@ class Resource(BaseModel):
 RESOURCES = (
     Resource(
         name="regions",
+        plural="regions",
         noun="region",
         listing=TopLevel(
             items_field="regions",
@@ -67,6 +70,7 @@ RESOURCES = (
     ),
     Resource(
         name="wells",
+        plural="wells",
         noun="well",
         listing=Nested(
             parent=Parent(flag="--region", help="Region whose wells to list."),
@@ -79,6 +83,7 @@ RESOURCES = (
     ),
     Resource(
         name="samples",
+        plural="samples",
         noun="sample",
         listing=Unpaged(
             parent=Parent(flag="--well", help="Well whose samples to list."),
@@ -89,6 +94,7 @@ RESOURCES = (
     ),
     Resource(
         name="projects",
+        plural="projects",
         noun="project",
         listing=Nested(
             parent=Parent(flag="--region", help="Region whose projects to list."),
@@ -101,6 +107,7 @@ RESOURCES = (
     ),
     Resource(
         name="fluid-models",
+        plural="fluid models",
         noun="fluid model",
         listing=Nested(
             parent=Parent(flag="--project", help="Project whose fluid models to list."),
@@ -112,7 +119,9 @@ RESOURCES = (
         get=lambda client, id: client.fluid_models.get(id),
     ),
     Resource(
-        name="black-oil-tables",
+        name="bot",
+        aliases=("black-oil-tables",),
+        plural="black-oil tables (BOT)",
         noun="black-oil table",
         listing=Nested(
             parent=Parent(flag="--fluid-model", help="Fluid model whose black-oil tables to list."),
@@ -144,7 +153,8 @@ AllOption = Annotated[bool, typer.Option("--all", help="Follow the pages to the 
 
 def resource_app(resource: Resource) -> typer.Typer:
     verbs = "List and show" if resource.export is None else "List, show and export"
-    group = typer.Typer(help=f"{verbs} {resource.name.replace('-', ' ')}.", no_args_is_help=True)
+    aliases = f" Alias: {', '.join(resource.aliases)}." if resource.aliases else ""
+    group = typer.Typer(help=f"{verbs} {resource.plural}.{aliases}", no_args_is_help=True)
     group.command("list", help=_list_help(resource))(_list_command(resource))
     group.command("get", help=f"Print one {resource.noun} as JSON.")(_get_command(resource))
     if resource.export is not None:
@@ -153,12 +163,11 @@ def resource_app(resource: Resource) -> typer.Typer:
 
 
 def _list_help(resource: Resource) -> str:
-    plural = resource.name.replace("-", " ")
     match resource.listing:
         case TopLevel():
-            return f"List {plural}, one page unless --all."
+            return f"List {resource.plural}, one page unless --all."
         case Nested(parent=parent):
-            return f"List {plural} under {parent.flag}, one page unless --all."
+            return f"List {resource.plural} under {parent.flag}, one page unless --all."
         case Unpaged(parent=parent):
             return f"List every {resource.noun} under {parent.flag}."
 

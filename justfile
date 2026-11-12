@@ -27,7 +27,7 @@ generate-file-check version file:
 install-hooks:
     uv run prek install --hook-type commit-msg
 
-lint +files='whitson_pvt_sdk/':
+lint +files='whitson_pvt_sdk/': plugins-check
     uv run ruff check {{files}}
 
 lint-fix +files='whitson_pvt_sdk/':
@@ -44,6 +44,14 @@ ty +files='':
 
 check: lint format ty
     @echo "All checks passed"
+
+# ── plugins ───────────────────────────────────────────────────────
+# Copy the packaged skills into plugins/wpvt/skills, the plugin's copy
+plugins-sync:
+    uv run python scripts/sync_plugins.py
+
+plugins-check:
+    uv run python scripts/sync_plugins.py --check
 
 # ── test ───────────────────────────────────────────────────────────
 test:

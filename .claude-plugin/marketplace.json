@@ -1,0 +1,14 @@
+{
+  "name": "whitson-pvt",
+  "description": "whitson PVT plugins for Claude Code",
+  "owner": {
+    "name": "Whitson AS"
+  },
+  "plugins": [
+    {
+      "name": "wpvt",
+      "source": "./plugins/wpvt",
+      "description": "whitson PVT MCP tools through `wpvt mcp`, and the whitson-pvt skill"
+    }
+  ]
+}
