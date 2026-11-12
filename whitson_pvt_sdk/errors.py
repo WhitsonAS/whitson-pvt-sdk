@@ -12,6 +12,10 @@ class LoginError(SDKError):
     """A login did not complete, or a stored login is no longer valid; run ``wpvt auth login``."""
 
 
+class CredentialStoreBusyError(SDKError):
+    """Another process held the credential store's lock for too long; try again."""
+
+
 class NoResponseError(SDKError):
     """The request got no response, such as a connection error or a timeout."""
 

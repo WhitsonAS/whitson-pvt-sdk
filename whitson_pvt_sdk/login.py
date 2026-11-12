@@ -2,16 +2,17 @@ import base64
 import hashlib
 import hmac
 import secrets
+import socket
 import socketserver
+import sys
 import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Literal
+from typing import Literal, TypeVar
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from pydantic import ValidationError as PydanticValidationError
 
 from whitson_pvt_sdk._oauth import (
     AuthConfig,
@@ -24,11 +25,12 @@ from whitson_pvt_sdk._oauth import (
     fetch_auth_config,
     oauth_client,
     parse_oauth_error,
+    parse_response,
     post_form,
     request_token,
     revoke_refresh_token,
 )
-from whitson_pvt_sdk._store import CredentialStore, RemovedLogin
+from whitson_pvt_sdk._store import CredentialStore, KeyringCleanup, RemovedLogin
 from whitson_pvt_sdk._trust import (
     Confirmation,
     FirstUse,
@@ -43,6 +45,7 @@ from whitson_pvt_sdk.credentials import StoredLogin, host_name, same_origin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
 __all__ = [
+    "CALLBACK_PORTS",
     "BrowserLogin",
     "Confirmation",
     "DeviceLogin",
@@ -56,6 +59,11 @@ __all__ = [
 ]
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+
+# Each must be registered as http://127.0.0.1:<port>/callback on the Auth0 command-line application.
+CALLBACK_PORTS = (52817, 54631, 57493, 61287)
+
+_Verified = TypeVar("_Verified")
 
 
 class BrowserLogin(BaseModel):
@@ -72,11 +80,15 @@ class DeviceLogin(BaseModel):
 LoginMethod = BrowserLogin | DeviceLogin
 
 
+Revocation = Literal["revoked", "not_offered", "failed", "skipped"]
+
+
 class LoggedOut(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     url: str
-    revocation: Literal["revoked", "not_offered", "failed", "skipped"]
+    revocation: Revocation
+    keyring: KeyringCleanup
 
 
 def login(
@@ -84,10 +96,11 @@ def login(
     method: LoginMethod,
     *,
     output: Callable[[str], None],
+    verify: Callable[[StoredLogin], _Verified],
     confirm: Callable[[Confirmation], bool] | None = None,
     trust_host: bool = False,
-) -> StoredLogin:
-    trusted = host_trust(base_url, trust_host=trust_host)
+) -> _Verified:
+    trusted = host_trust(base_url, trust_host=trust_host, resolve=_addresses)
     url = trusted.url
     with oauth_client() as http:
         config = fetch_auth_config(http, url)
@@ -134,10 +147,11 @@ def login(
         refresh_token=token.refresh_token,
         expires_at=token.expires_at(),
     )
+    verified = verify(stored)
     with CredentialStore.from_environment().transaction() as transaction:
         transaction.put(stored)
         transaction.set_default(stored.base_url)
-    return stored
+    return verified
 
 
 def logout(base_url: str) -> LoggedOut | None:
@@ -150,6 +164,14 @@ def logout_all() -> list[LoggedOut]:
     with CredentialStore.from_environment().transaction() as transaction:
         removed = [transaction.remove(url) for url in transaction.urls()]
     return [_revoke(entry) for entry in removed if entry is not None]
+
+
+def _addresses(host: str) -> list[str]:
+    try:
+        found = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return []
+    return [str(address[0]) for *_, address in found]
 
 
 def _without_a_browser(config: AuthConfig) -> str:
@@ -185,7 +207,7 @@ class _CallbackTimedOut(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-_Callback = _CodeReceived | _AuthorizationRefused | _StateMismatch
+_Callback = _CodeReceived | _AuthorizationRefused
 
 
 def _browser_flow(
@@ -199,7 +221,7 @@ def _browser_flow(
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
     state = secrets.token_urlsafe(32)
-    with _CallbackServer(state) as server:
+    with _callback_server(state) as server:
         redirect_uri = f"http://127.0.0.1:{server.server_address[1]}/callback"
         params = {
             "response_type": "code",
@@ -242,20 +264,33 @@ def _browser_flow(
                     raise LoginError(f"The login was refused: {error.describe()}.")
         case _AuthorizationRefused(error=error):
             raise LoginError(f"The login was refused: {error.describe()}.")
-        case _StateMismatch():
-            raise LoginError(
-                "The login callback did not carry this login's state value, so it was "
-                "rejected. Run the login again."
-            )
         case _CallbackTimedOut():
             raise LoginError(f"Timed out after {timeout:.0f} s waiting for the browser login.")
 
 
+def _callback_server(state: str) -> "_CallbackServer":
+    failure: OSError | None = None
+    for port in CALLBACK_PORTS:
+        try:
+            return _CallbackServer(state, port)
+        except OSError as exc:
+            failure = exc
+    raise LoginError(
+        "Could not listen for the browser login on 127.0.0.1 port "
+        f"{', '.join(map(str, CALLBACK_PORTS))} ({failure.strerror if failure else 'no port'}). "
+        "Stop the program using one of these ports and log in again, or log in with --device "
+        "where the deployment allows it."
+    )
+
+
 class _CallbackServer(HTTPServer):
-    def __init__(self, state: str) -> None:
+    # SO_REUSEADDR on Windows would let this bind over another program's listener on the port.
+    allow_reuse_address = sys.platform != "win32"
+
+    def __init__(self, state: str, port: int) -> None:
         self.expected_state = state
         self.callback: _Callback | None = None
-        super().__init__(("127.0.0.1", 0), _CallbackHandler)
+        super().__init__(("127.0.0.1", port), _CallbackHandler)
 
     def server_bind(self) -> None:
         socketserver.TCPServer.server_bind(self)
@@ -282,12 +317,14 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         if target.path != "/callback" or self.server.callback is not None:
             self._page(404, "Not found.")
             return
-        callback = _parse_callback(parse_qs(target.query), self.server.expected_state)
-        self.server.callback = callback
-        match callback:
-            case _CodeReceived():
+        match _parse_callback(parse_qs(target.query), self.server.expected_state):
+            case _StateMismatch():
+                self._page(400, "This is not the login this terminal is waiting for.")
+            case _CodeReceived() as callback:
+                self.server.callback = callback
                 self._page(200, "Logged in to whitson PVT. You can close this window.")
-            case _AuthorizationRefused() | _StateMismatch():
+            case _AuthorizationRefused() as callback:
+                self.server.callback = callback
                 self._page(400, "The whitson PVT login failed. Return to the terminal.")
 
     def log_message(self, format: str, *args: object) -> None:
@@ -306,7 +343,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def _parse_callback(query: dict[str, list[str]], expected_state: str) -> _Callback:
+def _parse_callback(query: dict[str, list[str]], expected_state: str) -> _Callback | _StateMismatch:
     state = _single(query, "state")
     if state is None or not hmac.compare_digest(state, expected_state):
         return _StateMismatch()
@@ -354,13 +391,10 @@ def _device_flow(
         endpoint,
         {"client_id": config.client_id, "scope": _scope(config), "audience": config.audience},
     )
-    if not response.is_success:
+    if response.is_client_error:
         error = parse_oauth_error(response, endpoint)
         raise LoginError(f"Device login could not start: {error.describe()}.")
-    try:
-        authorization = _DeviceAuthorization.model_validate_json(response.content)
-    except PydanticValidationError:
-        raise LoginError(f"{endpoint} returned a response this SDK cannot use.") from None
+    authorization = parse_response(_DeviceAuthorization, response, endpoint)
     for page in (authorization.verification_uri, authorization.verification_uri_complete):
         if page is not None and not same_origin(page, config.issuer):
             raise LoginError(
@@ -409,15 +443,19 @@ def _device_expired() -> LoginError:
 
 
 def _revoke(removed: RemovedLogin) -> LoggedOut:
+    return LoggedOut(url=removed.base_url, revocation=_revocation(removed), keyring=removed.keyring)
+
+
+def _revocation(removed: RemovedLogin) -> Revocation:
     stored = removed.login
     if stored is None:
-        return LoggedOut(url=removed.base_url, revocation="skipped")
+        return "skipped"
     try:
         with oauth_client() as http:
             endpoint = discover(http, stored.issuer).revocation_endpoint
             if endpoint is None:
-                return LoggedOut(url=removed.base_url, revocation="not_offered")
+                return "not_offered"
             revoked = revoke_refresh_token(http, endpoint, stored)
     except SDKError:
-        return LoggedOut(url=removed.base_url, revocation="failed")
-    return LoggedOut(url=removed.base_url, revocation="revoked" if revoked else "failed")
+        return "failed"
+    return "revoked" if revoked else "failed"

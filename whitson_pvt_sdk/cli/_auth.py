@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from whitson_pvt_sdk.auth import (
     TOKEN_ENV_VAR,
+    URL_ENV_VAR,
     FromArgument,
     FromEnvironment,
     FromStore,
@@ -103,7 +104,7 @@ def login_command(
     with reporting(json_output=json_output):
         if trust_host and url is None:
             raise ConfigurationError("--trust-host applies only to a URL given with --url.")
-        target = resolve_base_url(url)
+        target = resolve_base_url(url).url
         interactive = sys.stdin.isatty() and sys.stderr.isatty()
         if device:
             method: BrowserLogin | DeviceLogin = DeviceLogin()
@@ -124,16 +125,25 @@ def login_command(
                 )
             return typer.confirm("Continue?", default=False, err=True)
 
-        stored = login(target, method, output=note, confirm=confirm, trust_host=trust_host)
-        identity = _identity(stored, stored.base_url)
+        report = login(
+            target,
+            method,
+            output=note,
+            verify=lambda stored: LoginReport(
+                url=stored.base_url, identity=_identity(stored, stored.base_url)
+            ),
+            confirm=confirm,
+            trust_host=trust_host,
+        )
         if os.environ.get(TOKEN_ENV_VAR):
             note(
-                f"{TOKEN_ENV_VAR} is set and takes precedence over this login; unset it to use "
+                f"{TOKEN_ENV_VAR} is set: commands given a URL (--url or {URL_ENV_VAR}) use it "
+                "instead of this login, and commands without one refuse to run. Unset it to use "
                 "the login."
             )
         emit(
-            LoginReport(url=stored.base_url, identity=identity),
-            f"Logged in to {stored.base_url} as {_who(identity)}. This login is now the default.",
+            report,
+            f"Logged in to {report.url} as {_who(report.identity)}. This login is now the default.",
             json_output=json_output,
         )
 
@@ -142,8 +152,9 @@ def login_command(
 def status_command(url: UrlOption = None, json_output: JsonOption = False) -> None:
     """Show the deployment, the credential in use and who it belongs to."""
     with reporting(json_output=json_output):
-        target = resolve_base_url(url)
-        resolved = resolve_credential(target, token=None)
+        deployment = resolve_base_url(url)
+        target = deployment.url
+        resolved = resolve_credential(deployment, token=None)
         match resolved:
             case FromStore():
                 credential = CredentialReport(kind="stored_login", source=resolved.source)
@@ -184,9 +195,12 @@ def logout_command(
         if all_logins:
             removed = logout_all()
         else:
-            result = logout(resolve_base_url(url))
+            result = logout(resolve_base_url(url).url)
             removed = [] if result is None else [result]
-        lines = [f"Logged out of {item.url}; {_revocation(item)}." for item in removed]
+        lines = [
+            f"Logged out of {item.url}; {_revocation(item)}.{_keyring_cleanup(item)}"
+            for item in removed
+        ]
         emit(
             LogoutReport(removed=removed),
             "\n".join(lines) or "No stored login to remove.",
@@ -248,3 +262,15 @@ def _revocation(item: LoggedOut) -> str:
             return "revoking the refresh token failed, so it stays valid until it expires"
         case "skipped":
             return "its tokens could not be read, so nothing was revoked"
+
+
+def _keyring_cleanup(item: LoggedOut) -> str:
+    match item.keyring:
+        case "not_used" | "deleted":
+            return ""
+        case "not_deleted":
+            return (
+                " Its tokens could not be deleted from the OS keyring; remove the entries "
+                f'"{item.url} access_token" and "{item.url} refresh_token" of the service '
+                '"whitson-pvt" with your keyring tool.'
+            )

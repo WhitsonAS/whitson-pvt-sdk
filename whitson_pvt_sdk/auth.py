@@ -53,15 +53,39 @@ class FromStore(BaseModel):
 ResolvedCredential = FromArgument | FromEnvironment | FromStore
 
 
-def resolve_base_url(base_url: str | None) -> str:
+class UrlFromArgument(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    source: Literal["argument"] = "argument"
+    url: str
+
+
+class UrlFromEnvironment(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    source: Literal["environment"] = "environment"
+    url: str
+
+
+class UrlFromDefaultLogin(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    source: Literal["default_login"] = "default_login"
+    url: str
+
+
+ResolvedUrl = UrlFromArgument | UrlFromEnvironment | UrlFromDefaultLogin
+
+
+def resolve_base_url(base_url: str | None) -> ResolvedUrl:
     if base_url is not None:
-        return _url(base_url, "The base_url argument")
+        return UrlFromArgument(url=_url(base_url, "The base_url argument"))
     env_url = os.environ.get(URL_ENV_VAR)
     if env_url is not None:
-        return _url(env_url, URL_ENV_VAR)
+        return UrlFromEnvironment(url=_url(env_url, URL_ENV_VAR))
     default = CredentialStore.from_environment().default_url()
     if default is not None:
-        return default
+        return UrlFromDefaultLogin(url=default)
     raise ConfigurationError(
         "No deployment URL configured. Provide one of: the base_url argument (--url), "
         f"the {URL_ENV_VAR} environment variable, or a default login from "
@@ -69,7 +93,27 @@ def resolve_base_url(base_url: str | None) -> str:
     )
 
 
-def resolve_credential(base_url: str, token: str | None) -> ResolvedCredential:
+def resolve_credential(deployment: ResolvedUrl, token: str | None) -> ResolvedCredential:
+    given = _given_api_token(token)
+    if given is None:
+        return FromStore(credential=_stored_login(deployment.url))
+    match deployment:
+        case UrlFromDefaultLogin(url=url):
+            given_by = (
+                "The token= argument was given"
+                if isinstance(given, FromArgument)
+                else f"{TOKEN_ENV_VAR} is set"
+            )
+            raise ConfigurationError(
+                f"{given_by} without a deployment URL, so the URL would come from the default "
+                f"login ({url}). An API token is only sent to a URL given explicitly: set "
+                f"{URL_ENV_VAR} (or pass --url or base_url=), or drop the token to use the login."
+            )
+        case UrlFromArgument() | UrlFromEnvironment():
+            return given
+
+
+def _given_api_token(token: str | None) -> FromArgument | FromEnvironment | None:
     if token is not None:
         return FromArgument(credential=_api_token(token, "The token= argument is empty"))
     env_token = os.environ.get(TOKEN_ENV_VAR)
@@ -77,9 +121,13 @@ def resolve_credential(base_url: str, token: str | None) -> ResolvedCredential:
         return FromEnvironment(
             credential=_api_token(env_token, f"{TOKEN_ENV_VAR} is set but empty")
         )
+    return None
+
+
+def _stored_login(base_url: str) -> StoredLogin:
     match CredentialStore.from_environment().get(base_url):
         case ActiveLogin(login=login):
-            return FromStore(credential=login)
+            return login
         case InvalidLogin(reason=reason):
             raise _login_invalid(base_url, reason)
         case None:

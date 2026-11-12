@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, TypeAlias
 from pydantic import TypeAdapter
 
 from whitson_pvt_sdk._generated.v2 import resources as generated_resources
-from whitson_pvt_sdk.errors import CalculationError, MissingDataError
+from whitson_pvt_sdk.errors import APIError, CalculationError, MissingDataError
 from whitson_pvt_sdk.shared.models import CompositionSource, Identity
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
@@ -106,6 +106,14 @@ class Calculations(generated_resources.Calculations):
         sample_ids = list(gor_values)
         match source:
             case dict():
+                missing_sample_ids = [
+                    sample_id for sample_id in sample_ids if sample_id not in source
+                ]
+                if missing_sample_ids:
+                    raise MissingDataError(
+                        "source has no feed composition for sample ids: "
+                        + ", ".join(str(sample_id) for sample_id in missing_sample_ids)
+                    )
                 feed_compositions = source
             case _:
                 feed_compositions = self.get_sample_feed_compositions(
@@ -195,6 +203,12 @@ _CompositionResult: TypeAlias = (
 def _feed_compositions(
     sample_ids: list[int], results: Sequence[_CompositionResult]
 ) -> dict[int, FeedComposition]:
+    if len(results) != len(sample_ids):
+        raise APIError(
+            f"The server returned {len(results)} result{'' if len(results) == 1 else 's'} "
+            f"for {len(sample_ids)} samples.",
+            200,
+        )
     feed_compositions: dict[int, FeedComposition] = {}
     for input_index, (sample_id, result) in enumerate(zip(sample_ids, results, strict=True)):
         match result:

@@ -327,48 +327,35 @@ def test_retry_logs_debug_message(transport, httpx2_mock, recorded_sleeps, caplo
     assert "/test" in caplog.text
 
 
-def test_retry_uses_retry_after_ms(transport, httpx2_mock, recorded_sleeps):
-    url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx2_mock.add_response(
-        url=url,
-        status_code=429,
-        headers={"retry-after-ms": "1500"},
-        json={"message": "Too many requests"},
-    )
-    httpx2_mock.add_response(url=url, json={"ok": True})
-
-    assert transport.get("/test") == {"ok": True}
-    assert recorded_sleeps == [1.5]
-
-
-def test_retry_uses_http_date_retry_after(transport, httpx2_mock, monkeypatch, recorded_sleeps):
+@pytest.mark.parametrize(
+    ("status", "headers", "delay"),
+    [
+        (429, {"retry-after-ms": "1500"}, 1.5),
+        (429, {"retry-after": "Tue, 14 Nov 2023 22:13:25 GMT"}, 5),
+        (429, {"x-ratelimit-reset": "1700000007"}, 7),
+        (503, {"x-ratelimit-reset": "1700000007"}, pytest.approx(0.25, abs=0.05)),
+        (503, {"retry-after": "3"}, 3),
+    ],
+    ids=[
+        "retry-after-ms",
+        "http-date",
+        "rate-limit-reset",
+        "rate-limit-reset-ignored-for-503",
+        "retry-after-for-503",
+    ],
+)
+def test_retry_waits_as_the_response_says(
+    transport, httpx2_mock, monkeypatch, recorded_sleeps, status, headers, delay
+):
     monkeypatch.setattr("whitson_pvt_sdk._retry.time.time", lambda: 1_700_000_000)
     url = "https://dev.pvt.whitson.com/external/v2/test"
     httpx2_mock.add_response(
-        url=url,
-        status_code=429,
-        headers={"retry-after": "Tue, 14 Nov 2023 22:13:25 GMT"},
-        json={"message": "Too many requests"},
+        url=url, status_code=status, headers=headers, json={"message": "Try again"}
     )
     httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
-    assert recorded_sleeps == [5]
-
-
-def test_retry_uses_rate_limit_reset(transport, httpx2_mock, monkeypatch, recorded_sleeps):
-    monkeypatch.setattr("whitson_pvt_sdk._retry.time.time", lambda: 1_700_000_000)
-    url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx2_mock.add_response(
-        url=url,
-        status_code=429,
-        headers={"x-ratelimit-reset": "1700000007"},
-        json={"message": "Too many requests"},
-    )
-    httpx2_mock.add_response(url=url, json={"ok": True})
-
-    assert transport.get("/test") == {"ok": True}
-    assert recorded_sleeps == [7]
+    assert recorded_sleeps == [delay]
 
 
 @pytest.mark.usefixtures("no_retry_sleep")

@@ -12,7 +12,9 @@ class WhitsonPVTClient:
     The deployment is ``base_url``, else the ``WHITSON_PVT_URL`` environment variable, else
     the default login stored by ``wpvt auth login``. The credential is the ``token=``
     argument, else the ``WHITSON_PVT_TOKEN`` environment variable, else the stored login for
-    that deployment, which renews itself and is never sent to another deployment.
+    that deployment, which renews itself and is never sent to another deployment. An API
+    token is only used with a URL given as ``base_url`` or ``WHITSON_PVT_URL``; with a URL
+    from the default login it raises ``ConfigurationError``.
 
     Usage::
 
@@ -39,10 +41,10 @@ class WhitsonPVTClient:
         timeout: float = 30.0,
         file_timeout: float = 60.0,
     ) -> None:
-        url = resolve_base_url(base_url)
+        deployment = resolve_base_url(base_url)
         transport = HTTPTransport(
-            resolve_credential(url, token).credential,
-            url,
+            resolve_credential(deployment, token).credential,
+            deployment.url,
             retry_config=retry_config,
             timeout=timeout,
             file_timeout=file_timeout,

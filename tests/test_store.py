@@ -1,13 +1,17 @@
+import os
 import stat
+import threading
 
 import keyring
 import pytest
 from keyring.backend import KeyringBackend
-from keyring.errors import PasswordDeleteError
+from keyring.backends import fail
+from keyring.errors import KeyringLocked, PasswordDeleteError
 
-from tests.conftest import EMPTY_PAGE
+from tests.conftest import EMPTY_PAGE, make_login
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.errors import ConfigurationError
+from whitson_pvt_sdk._store import ActiveLogin
+from whitson_pvt_sdk.errors import ConfigurationError, CredentialStoreBusyError
 from whitson_pvt_sdk.login import logout
 
 
@@ -27,6 +31,24 @@ class MemoryKeyring(KeyringBackend):
     def delete_password(self, service: str, username: str) -> None:
         if self.passwords.pop((service, username), None) is None:
             raise PasswordDeleteError(username)
+
+
+def _logged_out(base_url: str) -> dict[str, object] | None:
+    result = logout(base_url)
+    return None if result is None else result.model_dump()
+
+
+class LockedKeyring(KeyringBackend):
+    priority = 1
+
+    def get_password(self, service: str, username: str) -> str | None:
+        raise KeyringLocked("Failed to unlock the collection")
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        raise KeyringLocked("Failed to unlock the collection")
+
+    def delete_password(self, service: str, username: str) -> None:
+        raise KeyringLocked("Failed to unlock the collection")
 
 
 def test_credentials_file_is_private_to_the_user(base_url, store, store_login):
@@ -62,5 +84,101 @@ def test_keyring_holds_the_tokens_when_it_is_usable(base_url, httpx2_mock, store
     httpx2_mock.add_response(
         url="https://whitson.eu.auth0.com/.well-known/openid-configuration", status_code=503
     )
-    logout(base_url)
+    assert _logged_out(base_url) == {"url": base_url, "revocation": "failed", "keyring": "deleted"}
     assert backend.passwords == {}
+
+
+def test_unreadable_keyring_is_a_configuration_error_and_logout_still_removes_the_login(
+    base_url, store, store_login
+):
+    keyring.set_keyring(MemoryKeyring())
+    store_login(base_url)
+    keyring.set_keyring(LockedKeyring())
+
+    with pytest.raises(ConfigurationError, match="KeyringLocked") as refusal:
+        WhitsonPVTClient(base_url=base_url)
+    assert "nlock" in refusal.value.message
+    assert f"wpvt auth login --url {base_url}" in refusal.value.message
+
+    assert _logged_out(base_url) == {
+        "url": base_url,
+        "revocation": "skipped",
+        "keyring": "not_deleted",
+    }
+    assert store.get(base_url) is None
+
+
+def test_logout_without_a_keyring_says_its_entries_were_not_deleted(base_url, store, store_login):
+    keyring.set_keyring(MemoryKeyring())
+    store_login(base_url)
+    keyring.set_keyring(fail.Keyring())
+
+    assert _logged_out(base_url) == {
+        "url": base_url,
+        "revocation": "skipped",
+        "keyring": "not_deleted",
+    }
+    assert store.get(base_url) is None
+
+
+@pytest.mark.parametrize("failures", [2, None], ids=["transient", "persistent"])
+def test_replacing_the_credentials_file_is_retried_while_it_is_open(
+    base_url, monkeypatch, store, store_login, failures
+):
+    store_login(base_url, access="first")
+    replace = os.replace
+    attempts = []
+
+    def replace_while_open(source, target):
+        attempts.append(target)
+        if failures is None or len(attempts) <= failures:
+            raise PermissionError(13, "The process cannot access the file")
+        replace(source, target)
+
+    monkeypatch.setattr(os, "replace", replace_while_open)
+
+    def save() -> None:
+        with store.transaction() as transaction:
+            transaction.put(make_login(base_url, access="second"))
+
+    if failures is None:
+        with pytest.raises(ConfigurationError, match="try again"):
+            save()
+        expected = "first"
+    else:
+        save()
+        expected = "second"
+
+    entry = store.get(base_url)
+    assert isinstance(entry, ActiveLogin)
+    assert entry.login.access_token.get_secret_value() == expected
+    assert [path.name for path in store.path.parent.iterdir() if path.suffix == ".tmp"] == []
+
+
+def test_waiting_for_the_lock_outlasts_a_token_refresh(monkeypatch, store):
+    held, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with store.transaction():
+            held.set()
+            release.wait(10)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    held.wait(10)
+    now = [1000.0]
+    monkeypatch.setattr("whitson_pvt_sdk._store.time.monotonic", lambda: now[0])
+
+    def sleep(seconds: float) -> None:
+        now[0] += seconds
+
+    monkeypatch.setattr("whitson_pvt_sdk._store.time.sleep", sleep)
+    try:
+        with pytest.raises(CredentialStoreBusyError, match="try again"):
+            with store.transaction():
+                pass
+    finally:
+        release.set()
+        holder.join()
+
+    assert now[0] - 1000.0 > 90

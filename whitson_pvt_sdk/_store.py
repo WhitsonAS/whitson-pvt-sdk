@@ -13,15 +13,20 @@ from typing import TYPE_CHECKING, Annotated, Literal, Self
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, PlainSerializer, SecretStr
 from pydantic import ValidationError as PydanticValidationError
 
+from whitson_pvt_sdk._oauth import HTTP_TIMEOUT_SECONDS
 from whitson_pvt_sdk.credentials import DeploymentUrl, StoredLogin, normalise_url
-from whitson_pvt_sdk.errors import ConfigurationError
+from whitson_pvt_sdk.errors import ConfigurationError, CredentialStoreBusyError
 
 if TYPE_CHECKING:
     from keyring.backend import KeyringBackend
 
 APP_DIRECTORY = "whitson-pvt"
 KEYRING_SERVICE = "whitson-pvt"
-LOCK_TIMEOUT_SECONDS = 30.0
+# Outlasts a token refresh held under the lock: connect, write and read can each take
+# HTTP_TIMEOUT_SECONDS.
+LOCK_TIMEOUT_SECONDS = 4 * HTTP_TIMEOUT_SECONDS
+_REPLACE_ATTEMPTS = 10
+_REPLACE_RETRY_SECONDS = 0.03
 
 logger = logging.getLogger("whitson_pvt_sdk")
 
@@ -47,11 +52,15 @@ class InvalidLogin(BaseModel):
 StoreEntry = ActiveLogin | InvalidLogin
 
 
+KeyringCleanup = Literal["not_used", "deleted", "not_deleted"]
+
+
 class RemovedLogin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     base_url: str
     login: StoredLogin | None
+    keyring: KeyringCleanup
 
 
 _Secret = Annotated[
@@ -112,7 +121,6 @@ class StoreTransaction:
     def __init__(self, document: _Document) -> None:
         self._document = document
         self._written: dict[str, StoredLogin] = {}
-        self._removed: list[_Profile] = []
 
     def get(self, base_url: str) -> StoreEntry | None:
         key = normalise_url(base_url)
@@ -153,10 +161,13 @@ class StoreTransaction:
         if profile is None:
             return None
         self._written.pop(key, None)
-        self._removed.append(profile)
         if self._document.default == key:
             self._document.default = None
-        return RemovedLogin(base_url=key, login=None if entry is None else entry.login)
+        return RemovedLogin(
+            base_url=key,
+            login=None if entry is None else entry.login,
+            keyring=_delete_secrets(profile),
+        )
 
 
 class CredentialStore:
@@ -211,9 +222,6 @@ class CredentialStore:
         backend = _keyring()
         for key, login in transaction._written.items():
             document.profiles[key].secrets = _secrets(backend, login)
-        for profile in transaction._removed:
-            if isinstance(profile.secrets, _KeyringSecrets) and backend is not None:
-                _delete_from_keyring(backend, profile.base_url)
         self._write(document)
 
     def _write(self, document: _Document) -> None:
@@ -225,7 +233,7 @@ class CredentialStore:
                 file.write(document.model_dump_json(indent=2).encode())
                 file.flush()
                 os.fsync(file.fileno())
-            os.replace(temporary, self.path)
+            _replace(temporary, self.path)
         except BaseException:
             temporary.unlink(missing_ok=True)
             raise
@@ -238,9 +246,10 @@ class CredentialStore:
             deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
             while not _try_lock(fd):
                 if time.monotonic() > deadline:
-                    raise ConfigurationError(
-                        f"Timed out waiting for the credential store lock {self._lock_path}; "
-                        "another wpvt process is holding it."
+                    raise CredentialStoreBusyError(
+                        f"Another process held the credential store lock {self._lock_path} for "
+                        f"{LOCK_TIMEOUT_SECONDS:.0f} s, probably while renewing a login; "
+                        "try again."
                     )
                 time.sleep(0.05)
             try:
@@ -249,6 +258,21 @@ class CredentialStore:
                 _unlock(fd)
         finally:
             os.close(fd)
+
+
+def _replace(source: Path, target: Path) -> None:
+    # Windows refuses to replace a file another process has open (reads take no lock).
+    for attempt in range(1, _REPLACE_ATTEMPTS + 1):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError as exc:
+            if attempt == _REPLACE_ATTEMPTS:
+                raise ConfigurationError(
+                    f"Could not save {target} ({exc.strerror}); another program may have it "
+                    "open. Close it and try again."
+                ) from None
+            time.sleep(_REPLACE_RETRY_SECONDS)
 
 
 def _check_private(path: Path, status: os.stat_result) -> None:
@@ -316,8 +340,16 @@ def _read_keyring(base_url: str) -> tuple[SecretStr, SecretStr]:
             f"`wpvt auth login --url {base_url}` again."
         )
     access_name, refresh_name = _keyring_names(base_url)
-    access_token = backend.get_password(KEYRING_SERVICE, access_name)
-    refresh_token = backend.get_password(KEYRING_SERVICE, refresh_name)
+    try:
+        access_token = backend.get_password(KEYRING_SERVICE, access_name)
+        refresh_token = backend.get_password(KEYRING_SERVICE, refresh_name)
+    except Exception as exc:
+        raise ConfigurationError(
+            f"Could not read the login for {base_url} from the OS keyring "
+            f"({type(exc).__name__}). Unlock the keyring and try again, or run "
+            f"`wpvt auth login --url {base_url}` again, which stores the login in the "
+            "credentials file when the keyring cannot be used."
+        ) from None
     if not access_token or not refresh_token:
         raise ConfigurationError(
             f"The OS keyring has no tokens for the login to {base_url}. "
@@ -346,12 +378,24 @@ def _secrets(
     return _KeyringSecrets()
 
 
-def _delete_from_keyring(backend: "KeyringBackend", base_url: str) -> None:
-    for name in _keyring_names(base_url):
+def _delete_secrets(profile: _Profile) -> KeyringCleanup:
+    if isinstance(profile.secrets, _FileSecrets):
+        return "not_used"
+    backend = _keyring()
+    if backend is None:
+        return "not_deleted"
+    from keyring.errors import PasswordDeleteError
+
+    deleted = True
+    for name in _keyring_names(profile.base_url):
         try:
             backend.delete_password(KEYRING_SERVICE, name)
+        except PasswordDeleteError:
+            pass
         except Exception:
             logger.warning("Could not delete %s from the OS keyring", name)
+            deleted = False
+    return "deleted" if deleted else "not_deleted"
 
 
 if sys.platform == "win32":

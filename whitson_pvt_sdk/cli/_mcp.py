@@ -31,9 +31,9 @@ class LoginBearer(httpx2.Auth):
             renewed = await anyio.to_thread.run_sync(self._bearer.renewed_after_rejection)
             if renewed is None:
                 raise AuthError(
-                    f"{self._base_url}/mcp refused the API token: personal tokens are not "
-                    f"available on MCP yet. Unset WHITSON_PVT_TOKEN and run `wpvt auth login "
-                    f"--url {self._base_url}`.",
+                    f"{self._base_url}/mcp refused the API token. MCP currently needs a login: "
+                    f"unset WHITSON_PVT_TOKEN and run `wpvt auth login --url {self._base_url}`. "
+                    "If the token should work elsewhere, check it with `wpvt auth status`.",
                     401,
                 )
             set_bearer(request.headers, renewed)
@@ -51,8 +51,9 @@ class LoginBearer(httpx2.Auth):
 
 
 def serve(url: str | None, *, verbose: bool) -> None:
-    base_url = resolve_base_url(url)
-    credential = resolve_credential(base_url, token=None).credential
+    deployment = resolve_base_url(url)
+    base_url = deployment.url
+    credential = resolve_credential(deployment, token=None).credential
     transport = StreamableHttpTransport(
         f"{base_url}/mcp",
         headers={CLIENT_HEADER: f"wpvt/{__version__}"},

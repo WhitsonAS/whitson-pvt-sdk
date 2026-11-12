@@ -59,6 +59,7 @@ def test_status_reports_the_credential_and_identity(
     store_login(base_url, access="stored-access", refresh="stored-refresh")
     if use_env_token:
         monkeypatch.setenv("WHITSON_PVT_TOKEN", "env-token")
+        monkeypatch.setenv("WHITSON_PVT_URL", base_url)
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/me",
         json={**identity, "added_later": {"ignored": True}},
@@ -137,7 +138,9 @@ def test_logout_removes_the_login_and_revokes_its_refresh_token(
     result = runner.invoke(app, ["auth", "logout", "--json"])
 
     assert result.exit_code == 0, result.stderr
-    assert json.loads(result.stdout) == {"removed": [{"url": base_url, "revocation": "revoked"}]}
+    assert json.loads(result.stdout) == {
+        "removed": [{"url": base_url, "revocation": "revoked", "keyring": "not_used"}]
+    }
     revocation = parse_qs(httpx2_mock.get_requests(url=REVOKE)[0].content.decode())
     assert revocation == {
         "token": ["stored-refresh"],
@@ -168,7 +171,9 @@ def test_logout_all_without_revocation_removes_every_login(httpx2_mock, store, s
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "removed": [{"url": url, "revocation": "not_offered"} for url in urls]
+        "removed": [
+            {"url": url, "revocation": "not_offered", "keyring": "not_used"} for url in urls
+        ]
     }
     assert all(store.get(url) is None for url in urls)
 
@@ -247,9 +252,7 @@ def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx2_mock, mo
     assert httpx2_mock.get_requests() == []
 
 
-def test_device_login_makes_the_login_the_default_and_prints_who(
-    base_url, httpx2_mock, monkeypatch, store
-):
+def _device_login_server(base_url, httpx2_mock, monkeypatch) -> None:
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
     httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=AUTH_CONFIG)
     httpx2_mock.add_response(
@@ -281,6 +284,12 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
             "expires_in": 3600,
         },
     )
+
+
+def test_device_login_makes_the_login_the_default_and_prints_who(
+    base_url, httpx2_mock, monkeypatch, store
+):
+    _device_login_server(base_url, httpx2_mock, monkeypatch)
     httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
 
     result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
@@ -293,6 +302,31 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
         for r in httpx2_mock.get_requests(url=f"{base_url}/external/v2/me")
     ] == ["Bearer stored-access"]
     assert store.default_url() == base_url
+    _no_secrets(result)
+
+
+@pytest.mark.parametrize(
+    ("me", "exit_code"),
+    [
+        ({"status_code": 403, "json": {"message": "No access to this deployment"}}, 3),
+        ({"json": {"kind": "unknown"}}, 4),
+    ],
+    ids=["no-access", "unexpected-identity"],
+)
+def test_login_whose_identity_check_fails_keeps_the_previous_default(
+    base_url, httpx2_mock, monkeypatch, store, store_login, me, exit_code
+):
+    previous = "https://other.pvt.whitson.com"
+    store_login(previous)
+    _device_login_server(base_url, httpx2_mock, monkeypatch)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", **me)
+
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
+
+    assert result.exit_code == exit_code
+    assert result.stdout == ""
+    assert store.get(base_url) is None
+    assert store.default_url() == previous
     _no_secrets(result)
 
 

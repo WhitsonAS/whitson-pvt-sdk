@@ -5,7 +5,7 @@ import httpx2
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic import ValidationError as PydanticValidationError
 
-from whitson_pvt_sdk._trust import SecureUrl
+from whitson_pvt_sdk._trust import InsecureUrlError, SecureUrl
 from whitson_pvt_sdk.credentials import StoredLogin, host_name, same_origin
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, NoResponseError
 
@@ -92,12 +92,12 @@ def fetch_auth_config(http: httpx2.Client, base_url: str) -> AuthConfig:
     response = _send(http, "GET", url)
     if response.status_code == 404:
         raise ConfigurationError(f"Command-line login is not enabled on {base_url}.")
-    return _parse(AuthConfig, response, url)
+    return parse_response(AuthConfig, response, url)
 
 
 def discover(http: httpx2.Client, issuer: str) -> ProviderMetadata:
     url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
-    metadata = _parse(ProviderMetadata, _send(http, "GET", url), url)
+    metadata = parse_response(ProviderMetadata, _send(http, "GET", url), url)
     if metadata.issuer.rstrip("/") != issuer.rstrip("/"):
         raise LoginError(f"{url} describes the issuer {metadata.issuer}, not {issuer}.")
     if not same_origin(metadata.authorization_endpoint, issuer):
@@ -114,9 +114,9 @@ def post_form(http: httpx2.Client, url: str, form: dict[str, str]) -> httpx2.Res
 
 def request_token(http: httpx2.Client, token_endpoint: str, form: dict[str, str]) -> TokenResult:
     response = post_form(http, token_endpoint, form)
-    if response.status_code in (400, 401, 403):
+    if response.is_client_error:
         return TokenRefused(error=parse_oauth_error(response, token_endpoint))
-    return TokenGranted(token=_parse(TokenResponse, response, token_endpoint))
+    return TokenGranted(token=parse_response(TokenResponse, response, token_endpoint))
 
 
 def parse_oauth_error(response: httpx2.Response, url: str) -> OAuthError:
@@ -161,14 +161,17 @@ def _send(
         raise NoResponseError(f"Could not reach {host_name(url)}: {exc}") from exc
 
 
-def _parse(model: type[_Model], response: httpx2.Response, url: str) -> _Model:
+def parse_response(model: type[_Model], response: httpx2.Response, url: str) -> _Model:
     if not response.is_success:
         raise APIError(f"{url} answered HTTP {response.status_code}", response.status_code)
     try:
         return model.model_validate_json(response.content)
     except PydanticValidationError as exc:
+        errors = exc.errors(include_url=False, include_input=False)
         problems = "; ".join(
-            f"{'.'.join(map(str, error['loc']))}: {error['msg']}"
-            for error in exc.errors(include_url=False, include_input=False, include_context=False)
+            f"{'.'.join(map(str, error['loc']))}: {error['msg']}" for error in errors
         )
-        raise LoginError(f"{url} returned a response this SDK cannot use ({problems}).") from None
+        message = f"{url} returned a response this SDK cannot use ({problems})."
+        if any(isinstance(error.get("ctx", {}).get("error"), InsecureUrlError) for error in errors):
+            raise LoginError(message) from None
+        raise APIError(message, response.status_code) from None

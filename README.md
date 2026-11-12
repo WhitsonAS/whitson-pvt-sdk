@@ -47,8 +47,15 @@ The client resolves its deployment and credential in a fixed order:
 | Deployment | `base_url=` | `WHITSON_PVT_URL` | the default login from `wpvt auth login` | `ConfigurationError` |
 | Credential | `token=` | `WHITSON_PVT_TOKEN` | the stored login for that deployment | `ConfigurationError` naming all three and `wpvt auth login --url <url>` |
 
+An API token (`token=` or `WHITSON_PVT_TOKEN`) is used only with a deployment from `base_url=` or
+`WHITSON_PVT_URL`; with one from the default login it is refused, as below.
+
 An API token is sent as the bearer token on every request and wins even when a stored login
-exists for the same deployment. A set-but-empty `token=` or `WHITSON_PVT_TOKEN` is an error, not
+exists for the same deployment, but only to a deployment you named: `base_url=` (`--url`) or
+`WHITSON_PVT_URL`. When the URL would come from the default login and `token=` or
+`WHITSON_PVT_TOKEN` is set, creating the client raises `ConfigurationError` naming both, so a
+token kept in the environment is never sent to whichever deployment happens to be the default
+login; set `WHITSON_PVT_URL` (or pass the URL) or unset the token. A set-but-empty `token=` or `WHITSON_PVT_TOKEN` is an error, not
 a fall-through. A stored login that the authorization server no longer accepts raises
 `LoginError`, which says to run `wpvt auth login` again.
 
@@ -287,19 +294,27 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
 ```
 
 - `wpvt auth login [--url URL] [--device] [--trust-host] [--yes]` logs in with the
-  authorization code flow and PKCE through a one-off listener on `127.0.0.1`. It opens a browser
-  only when attached to a terminal; otherwise it prints the URL. `--device` logs in with a code
-  entered on another device, for SSH sessions, containers and sandboxes, on deployments that
-  enable it. The new login becomes the default.
+  authorization code flow and PKCE through a one-off listener on `127.0.0.1`, on the first free
+  port of 52817, 54631, 57493 and 61287 (the redirect URI must match exactly, so these are the
+  ports registered on the login server; the login fails with a message naming them when all are
+  busy). Only a callback carrying this login's `state` ends the wait; any other request to the
+  listener is answered 400 and ignored. It opens a browser only when attached to a terminal;
+  otherwise it prints the URL. `--device` logs in with a code entered on another device, for SSH
+  sessions, containers and sandboxes, on deployments that enable it. The login is stored, and
+  becomes the default, only after `/external/v2/me` accepts it; if that check fails, nothing is
+  stored and the previous default stays.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
   came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
   API reports: the API token's name for an API token, and "legacy client <subject>, full
   access" for a legacy client. It never prints a token.
 - `wpvt auth logout [--url URL | --all]` removes stored logins and revokes their refresh
-  tokens when the authorization server offers revocation.
+  tokens when the authorization server offers revocation. It removes a login even when its
+  tokens cannot be read; when the OS keyring is unavailable, it says the keyring entries were
+  not deleted (`"keyring": "not_deleted"` with `--json`) and names them.
 - `wpvt --version` prints the version.
 
-The URL comes from `--url`, else `WHITSON_PVT_URL`, else the default login. Commands that report
+The URL comes from `--url`, else `WHITSON_PVT_URL`, else the default login; with
+`WHITSON_PVT_TOKEN` set, a URL from the default login is refused (see Quick start). Commands that report
 take `--json`: one JSON document on stdout; errors go to stderr, as one JSON document (`error`,
 `message`) with `--json`. Progress messages (the login URL, the device code) go to stderr.
 
@@ -384,7 +399,9 @@ codex mcp add wpvt -- wpvt mcp
 ```
 
 - MCP currently needs a login from `wpvt auth login`; the server refuses API tokens
-  (`whitson_pvt_...`) on MCP, and `wpvt mcp` says so when `WHITSON_PVT_TOKEN` is set.
+  (`whitson_pvt_...`) on MCP. When it refuses the token in `WHITSON_PVT_TOKEN`, `wpvt mcp` says
+  to unset it and log in, and to check the token with `wpvt auth status` if it should work
+  elsewhere.
 - It never starts a login or opens a browser. With no login, a login that is no longer valid,
   a credential the server refuses, or an unreachable deployment, it exits before serving with
   the message on stderr, so the host shows the server as failed. A login that stops working while
@@ -398,10 +415,10 @@ codex mcp add wpvt -- wpvt mcp
 | Exit code | Meaning |
 | --- | --- |
 | 0 | Success |
-| 1 | Any other error |
-| 2 | Usage or configuration: a bad option, no URL or credential configured, login not enabled on the deployment, a credentials file with loose permissions, the `cli` extra (or for `wpvt mcp`, the `mcp` extra) missing |
+| 1 | Any other error, such as another process holding the credential store's lock for longer than a login renewal can take (try again) |
+| 2 | Usage or configuration: a bad option, no URL or credential configured, an API token without an explicit URL, login not enabled on the deployment, a credentials file with loose permissions or that cannot be replaced, an OS keyring that cannot be read, the `cli` extra (or for `wpvt mcp`, the `mcp` extra) missing |
 | 3 | Authentication: the login was refused or is no longer valid, or the API rejected the credential |
-| 4 | Network or server: no response, or an unexpected status from the API or the authorization server |
+| 4 | Network or server: no response, or an unexpected status or response shape from the API, the deployment's login configuration or the authorization server |
 
 ### Use with Claude Code and Codex
 
@@ -430,7 +447,9 @@ starts for hosts it can expect you to trust:
   `eu.example.pvt.whitson.com` (not `pvt.whitson.com` itself, and not lookalikes such as
   `evilpvt.whitson.com` or `pvt.whitson.com.example.org`);
 - this machine, over http or https: `localhost`, names under `localhost` (such as
-  `api.pvt.localhost`), `127.0.0.1` and `::1`.
+  `api.pvt.localhost`), `127.0.0.1` and `::1`. A name under `localhost` must resolve only to
+  loopback addresses when the login starts, since not every resolver maps such names to this
+  machine; otherwise the login is refused before any request.
 
 Host names are compared lower-case without a trailing dot. A URL with a user name or password,
 a non-ASCII or punycode (`xn--`) host name, or plain HTTP to another host is refused. For any
@@ -471,6 +490,11 @@ that receives a `FirstUse` or `IssuerChanged` from `whitson_pvt_sdk.login` (each
 continue; without it, such a login raises `ConfigurationError`. A login that needs no question
 needs no `confirm=`.
 
+`login()` also takes `verify=`, a function called with the new login before it is stored;
+`login()` returns its result. If it raises, nothing is stored and the previous default stays.
+`wpvt auth login` passes a check of `/external/v2/me`; a caller that wants no check passes
+`verify=lambda new_login: new_login`.
+
 The issuer, and the authorization, token, device and revocation endpoints it publishes, must be
 HTTPS (http only on this machine). The browser, and the page where a device code is entered, are
 only ever on the issuer's own scheme, host and port.
@@ -480,7 +504,8 @@ Device login (`--device`) is available only on deployments that enable it (`devi
 machine with a browser or use an API token in `WHITSON_PVT_TOKEN`.
 
 These checks apply to logging in. An API token (`token=` or `WHITSON_PVT_TOKEN`) is sent to
-whatever `base_url` you configure, and a stored login only ever to its own deployment.
+the URL you give in `base_url=`, `--url` or `WHITSON_PVT_URL`, never to one taken from the
+default login, and a stored login only ever to its own deployment.
 
 Library code never starts a login. Scripts and agents should use `WHITSON_PVT_TOKEN`; a login
 made with `wpvt auth login` is for people at a terminal, and every SDK client on the machine then
@@ -498,6 +523,14 @@ the login is still valid, and the default. Without a usable keyring, or when the
 a write, the tokens are kept in the file. To keep tokens out of the keyring, set
 `PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`.
 
+If a login is in the keyring and the keyring cannot be read, such as a locked keyring or an SSH
+session without a desktop session bus, commands stop with exit code 2 and name the keyring
+error. Unlock the keyring (on Linux, log in to the desktop session or start
+`gnome-keyring-daemon --unlock`) and try again, or run `wpvt auth login` again in that session:
+when the keyring refuses the write, the login is stored in the credentials file instead.
+`wpvt auth logout` removes such a login without reading it; it cannot revoke the refresh token
+or delete the keyring entries then, and says so.
+
 ### Security properties
 
 - **Host binding.** A stored login is only ever sent to the deployment it was issued for. The
@@ -509,7 +542,10 @@ a write, the tokens are kept in the file. To keep tokens out of the keyring, set
 - **Rotation-safe renewal.** The access token is renewed five minutes before it expires and once
   after a 401. Renewal takes a lock on `credentials.lock` next to the file, re-reads the store
   (another process may have renewed already), and saves the rotated refresh token before it lets
-  go, so a script and another `wpvt` process can share one login.
+  go, so a script and another `wpvt` process can share one login. Another process waits for the
+  lock up to 120 s, longer than a renewal can take with the 30 s HTTP timeouts. On Windows, where
+  the file cannot be replaced while another process is reading it, the replacement is retried
+  briefly.
 - **No browser from library code.** Only `wpvt auth login`, or an explicit call to
   `whitson_pvt_sdk.login.login`, starts a login, and only to a trusted deployment that names
   whitson's login server, or after you confirm the hosts (see above).

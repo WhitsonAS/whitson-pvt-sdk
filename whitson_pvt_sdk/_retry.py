@@ -57,7 +57,7 @@ def retry_after(response: httpx2.Response) -> float | None:
 
 def _rate_limit_reset_after(response: httpx2.Response) -> float | None:
     value = response.headers.get("x-ratelimit-reset")
-    if value is None:
+    if value is None or response.status_code != 429:
         return None
     try:
         return max(float(value) - time.time(), 0)

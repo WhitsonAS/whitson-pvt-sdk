@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import re
+import socket
 import threading
 import urllib.error
 import urllib.request
@@ -10,8 +11,10 @@ import pytest
 
 from tests.conftest import ISSUER, TOKEN_ENDPOINT, make_login
 from whitson_pvt_sdk._store import ActiveLogin
-from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
+from whitson_pvt_sdk.credentials import StoredLogin
+from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, SDKError
 from whitson_pvt_sdk.login import (
+    CALLBACK_PORTS,
     BrowserLogin,
     Confirmation,
     DeviceLogin,
@@ -30,6 +33,14 @@ TOKENS = {
     "refresh_token": "fresh-refresh",
     "token_type": "Bearer",
     "expires_in": 3600,
+}
+
+
+PROVIDER = {
+    "issuer": ISSUER,
+    "authorization_endpoint": AUTHORIZE,
+    "token_endpoint": TOKEN_ENDPOINT,
+    "device_authorization_endpoint": DEVICE_ENDPOINT,
 }
 
 
@@ -59,6 +70,10 @@ def authorization_server(base_url, httpx2_mock):
 
 def _accept(_: Confirmation) -> bool:
     return True
+
+
+def _keep(stored: StoredLogin) -> StoredLogin:
+    return stored
 
 
 def _form(request):
@@ -98,6 +113,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         base_url,
         BrowserLogin(open_browser=open_browser, timeout=10),
         output=messages.append,
+        verify=_keep,
     )
     visits.pop().join()
 
@@ -112,7 +128,12 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         "code_challenge_method": "S256",
         "connection": "acme-sso",
     }
-    assert authorize["redirect_uri"][0].startswith("http://127.0.0.1:")
+    redirect = urlsplit(authorize["redirect_uri"][0])
+    assert (redirect.hostname, redirect.port, redirect.path) == (
+        "127.0.0.1",
+        CALLBACK_PORTS[0],
+        "/callback",
+    )
     exchange = _form(httpx2_mock.get_requests(url=TOKEN_ENDPOINT)[0])
     verifier = exchange.pop("code_verifier")
     digest = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=")
@@ -131,25 +152,39 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
     assert store.default_url() == base_url
 
 
+@pytest.mark.parametrize("then_valid", [True, False], ids=["then-valid", "only-forged"])
 @pytest.mark.usefixtures("authorization_server")
-def test_browser_callback_with_another_state_is_rejected(base_url, store):
+def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, store, then_valid):
+    if then_valid:
+        httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
     statuses, visits = [], []
 
     def open_browser(url: str) -> bool:
-        redirect = parse_qs(urlsplit(url).query)["redirect_uri"][0]
-        visits.append(_visit_later([f"{redirect}?code=forged-code&state=forged-state"], statuses))
+        query = parse_qs(urlsplit(url).query)
+        redirect = query["redirect_uri"][0]
+        forged = [f"{redirect}?code=forged-code&state=forged-state", f"{redirect}?code=forged-code"]
+        valid = [f"{redirect}?code=the-code&state={query['state'][0]}"] if then_valid else []
+        visits.append(_visit_later(forged + valid, statuses))
         return True
 
-    with pytest.raises(LoginError, match="state"):
-        login(
-            base_url,
-            BrowserLogin(open_browser=open_browser, timeout=10),
-            output=print,
+    def attempt():
+        return login(
+            base_url, BrowserLogin(open_browser=open_browser, timeout=2), output=print, verify=_keep
         )
+
+    if then_valid:
+        stored = attempt()
+        assert store.get(base_url) == ActiveLogin(login=stored)
+    else:
+        with pytest.raises(LoginError, match="Timed out"):
+            attempt()
+        assert store.get(base_url) is None
     visits.pop().join()
 
-    assert statuses == [400]
-    assert store.get(base_url) is None
+    assert statuses == [400, 400] + ([200] if then_valid else [])
+    assert [_form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
+        ["the-code"] if then_valid else []
+    )
 
 
 @pytest.mark.parametrize(
@@ -163,7 +198,6 @@ def test_browser_callback_with_another_state_is_rejected(base_url, store):
         ("https://localhost", "https://localhost"),
         ("http://127.0.0.1:4000", "http://127.0.0.1:4000"),
         ("http://[::1]:4000", "http://[::1]:4000"),
-        ("http://mcp.api.pvt.localhost:4000", "http://mcp.api.pvt.localhost:4000"),
     ],
 )
 def test_login_contacts_a_trusted_deployment(httpx2_mock, url, deployment):
@@ -172,7 +206,7 @@ def test_login_contacts_a_trusted_deployment(httpx2_mock, url, deployment):
     with pytest.raises(
         ConfigurationError, match=re.escape(f"Command-line login is not enabled on {deployment}.")
     ):
-        login(url, DeviceLogin(), output=print)
+        login(url, DeviceLogin(), output=print, verify=_keep)
 
     assert [str(r.url) for r in httpx2_mock.get_requests()] == [
         f"{deployment}/external/v2/auth/config"
@@ -200,7 +234,9 @@ def test_login_contacts_a_trusted_deployment(httpx2_mock, url, deployment):
 )
 def test_login_refuses_other_hosts_before_any_request(httpx2_mock, url, trust_host, reason):
     with pytest.raises(ConfigurationError, match=reason) as refusal:
-        login(url, DeviceLogin(), output=print, confirm=_accept, trust_host=trust_host)
+        login(
+            url, DeviceLogin(), output=print, verify=_keep, confirm=_accept, trust_host=trust_host
+        )
 
     assert httpx2_mock.get_requests() == []
     assert "secret" not in refusal.value.message
@@ -478,6 +514,7 @@ def test_login_decides_by_deployment_issuer_and_audience(
             deployment,
             BrowserLogin(open_browser=open_browser, timeout=0.1),
             output=print,
+            verify=_keep,
             confirm=None if answer is None else confirm,
             trust_host=trust_host,
         )
@@ -514,7 +551,7 @@ def test_a_deployment_signs_in_only_at_a_known_issuer_host(base_url, httpx2_mock
         httpx2_mock.add_response(status_code=503)
 
     with pytest.raises(SDKError, match=re.escape(error)):
-        login(base_url, DeviceLogin(), output=print, confirm=_accept, trust_host=True)
+        login(base_url, DeviceLogin(), output=print, verify=_keep, confirm=_accept, trust_host=True)
 
     requests = [r.url for r in httpx2_mock.get_requests()]
     assert [str(url) for url in requests[:1]] == [f"{base_url}/external/v2/auth/config"]
@@ -563,6 +600,7 @@ def test_a_deployment_may_only_ask_for_access_to_itself(
             base_url,
             BrowserLogin(open_browser=open_browser, timeout=0.1),
             output=print,
+            verify=_keep,
             confirm=_accept,
             trust_host=trust_host,
         )
@@ -624,6 +662,7 @@ def test_login_refuses_insecure_login_servers(
             base_url,
             BrowserLogin(open_browser=open_browser, timeout=0.1),
             output=print,
+            verify=_keep,
         )
 
     assert opened == []
@@ -667,7 +706,7 @@ def test_device_login_needs_the_deployment_to_enable_it(httpx2_mock, deployment,
         return True
 
     with pytest.raises(SDKError, match=re.escape(error)):
-        login(deployment, DeviceLogin(), output=print, confirm=confirm)
+        login(deployment, DeviceLogin(), output=print, verify=_keep, confirm=confirm)
 
     assert questions == []
     assert len(httpx2_mock.get_requests()) == 1
@@ -686,8 +725,8 @@ class FakeClock:
         self.now += seconds
 
 
-PENDING = {"status_code": 400, "json": {"error": "authorization_pending"}}
-SLOW_DOWN = {"status_code": 400, "json": {"error": "slow_down"}}
+PENDING = {"status_code": 403, "json": {"error": "authorization_pending"}}
+SLOW_DOWN = {"status_code": 429, "json": {"error": "slow_down"}}
 DENIED = {"status_code": 403, "json": {"error": "access_denied"}}
 EXPIRED = {"status_code": 400, "json": {"error": "expired_token"}}
 GRANTED = {"json": TOKENS}
@@ -726,12 +765,12 @@ def test_device_login_polls_at_the_server_interval(
     messages = []
 
     if error is None:
-        stored = login(base_url, DeviceLogin(), output=messages.append)
+        stored = login(base_url, DeviceLogin(), output=messages.append, verify=_keep)
         assert stored.refresh_token.get_secret_value() == "fresh-refresh"
         assert store.default_url() == base_url
     else:
         with pytest.raises(LoginError, match=error):
-            login(base_url, DeviceLogin(), output=messages.append)
+            login(base_url, DeviceLogin(), output=messages.append, verify=_keep)
         assert store.get(base_url) is None
 
     assert clock.sleeps == sleeps
@@ -774,8 +813,121 @@ def test_device_login_refuses_a_code_page_off_the_login_server(
     messages = []
 
     with pytest.raises(LoginError, match=message):
-        login(base_url, DeviceLogin(), output=messages.append)
+        login(base_url, DeviceLogin(), output=messages.append, verify=_keep)
 
     assert messages == []
     assert httpx2_mock.get_requests(url=TOKEN_ENDPOINT) == []
+    assert store.get(base_url) is None
+
+
+@pytest.mark.parametrize("busy", [1, len(CALLBACK_PORTS)], ids=["first-busy", "all-busy"])
+@pytest.mark.usefixtures("authorization_server")
+def test_browser_login_listens_on_the_first_free_registered_port(base_url, busy):
+    occupied = []
+    for port in CALLBACK_PORTS[:busy]:
+        listener = socket.socket()
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", port))
+        listener.listen()
+        occupied.append(listener)
+    redirects = []
+
+    def open_browser(url: str) -> bool:
+        redirects.append(parse_qs(urlsplit(url).query)["redirect_uri"][0])
+        return True
+
+    try:
+        with pytest.raises(LoginError) as failure:
+            login(
+                base_url,
+                BrowserLogin(open_browser=open_browser, timeout=0.1),
+                output=print,
+                verify=_keep,
+            )
+    finally:
+        for listener in occupied:
+            listener.close()
+
+    if busy == len(CALLBACK_PORTS):
+        assert redirects == []
+        assert all(str(port) in failure.value.message for port in CALLBACK_PORTS)
+    else:
+        assert redirects == [f"http://127.0.0.1:{CALLBACK_PORTS[1]}/callback"]
+        assert "Timed out" in failure.value.message
+
+
+LOCAL_NAME = "mcp.api.pvt.localhost"
+
+
+@pytest.mark.parametrize(
+    ("addresses", "error"),
+    [
+        (["127.0.0.1", "::1"], "Command-line login is not enabled"),
+        (["127.0.0.1", "10.0.0.5"], "10.0.0.5"),
+        (["192.0.2.7"], "192.0.2.7"),
+        ([], "does not resolve"),
+    ],
+    ids=["loopback", "loopback-and-other", "other", "unresolved"],
+)
+def test_a_name_under_localhost_must_resolve_only_to_this_machine(
+    httpx2_mock, monkeypatch, addresses, error
+):
+    resolve = socket.getaddrinfo
+
+    def getaddrinfo(host, *args, **kwargs):
+        if host != LOCAL_NAME:
+            return resolve(host, *args, **kwargs)
+        if not addresses:
+            raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")
+        return [
+            (socket.AF_INET6 if ":" in a else socket.AF_INET, socket.SOCK_STREAM, 6, "", (a, 0))
+            for a in addresses
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    accepted = addresses == ["127.0.0.1", "::1"]
+    if accepted:
+        httpx2_mock.add_response(status_code=404, json={"message": "Not found"})
+
+    with pytest.raises(ConfigurationError, match=re.escape(error)):
+        login(f"http://{LOCAL_NAME}:4000", DeviceLogin(), output=print, verify=_keep)
+
+    assert [str(r.url) for r in httpx2_mock.get_requests()] == (
+        [f"http://{LOCAL_NAME}:4000/external/v2/auth/config"] if accepted else []
+    )
+
+
+DEVICE_AUTHORIZATION = {
+    "device_code": "secret-device-code",
+    "user_code": "ABCD-EFGH",
+    "verification_uri": ACTIVATE,
+    "expires_in": 600,
+}
+
+
+@pytest.mark.parametrize("malformed", ["auth-config", "device-authorization", "token"])
+def test_a_malformed_login_server_response_is_a_server_error(
+    base_url, httpx2_mock, monkeypatch, store, malformed
+):
+    monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
+    config = _auth_config()
+    httpx2_mock.add_response(
+        url=f"{base_url}/external/v2/auth/config",
+        json={**config, "client_id": None} if malformed == "auth-config" else config,
+    )
+    if malformed != "auth-config":
+        httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
+        httpx2_mock.add_response(
+            method="POST",
+            url=DEVICE_ENDPOINT,
+            json={"user_code": "ABCD-EFGH"}
+            if malformed == "device-authorization"
+            else DEVICE_AUTHORIZATION,
+        )
+    if malformed == "token":
+        httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json={"access_token": "x"})
+
+    with pytest.raises(APIError, match="cannot use"):
+        login(base_url, DeviceLogin(), output=print, verify=_keep)
+
     assert store.get(base_url) is None

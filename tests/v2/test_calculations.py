@@ -1,6 +1,11 @@
 import pytest
 
-from whitson_pvt_sdk.errors import CalculationError, MissingDataError
+from whitson_pvt_sdk.errors import APIError, CalculationError, MissingDataError
+from whitson_pvt_sdk.v2.models import (
+    CalculationCompositionEntryModel,
+    SurfaceProcessInputModel,
+    SurfaceProcessStageInputModel,
+)
 from whitson_pvt_sdk.v2.resources import Calculations
 
 
@@ -207,3 +212,50 @@ def test_get_sample_feed_compositions_raises_on_missing_adjusted_composition(
             sample_ids=[456],
             source="adjusted_compositions",
         )
+
+
+def _converted(molar_amount):
+    return {
+        "status": "success",
+        "result": {
+            "component_names": ["C1"],
+            "composition": [{"component_name": "C1", "molar_amount": molar_amount}],
+            "mass_fractions": [1.0],
+            "mole_fractions": [1.0],
+        },
+    }
+
+
+def test_a_result_count_other_than_the_sample_count_is_a_server_error(transport, httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://dev.pvt.whitson.com/external/v2/calculations/sample-to-eos-slate-conversion",
+        json={"results": [_converted(1.0)]},
+    )
+
+    with pytest.raises(APIError, match="1 result for 2 samples"):
+        Calculations(transport).get_sample_feed_compositions(
+            fluid_model_id=123, sample_ids=[456, 789]
+        )
+
+
+def test_gor_recombination_source_missing_a_sample_is_refused_before_any_request(
+    transport, httpx2_mock
+):
+    feed = [CalculationCompositionEntryModel(component_name="C1", molar_amount=1.0)]
+
+    with pytest.raises(MissingDataError, match="no feed composition for sample ids: 789"):
+        Calculations(transport).get_gor_recombination_feed_compositions(
+            fluid_model_id=123,
+            gor_values={456: 100.0, 789: 200.0},
+            gor_unit="Sm3/m3",
+            recombination_type="total_gor",
+            surface_process=SurfaceProcessInputModel(
+                pressure_unit="bara",
+                temperature_unit="C",
+                stages=[SurfaceProcessStageInputModel(pressure=1.01325, temperature=15.0)],
+            ),
+            source={456: feed},
+        )
+
+    assert httpx2_mock.get_requests() == []

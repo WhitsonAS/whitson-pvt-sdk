@@ -1,3 +1,5 @@
+import ipaddress
+from collections.abc import Callable, Sequence
 from typing import Annotated
 
 import httpx2
@@ -73,7 +75,10 @@ class TrustedByOverride(BaseModel):
 TrustedHost = TrustedDeployment | TrustedLoopback | TrustedByOverride
 
 
-def host_trust(base_url: str, *, trust_host: bool) -> TrustedHost:
+Resolver = Callable[[str], Sequence[str]]
+
+
+def host_trust(base_url: str, *, trust_host: bool, resolve: Resolver) -> TrustedHost:
     try:
         url = normalise_url(base_url)
     except ValueError:
@@ -90,6 +95,7 @@ def host_trust(base_url: str, *, trust_host: bool) -> TrustedHost:
             "logins are only started for plain ASCII host names."
         )
     if ALLOWLIST.is_loopback(host):
+        _require_loopback_resolution(host, resolve)
         return TrustedLoopback(url=url)
     if parsed.scheme != "https":
         raise ConfigurationError(f"Refusing to log in over plain HTTP to {url}; use https://.")
@@ -104,6 +110,31 @@ def host_trust(base_url: str, *, trust_host: bool) -> TrustedHost:
         f"{host} and meant to log in to it, run the login again with --trust-host "
         "(trust_host=True in Python)."
     )
+
+
+def _require_loopback_resolution(host: str, resolve: Resolver) -> None:
+    if host in ALLOWLIST.loopback_addresses or host in ALLOWLIST.loopback_names:
+        return
+    addresses = sorted(set(resolve(host)))
+    if not addresses:
+        raise ConfigurationError(
+            f"{host} does not resolve to an address on this machine, so the login was not "
+            "started. Use http://localhost:<port> or check the name."
+        )
+    elsewhere = [address for address in addresses if not _is_loopback_address(address)]
+    if elsewhere:
+        raise ConfigurationError(
+            f"{host} resolves to {', '.join(elsewhere)}, which is not this machine, so the "
+            "login was not started. Names under localhost are only trusted where they resolve "
+            "to loopback addresses only; use http://localhost:<port> instead."
+        )
+
+
+def _is_loopback_address(address: str) -> bool:
+    try:
+        return ipaddress.ip_address(address).is_loopback
+    except ValueError:
+        return False
 
 
 class Proceed(BaseModel):
@@ -207,6 +238,10 @@ def _is_own_audience(url: str, audience: str) -> bool:
     return same_origin(audience_origin, url) and path == b"/mcp"
 
 
+class InsecureUrlError(ValueError):
+    pass
+
+
 def _secure_url(value: str) -> str:
     try:
         url = httpx2.URL(value)
@@ -216,7 +251,7 @@ def _secure_url(value: str) -> str:
         return value
     if url.scheme == "http" and ALLOWLIST.is_loopback(host_name(url)):
         return value
-    raise ValueError("must be an https URL (http only on this machine)")
+    raise InsecureUrlError("must be an https URL (http only on this machine)")
 
 
 SecureUrl = Annotated[str, AfterValidator(_secure_url)]

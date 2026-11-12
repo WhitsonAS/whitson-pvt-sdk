@@ -254,14 +254,16 @@ def test_mcp_renews_an_expiring_login_before_serving_and_keeps_the_rotated_token
     assert f"refused the stored login. Run `wpvt auth login --url {backend.url}`" in result.stderr
 
 
-def test_mcp_with_an_api_token_says_personal_tokens_are_not_available(backend, monkeypatch):
+def test_mcp_with_a_refused_api_token_says_mcp_needs_a_login(backend, monkeypatch):
     monkeypatch.setenv("WHITSON_PVT_TOKEN", "whitson_pvt_secret")
 
     result = runner.invoke(app, ["mcp", "--url", backend.url])
 
     assert result.exit_code == 3
-    assert "personal tokens are not available on MCP yet" in result.stderr
+    assert f"{backend.url}/mcp refused the API token" in result.stderr
+    assert "personal tokens are not available" not in result.stderr
     assert f"wpvt auth login --url {backend.url}" in result.stderr
+    assert "wpvt auth status" in result.stderr
     assert result.stdout == ""
     assert "whitson_pvt_secret" not in result.stderr
 
