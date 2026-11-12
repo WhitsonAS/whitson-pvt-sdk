@@ -45,6 +45,8 @@ select = ["E", "F", "I", "TID251", "UP", "W"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "whitson_pvt_sdk._generated.v2.models".msg = "Import models from whitson_pvt_sdk.v2.models instead."
+"unittest.mock".msg = "Mock only at boundaries: httpx2_mock for HTTP, monkeypatch for the clock and OS calls (TESTING.md)."
+"pytest_mock".msg = "Mock only at boundaries: httpx2_mock for HTTP, monkeypatch for the clock and OS calls (TESTING.md)."
 
 [tool.ruff.lint.isort]
 known-first-party = ["whitson_pvt_sdk"]

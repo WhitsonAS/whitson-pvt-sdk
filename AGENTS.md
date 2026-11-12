@@ -12,6 +12,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 
 ## Tests
 
+- Mock only at boundaries. Lint bans `unittest.mock` and `pytest_mock` (`TID251`), and `just lint` covers `tests/`: use `httpx2_mock` for HTTP and `monkeypatch` for the clock and OS calls, never for an SDK function.
 - HTTP is mocked with `httpx2-pytest` (the `pytest-httpx` API for httpx2): request the `httpx2_mock` fixture. It patches httpx2's transports, so a test that requests it cannot also reach the loopback server `tests/test_cli_mcp.py` starts.
 - Run the test suite with `just test`; it executes `uv run pytest tests/ -v`.
 - Run coverage with `just test-cov`; it executes `uv run pytest tests/ -v --cov=whitson_pvt_sdk --cov-report=term-missing`.
