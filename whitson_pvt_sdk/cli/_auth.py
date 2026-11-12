@@ -93,8 +93,9 @@ def login_command(
         typer.Option(
             "--yes",
             help="Skip the question asked before the first login to a --trust-host or "
-            "localhost deployment that names a login server other than whitson's (or after "
-            "that login server changed). Required there without a terminal.",
+            "localhost deployment that names a login server other than whitson's or asks for "
+            "access to another service (or after that login server changed). Required there "
+            "without a terminal.",
         ),
     ] = False,
     json_output: JsonOption = False,

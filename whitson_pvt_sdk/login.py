@@ -40,6 +40,7 @@ from whitson_pvt_sdk._trust import (
     TrustedByOverride,
     TrustedDeployment,
     TrustedLoopback,
+    UnexpectedAudience,
     UnexpectedIssuer,
     host_trust,
     login_decision,
@@ -87,16 +88,16 @@ def login(
             raise ConfigurationError(reason)
     with oauth_client() as http:
         config = fetch_auth_config(http, url)
-        if isinstance(method, DeviceLogin) and not config.device_login:
-            raise ConfigurationError(
-                f"Device login is not enabled on {url}. Log in with a browser from a machine "
-                f"that has one, or use an API token in {TOKEN_ENV_VAR}."
-            )
-        match login_decision(trusted, config.issuer):
+        match login_decision(trusted, config.issuer, config.audience):
+            case UnexpectedIssuer() | UnexpectedAudience() as unexpected:
+                raise LoginError(unexpected.describe())
+            case _ if isinstance(method, DeviceLogin) and not config.device_login:
+                raise ConfigurationError(
+                    f"Device login is not enabled on {url}. Log in with a browser from a machine "
+                    f"that has one, or use an API token in {TOKEN_ENV_VAR}."
+                )
             case Proceed():
                 pass
-            case UnexpectedIssuer() as unexpected:
-                raise LoginError(unexpected.describe())
             case FirstUse() | IssuerChanged() as confirmation:
                 if confirm is None:
                     raise ConfigurationError(

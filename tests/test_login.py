@@ -40,7 +40,7 @@ def authorization_server(base_url, httpx_mock):
         json={
             "issuer": ISSUER,
             "client_id": "cli-client",
-            "audience": "https://dev.pvt.whitson.com/external",
+            "audience": "https://dev.pvt.whitson.com/mcp",
             "scopes": ["read:data", "write:data"],
             "connection": "acme-sso",
             "device_login": True,
@@ -107,7 +107,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx_m
         "client_id": "cli-client",
         "redirect_uri": authorize["redirect_uri"][0],
         "scope": "read:data write:data offline_access",
-        "audience": "https://dev.pvt.whitson.com/external",
+        "audience": "https://dev.pvt.whitson.com/mcp",
         "code_challenge": authorize["code_challenge"][0],
         "code_challenge_method": "S256",
         "connection": "acme-sso",
@@ -126,6 +126,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx_m
     assert statuses == [404, 200]
     assert not any(verifier in message or "the-code" in message for message in messages)
     assert stored.access_token.get_secret_value() == "fresh-access"
+    assert stored.audience == "https://dev.pvt.whitson.com/mcp"
     assert store.get(base_url) == ActiveLogin(login=stored)
     assert store.default_url() == base_url
 
@@ -203,11 +204,11 @@ def test_login_refuses_other_hosts_before_any_request(httpx_mock, url, trust_hos
     assert "secret" not in refusal.value.message
 
 
-def _auth_config(issuer=ISSUER, device_login=True):
+def _auth_config(issuer=ISSUER, device_login=True, audience="https://dev.pvt.whitson.com/mcp"):
     config = {
         "issuer": issuer,
         "client_id": "cli-client",
-        "audience": "https://dev.pvt.whitson.com/external",
+        "audience": audience,
         "scopes": ["read:data"],
     }
     return config if device_login is None else {**config, "device_login": device_login}
@@ -217,12 +218,19 @@ LOOPBACK = "http://localhost:4000"
 BASE = "https://dev.pvt.whitson.com"
 UNLISTED = "https://pvt.example.org"
 OLD_ISSUER = "https://old-login.example.com/"
+OTHER_DEPLOYMENT = "https://prod.pvt.whitson.com/mcp"
+LOCAL_MCP = "http://localhost:8000/mcp"
 PROCEEDS = "HTTP 503"
 REFUSED = "dev.pvt.whitson.com named an unexpected login server, https://login.example.com"
+OTHER_SERVICE = "dev.pvt.whitson.com asked for access to a different service"
 
 
-def _first_use(deployment_host, issuer_host="login.example.com"):
-    return FirstUse(deployment_host=deployment_host, issuer_host=issuer_host)
+def _first_use(deployment_host, issuer_host="login.example.com", foreign_audience=None):
+    return FirstUse(
+        deployment_host=deployment_host,
+        issuer_host=issuer_host,
+        foreign_audience=foreign_audience,
+    )
 
 
 def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
@@ -230,35 +238,92 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
         deployment_host=deployment_host,
         issuer_host="login.example.com",
         previous_issuer_host=previous_issuer_host,
+        foreign_audience=None,
     )
 
 
+OWN = "own"
+
+
 @pytest.mark.parametrize(
-    ("deployment", "trust_host", "issuer", "stored", "answer", "asked", "error"),
+    ("deployment", "trust_host", "issuer", "audience", "stored", "answer", "asked", "error"),
     [
-        pytest.param(BASE, False, ISSUER, None, None, None, PROCEEDS, id="deployment-known"),
+        pytest.param(BASE, False, ISSUER, OWN, None, None, None, PROCEEDS, id="deployment-known"),
         pytest.param(
-            BASE, False, ISSUER, OLD_ISSUER, None, None, PROCEEDS, id="deployment-known-changed"
+            BASE,
+            False,
+            ISSUER,
+            OWN,
+            OLD_ISSUER,
+            None,
+            None,
+            PROCEEDS,
+            id="deployment-known-changed",
         ),
-        pytest.param(BASE, False, OTHER_ISSUER, None, True, None, REFUSED, id="deployment-other"),
         pytest.param(
-            BASE, True, OTHER_ISSUER, None, True, None, REFUSED, id="deployment-other-trust-host"
+            BASE, False, OTHER_ISSUER, OWN, None, True, None, REFUSED, id="deployment-other"
+        ),
+        pytest.param(
+            BASE,
+            True,
+            OTHER_ISSUER,
+            OWN,
+            None,
+            True,
+            None,
+            REFUSED,
+            id="deployment-other-trust-host",
         ),
         pytest.param(
             BASE,
             False,
             OTHER_ISSUER,
+            OWN,
             OTHER_ISSUER,
             True,
             None,
             REFUSED,
             id="deployment-other-stored",
         ),
-        pytest.param(LOOPBACK, False, ISSUER, None, None, None, PROCEEDS, id="loopback-known"),
+        pytest.param(
+            BASE,
+            True,
+            ISSUER,
+            OTHER_DEPLOYMENT,
+            ISSUER,
+            True,
+            None,
+            OTHER_SERVICE,
+            id="deployment-other-audience-stored-trust-host",
+        ),
+        pytest.param(LOOPBACK, False, ISSUER, OWN, None, None, None, PROCEEDS, id="loopback-known"),
+        pytest.param(
+            LOOPBACK,
+            False,
+            ISSUER,
+            LOCAL_MCP,
+            None,
+            False,
+            _first_use("localhost", "whitson.eu.auth0.com", LOCAL_MCP),
+            "cancelled",
+            id="loopback-known-other-audience",
+        ),
+        pytest.param(
+            LOOPBACK,
+            False,
+            ISSUER,
+            LOCAL_MCP,
+            ISSUER,
+            None,
+            None,
+            PROCEEDS,
+            id="loopback-known-other-audience-known",
+        ),
         pytest.param(
             LOOPBACK,
             False,
             OTHER_ISSUER,
+            OWN,
             None,
             False,
             _first_use("localhost"),
@@ -269,6 +334,7 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
             LOOPBACK,
             False,
             OTHER_ISSUER,
+            OWN,
             None,
             None,
             None,
@@ -279,6 +345,7 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
             LOOPBACK,
             False,
             OTHER_ISSUER,
+            OWN,
             OLD_ISSUER,
             False,
             _changed("localhost"),
@@ -289,6 +356,7 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
             LOOPBACK,
             False,
             OTHER_ISSUER,
+            OWN,
             ISSUER,
             False,
             _changed("localhost", "whitson.eu.auth0.com"),
@@ -299,6 +367,7 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
             LOOPBACK,
             False,
             OTHER_ISSUER,
+            OWN,
             OTHER_ISSUER,
             None,
             None,
@@ -309,6 +378,7 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
             LOOPBACK,
             False,
             OTHER_ISSUER,
+            OWN,
             "invalid",
             None,
             None,
@@ -319,6 +389,7 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
             UNLISTED,
             True,
             ISSUER,
+            OWN,
             None,
             False,
             _first_use("pvt.example.org", "whitson.eu.auth0.com"),
@@ -328,7 +399,19 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
         pytest.param(
             UNLISTED,
             True,
+            ISSUER,
+            OTHER_DEPLOYMENT,
+            None,
+            False,
+            _first_use("pvt.example.org", "whitson.eu.auth0.com", OTHER_DEPLOYMENT),
+            "cancelled",
+            id="trust-host-known-other-audience",
+        ),
+        pytest.param(
+            UNLISTED,
+            True,
             OTHER_ISSUER,
+            OWN,
             None,
             False,
             _first_use("pvt.example.org"),
@@ -339,6 +422,7 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
             UNLISTED,
             True,
             OTHER_ISSUER,
+            OWN,
             OLD_ISSUER,
             False,
             _changed("pvt.example.org"),
@@ -347,8 +431,8 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
         ),
     ],
 )
-def test_login_decides_by_deployment_and_issuer(
-    httpx_mock, store, deployment, trust_host, issuer, stored, answer, asked, error
+def test_login_decides_by_deployment_issuer_and_audience(
+    httpx_mock, store, deployment, trust_host, issuer, audience, stored, answer, asked, error
 ):
     if stored is not None:
         previous = make_login(deployment, refresh="old-refresh")
@@ -359,7 +443,10 @@ def test_login_decides_by_deployment_and_issuer(
             transaction.put(previous)
             if stored == "invalid":
                 transaction.mark_invalid(deployment, "the refresh token was revoked")
-    httpx_mock.add_response(url=f"{deployment}/external/v2/auth/config", json=_auth_config(issuer))
+    httpx_mock.add_response(
+        url=f"{deployment}/external/v2/auth/config",
+        json=_auth_config(issuer, audience=f"{deployment}/mcp" if audience == OWN else audience),
+    )
     discovery = f"{issuer}.well-known/openid-configuration"
     if error == PROCEEDS:
         httpx_mock.add_response(url=discovery, status_code=503)
@@ -423,6 +510,57 @@ def test_a_deployment_signs_in_only_at_a_known_issuer_host(base_url, httpx_mock,
     )
 
 
+@pytest.mark.parametrize("trust_host", [False, True], ids=["allowlisted", "trust-host"])
+@pytest.mark.parametrize(
+    ("audience", "error"),
+    [
+        ("https://dev.pvt.whitson.com/mcp", PROCEEDS),
+        ("https://Dev.PVT.Whitson.com/mcp", PROCEEDS),
+        ("https://dev.pvt.whitson.com:443/mcp", PROCEEDS),
+        ("https://prod.pvt.whitson.com/mcp", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com/external", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com/mcp/", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com/mcp/x", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com/MCP", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com/mcp?resource=prod", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com:8443/mcp", OTHER_SERVICE),
+        ("http://dev.pvt.whitson.com/mcp", OTHER_SERVICE),
+        ("https://dev.pvt.whitson.com.evil.example/mcp", OTHER_SERVICE),
+        ("https://eu.dev.pvt.whitson.com/mcp", OTHER_SERVICE),
+        ("urn:whitson:prod", OTHER_SERVICE),
+    ],
+)
+def test_a_deployment_may_only_ask_for_access_to_itself(
+    base_url, httpx_mock, store, audience, error, trust_host
+):
+    httpx_mock.add_response(
+        url=f"{base_url}/external/v2/auth/config", json=_auth_config(audience=audience)
+    )
+    if error == PROCEEDS:
+        httpx_mock.add_response(url=DISCOVERY, status_code=503)
+    opened: list[str] = []
+
+    def open_browser(url: str) -> bool:
+        opened.append(url)
+        return True
+
+    with pytest.raises(SDKError, match=re.escape(error)):
+        login(
+            base_url,
+            BrowserLogin(open_browser=open_browser, timeout=0.1),
+            output=print,
+            confirm=_accept,
+            trust_host=trust_host,
+        )
+
+    assert [str(r.url) for r in httpx_mock.get_requests()] == [
+        f"{base_url}/external/v2/auth/config"
+    ] + ([DISCOVERY] if error == PROCEEDS else [])
+    assert opened == []
+    assert store.get(base_url) is None
+
+
 @pytest.mark.parametrize(
     ("issuer", "provider", "message"),
     [
@@ -479,15 +617,46 @@ def test_login_refuses_insecure_login_servers(
     assert store.get(base_url) is None
 
 
-@pytest.mark.parametrize("device_login", [False, None], ids=["disabled", "absent"])
-def test_device_login_needs_the_deployment_to_enable_it(base_url, httpx_mock, device_login):
-    httpx_mock.add_response(
-        url=f"{base_url}/external/v2/auth/config", json=_auth_config(device_login=device_login)
-    )
+DEVICE_DISABLED = "Device login is not enabled"
 
-    with pytest.raises(ConfigurationError, match="Device login is not enabled.*WHITSON_PVT_TOKEN"):
-        login(base_url, DeviceLogin(), output=print)
 
+@pytest.mark.parametrize(
+    ("deployment", "config", "error"),
+    [
+        pytest.param(BASE, _auth_config(device_login=False), DEVICE_DISABLED, id="disabled"),
+        pytest.param(BASE, _auth_config(device_login=None), DEVICE_DISABLED, id="absent"),
+        pytest.param(
+            BASE,
+            _auth_config(OTHER_ISSUER, device_login=False),
+            REFUSED,
+            id="unexpected-issuer-first",
+        ),
+        pytest.param(
+            BASE,
+            _auth_config(device_login=False, audience=OTHER_DEPLOYMENT),
+            OTHER_SERVICE,
+            id="unexpected-audience-first",
+        ),
+        pytest.param(
+            LOOPBACK,
+            _auth_config(OTHER_ISSUER, device_login=False),
+            DEVICE_DISABLED,
+            id="before-the-question",
+        ),
+    ],
+)
+def test_device_login_needs_the_deployment_to_enable_it(httpx_mock, deployment, config, error):
+    httpx_mock.add_response(url=f"{deployment}/external/v2/auth/config", json=config)
+    questions: list[Confirmation] = []
+
+    def confirm(question: Confirmation) -> bool:
+        questions.append(question)
+        return True
+
+    with pytest.raises(SDKError, match=re.escape(error)):
+        login(deployment, DeviceLogin(), output=print, confirm=confirm)
+
+    assert questions == []
     assert len(httpx_mock.get_requests()) == 1
 
 

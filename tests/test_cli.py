@@ -181,34 +181,63 @@ def test_logout_all_without_revocation_removes_every_login(httpx_mock, store, st
 AUTH_CONFIG = {
     "issuer": ISSUER,
     "client_id": "cli-client",
-    "audience": "https://dev.pvt.whitson.com/external",
+    "audience": "https://dev.pvt.whitson.com/mcp",
     "scopes": ["read:data"],
     "device_login": True,
 }
 
 
+OTHER_LOGIN_SERVER = {"issuer": "https://login.example.com/"}
+OTHER_DEPLOYMENT = {"audience": "https://prod.pvt.whitson.com/mcp"}
+
+
 @pytest.mark.parametrize(
-    ("url", "options", "exit_code", "message"),
+    ("url", "config", "options", "exit_code", "message"),
     [
-        ("https://pvt.example.org", ["--trust-host"], 2, "--yes"),
-        ("http://localhost:4000", [], 2, "--yes"),
-        ("https://dev.pvt.whitson.com", ["--yes"], 3, "unexpected login server"),
-        ("https://dev.pvt.whitson.com", ["--yes", "--trust-host"], 3, "unexpected login server"),
+        ("https://pvt.example.org", OTHER_LOGIN_SERVER, ["--trust-host"], 2, "--yes"),
+        ("http://localhost:4000", OTHER_LOGIN_SERVER, [], 2, "--yes"),
+        ("http://localhost:4000", OTHER_DEPLOYMENT, [], 2, "prod.pvt.whitson.com/mcp"),
+        (
+            "https://dev.pvt.whitson.com",
+            OTHER_LOGIN_SERVER,
+            ["--yes"],
+            3,
+            "unexpected login server",
+        ),
+        (
+            "https://dev.pvt.whitson.com",
+            OTHER_LOGIN_SERVER,
+            ["--yes", "--trust-host"],
+            3,
+            "unexpected login server",
+        ),
+        (
+            "https://dev.pvt.whitson.com",
+            OTHER_DEPLOYMENT,
+            ["--yes", "--trust-host"],
+            3,
+            "asked for access to a different service, 'https://prod.pvt.whitson.com/mcp'",
+        ),
     ],
-    ids=["trust-host-without-yes", "localhost-without-yes", "deployment", "deployment-trust-host"],
+    ids=[
+        "trust-host-without-yes",
+        "localhost-without-yes",
+        "localhost-other-audience-without-yes",
+        "deployment",
+        "deployment-trust-host",
+        "deployment-other-audience",
+    ],
 )
 def test_login_to_another_login_server_asks_or_is_refused(
-    httpx_mock, store, url, options, exit_code, message
+    httpx_mock, store, url, config, options, exit_code, message
 ):
-    httpx_mock.add_response(
-        url=f"{url}/external/v2/auth/config",
-        json={**AUTH_CONFIG, "issuer": "https://login.example.com/"},
-    )
+    httpx_mock.add_response(url=f"{url}/external/v2/auth/config", json={**AUTH_CONFIG, **config})
 
     result = runner.invoke(app, ["auth", "login", "--url", url, "--device", "--json", *options])
 
     assert result.exit_code == exit_code
-    assert message in json.loads(result.stderr.splitlines()[-1])["message"]
+    assert message in result.stderr
+    assert "message" in json.loads(result.stderr.splitlines()[-1])
     assert [str(r.url) for r in httpx_mock.get_requests()] == [f"{url}/external/v2/auth/config"]
     assert store.get(url) is None
 

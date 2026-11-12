@@ -66,7 +66,7 @@ def make_login(
         base_url=base_url,
         issuer=ISSUER,
         client_id="cli-client",
-        audience="https://dev.pvt.whitson.com/external",
+        audience="https://dev.pvt.whitson.com/mcp",
         scopes=("read:data",),
         token_endpoint=TOKEN_ENDPOINT,
         access_token=SecretStr(access),

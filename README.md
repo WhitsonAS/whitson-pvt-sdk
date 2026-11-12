@@ -294,27 +294,35 @@ run the login again with `--trust-host` and the URL in `--url` (in Python,
 `login(..., trust_host=True)`). The override applies to that one command and that URL only; no
 environment variable or setting widens the list.
 
-The deployment also names the login server (the issuer) your browser is sent to, and that
-decides what happens next:
+The deployment also names the login server (the issuer) your browser is sent to and the service
+the login grants access to (the audience). A deployment may only ask for access to itself: its
+own MCP resource URL, `https://<deployment host>/mcp`, with the same scheme, host and port and
+exactly the path `/mcp`. Together they decide what happens next:
 
-| Deployment | Login server it names | Result |
-| --- | --- | --- |
-| Under `pvt.whitson.com` | whitson's (`whitson.eu.auth0.com`) | Logs in, no question |
-| Under `pvt.whitson.com` | any other | Refused, also with `--trust-host` or `--yes` |
-| This machine | whitson's | Logs in, no question |
-| This machine | any other | Asks first (see below) |
-| Another host, with `--trust-host` | any | Asks first (see below) |
+| Deployment | Login server it names | Audience it asks for | Result |
+| --- | --- | --- | --- |
+| Under `pvt.whitson.com` | whitson's (`whitson.eu.auth0.com`) | itself | Logs in, no question |
+| Under `pvt.whitson.com` | whitson's | anything else | Refused, also with `--trust-host` or `--yes` |
+| Under `pvt.whitson.com` | any other | any | Refused, also with `--trust-host` or `--yes` |
+| This machine | whitson's | itself | Logs in, no question |
+| This machine | whitson's | anything else | Asks first (see below) |
+| This machine | any other | any | Asks first (see below) |
+| Another host, with `--trust-host` | any | any | Asks first (see below) |
 
 The login server's host must match exactly: `whitson.eu.auth0.com` with the default HTTPS port,
 not a subdomain, a lookalike or another Auth0 tenant. A deployment under `pvt.whitson.com` that
 names another login server may have been taken over or misconfigured, so the refusal names both
-hosts and asks you to report it to whitson; there is no option to continue.
+hosts and asks you to report it to whitson; there is no option to continue. The same holds for
+one that asks for access to another service, such as another deployment: the tokens would be
+valid there, and the deployment you logged in to could use them against it.
 
 Asking first means: the first login to such a deployment from this machine, and a login after its
-login server changed, shows the deployment host and the login server host and asks to continue
-(default no). Without a terminal, the login is refused unless you pass `--yes`, which only
+login server changed, shows the deployment host and the login server host, and the audience
+when it is not the deployment itself, and asks to continue (default no). Later logins to the
+same deployment with the same login server ask nothing. Without a terminal, the login is refused unless you pass `--yes`, which only
 answers this question. In Python, pass `confirm=`, a function that receives `FirstUse` or
-`IssuerChanged` (each with `deployment_host`, `issuer_host` and `describe()`) and returns whether
+`IssuerChanged` (each with `deployment_host`, `issuer_host`, `foreign_audience` and
+`describe()`) and returns whether
 to continue; without it, such a login raises `ConfigurationError`. A login that needs no
 question needs no `confirm=`.
 

@@ -57,6 +57,7 @@ def test_expiring_login_is_renewed_before_the_request(base_url, httpx_mock, stor
     stored = _active(store, base_url)
     assert stored.refresh_token.get_secret_value() == "new-refresh"
     assert stored.access_token.get_secret_value() == "new-access"
+    assert stored.audience == "https://dev.pvt.whitson.com/mcp"
 
 
 def test_rejected_login_is_renewed_once_and_the_request_retried(
