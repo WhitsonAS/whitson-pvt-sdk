@@ -747,22 +747,24 @@ mise create NAME --sdk           # in the app repository; also adds it to an exi
 ```
 
 The SDK branch defaults to the app branch name and starts from `origin/main`.
-From the workspace's `app/`:
+Creating it runs `uv sync` and installs the commit message hook. Work in `sdk/`
+with this repository's own recipes (`mise exec -- just RECIPE` outside a
+mise-activated shell):
 
 ```bash
-mise sdk:install                 # uv sync and the commit message hook
-mise sdk:check                   # just lint and just ty, without formatting
-mise sdk:test                    # just test
-mise sdk:generate                # regenerate from the workspace's API source
-mise sdk:generate:check          # only show the drift
-mise sdk:integration             # integration tests against the workspace API
+just test                                                    # unit tests
+just lint && just ty                                         # lint and type check
+just generate-file v2 ../app/api/openapi-external.json       # regenerate from the workspace's API
+just generate-file-check v2 ../app/api/openapi-external.json # only show the drift
+just integration                                             # integration tests against the workspace API
 ```
 
-`sdk:generate` writes the external v2 document from the API source, without a
-running API, and runs `just generate-file`'s command on it. `sdk:integration`
-uses the API's local bypass token on its loopback port; start the API with
-`EXTERNAL_API_AUTH_BYPASS=true mise api:dev` first. Commit and release from
-`sdk/` as usual.
+The app repository commits `api/openapi-external.json` and keeps it current. For
+`just integration` the workspace presets `WHITSON_INTEGRATION_BASE_URL` (always)
+and `WHITSON_INTEGRATION_TOKEN` (the API's local bypass token, unless you export
+your own); start the API with `EXTERNAL_API_AUTH_BYPASS=true mise api:dev` first.
+It writes test data to the workspace database. Commit and release from `sdk/` as
+usual.
 
 ### Package structure
 

@@ -22,7 +22,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 
 - Treat `whitson_pvt_sdk/_generated/**` and `whitson_pvt_sdk/v2/models/__init__.py` as generated output.
 - Regenerate from the external API's OpenAPI document, either from a file or from a live API:
-  - From a file, with no API running: `just generate-file v2 FILE`, or `just generate-file-check v2 FILE` to only show the diff. In a whitsonPVT workspace, `mise sdk:generate` and `mise sdk:generate:check` (run from `app/`) build the file from the workspace's API source and do this.
+  - From a file, with no API running: `just generate-file v2 FILE`, or `just generate-file-check v2 FILE` to only show the diff. In a whitsonPVT workspace the file is `../app/api/openapi-external.json`, which the app repository commits and keeps current.
   - From a live local API at `http://localhost:4000`: `just generate v2` or `just generate-all`, which fetch `http://localhost:4000/external/{version}/docs/openapi.json`.
 - The repo-specific generator lives in `scripts/sdk_generator/`. It runs `ruff check --fix --select I,F401` and `ruff format` on rendered endpoint/resource files, so generated files should not require a second formatting pass.
 - Put hand-maintained shared models in `whitson_pvt_sdk/shared/models.py`; avoid hand-editing generated files unless intentionally patching generated output when the API spec is unavailable.
@@ -32,7 +32,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 
 - A whitsonPVT development workspace can hold this repository as an optional `sdk/` worktree next to `app/` and `utils/` (`mise create NAME --sdk` in the app repository). Its branch starts from `origin/main` and tracks nothing until pushed.
 - Commit, push and release from `sdk/` as usual; this file and its commit-message rules apply there.
-- From the workspace's `app/`: `mise sdk:install`, `mise sdk:check` (lint and ty, no formatting), `mise sdk:test`, `mise sdk:generate`, `mise sdk:generate:check`, and `mise sdk:integration`, which runs the integration tests against the workspace API with its local bypass token and writes test data to the workspace database.
+- There are no workspace tasks for the SDK: run this repository's `just` recipes in `sdk/` (`mise exec -- just RECIPE` outside a mise-activated shell). The workspace presets `WHITSON_INTEGRATION_BASE_URL` and, unless one is exported, `WHITSON_INTEGRATION_TOKEN` (the API's local bypass token), so `just integration` targets the workspace API; start that with `EXTERNAL_API_AUTH_BYPASS=true mise api:dev`. It writes test data to the workspace database, so ask first.
 - Never work in the persistent clone the workspaces share (`PVT_SDK_SOURCE`, default `~/Developer/whitson-pvt-sdk`); it stays on `main`.
 
 ## Architecture
