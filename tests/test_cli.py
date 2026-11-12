@@ -1,16 +1,14 @@
 import json
 import subprocess
 import sys
-from urllib.parse import parse_qs
 
 import httpx2
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import ISSUER, TOKEN_ENDPOINT
+from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form
 from whitson_pvt_sdk.cli._app import app
 
-DISCOVERY = f"{ISSUER}.well-known/openid-configuration"
 REVOKE = f"{ISSUER}oauth/revoke"
 IDENTITY = {
     "kind": "user_token",
@@ -141,11 +139,10 @@ def test_logout_removes_the_login_and_revokes_its_refresh_token(
     assert json.loads(result.stdout) == {
         "removed": [{"url": base_url, "revocation": "revoked", "keyring": "not_used"}]
     }
-    revocation = parse_qs(httpx2_mock.get_requests(url=REVOKE)[0].content.decode())
-    assert revocation == {
-        "token": ["stored-refresh"],
-        "token_type_hint": ["refresh_token"],
-        "client_id": ["cli-client"],
+    assert form(httpx2_mock.get_requests(url=REVOKE)[0]) == {
+        "token": "stored-refresh",
+        "token_type_hint": "refresh_token",
+        "client_id": "cli-client",
     }
     assert store.get(base_url) is None
     assert store.get(other) is not None
@@ -176,15 +173,6 @@ def test_logout_all_without_revocation_removes_every_login(httpx2_mock, store, s
         ]
     }
     assert all(store.get(url) is None for url in urls)
-
-
-AUTH_CONFIG = {
-    "issuer": ISSUER,
-    "client_id": "cli-client",
-    "audience": "https://dev.pvt.whitson.com/mcp",
-    "scopes": ["read:data"],
-    "device_login": True,
-}
 
 
 OTHER_LOGIN_SERVER = {"issuer": "https://login.example.com/"}
@@ -243,7 +231,7 @@ def test_login_to_another_login_server_asks_or_is_refused(
 ):
     httpx2_mock.add_response(
         url=f"{url}/external/v2/auth/config",
-        json={**AUTH_CONFIG, "audience": f"{url}/mcp", **config},
+        json={**auth_config(), "audience": f"{url}/mcp", **config},
     )
 
     result = runner.invoke(app, ["auth", "login", "--url", url, "--device", "--json", *options])
@@ -267,7 +255,7 @@ def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx2_mock, mo
 
 def _device_login_server(base_url, httpx2_mock, monkeypatch) -> None:
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
-    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=AUTH_CONFIG)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=auth_config())
     httpx2_mock.add_response(
         url=DISCOVERY,
         json={

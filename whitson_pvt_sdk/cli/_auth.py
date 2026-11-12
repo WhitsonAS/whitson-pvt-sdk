@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 import typer
 from pydantic import BaseModel
 
+from whitson_pvt_sdk._store import KEYRING_SERVICE, keyring_names
 from whitson_pvt_sdk.auth import (
     TOKEN_ENV_VAR,
     URL_ENV_VAR,
@@ -160,9 +161,8 @@ def login_command(
 def status_command(url: UrlOption = None, json_output: JsonOption = False) -> None:
     """Show the deployment, the credential in use and who it belongs to."""
     with reporting(json_output=json_output):
-        deployment = resolve_base_url(url)
-        target = deployment.url
-        resolved = resolve_credential(deployment, token=None)
+        resolved = resolve_credential(url, token=None)
+        target = resolved.url
         match resolved:
             case FromStore():
                 credential = CredentialReport(kind="stored_login", source=resolved.source)
@@ -277,8 +277,9 @@ def _keyring_cleanup(item: LoggedOut) -> str:
         case "not_used" | "deleted":
             return ""
         case "not_deleted":
+            access_name, refresh_name = keyring_names(item.url)
             return (
                 " Its tokens could not be deleted from the OS keyring; remove the entries "
-                f'"{item.url} access_token" and "{item.url} refresh_token" of the service '
-                '"whitson-pvt" with your keyring tool.'
+                f'"{access_name}" and "{refresh_name}" of the service "{KEYRING_SERVICE}" with '
+                "your keyring tool."
             )

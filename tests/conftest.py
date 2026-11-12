@@ -1,7 +1,10 @@
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs
 
+import httpx2
 import keyring
 import pytest
 from keyring.backends import fail
@@ -14,10 +17,29 @@ from whitson_pvt_sdk.http import HTTPTransport
 
 ISSUER = "https://whitson.eu.auth0.com/"
 TOKEN_ENDPOINT = "https://whitson.eu.auth0.com/oauth/token"
+DISCOVERY = f"{ISSUER}.well-known/openid-configuration"
 
 EMPTY_PAGE = {"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}}
 
 StoreLogin = Callable[..., StoredLogin]
+
+
+def form(request: httpx2.Request) -> dict[str, str]:
+    return {key: value[0] for key, value in parse_qs(request.content.decode()).items()}
+
+
+def auth_config(
+    issuer: str = ISSUER,
+    device_login: bool | None = True,
+    audience: str = "https://dev.pvt.whitson.com/mcp",
+) -> dict[str, Any]:
+    config = {
+        "issuer": issuer,
+        "client_id": "cli-client",
+        "audience": audience,
+        "scopes": ["read:data"],
+    }
+    return config if device_login is None else {**config, "device_login": device_login}
 
 
 @pytest.fixture(autouse=True)
@@ -68,14 +90,16 @@ def make_login(
     access: str = "access-1",
     refresh: str = "refresh-1",
     expires_in: timedelta = timedelta(hours=1),
+    audience: str = "https://dev.pvt.whitson.com/mcp",
+    token_endpoint: str = TOKEN_ENDPOINT,
 ) -> StoredLogin:
     return StoredLogin(
         base_url=base_url,
         issuer=ISSUER,
         client_id="cli-client",
-        audience="https://dev.pvt.whitson.com/mcp",
+        audience=audience,
         scopes=("read:data",),
-        token_endpoint=TOKEN_ENDPOINT,
+        token_endpoint=token_endpoint,
         access_token=SecretStr(access),
         refresh_token=SecretStr(refresh),
         expires_at=datetime.now(UTC) + expires_in,
@@ -84,14 +108,8 @@ def make_login(
 
 @pytest.fixture
 def store_login(store: CredentialStore) -> StoreLogin:
-    def save(
-        base_url: str,
-        *,
-        access: str = "access-1",
-        refresh: str = "refresh-1",
-        expires_in: timedelta = timedelta(hours=1),
-    ) -> StoredLogin:
-        login = make_login(base_url, access=access, refresh=refresh, expires_in=expires_in)
+    def save(base_url: str, **fields: Any) -> StoredLogin:
+        login = make_login(base_url, **fields)
         with store.transaction() as transaction:
             transaction.put(login)
             transaction.set_default(login.base_url)

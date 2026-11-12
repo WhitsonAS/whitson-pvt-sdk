@@ -68,6 +68,17 @@ class OAuthError(BaseModel):
         return self.error
 
 
+class DeviceAuthorization(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    device_code: SecretStr
+    user_code: str
+    verification_uri: SecureUrl
+    verification_uri_complete: SecureUrl | None = None
+    expires_in: int = Field(gt=0)
+    interval: int = Field(default=5, gt=0)
+
+
 class TokenGranted(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -92,12 +103,12 @@ def fetch_auth_config(http: httpx2.Client, base_url: str) -> AuthConfig:
     response = _send(http, "GET", url)
     if response.status_code == 404:
         raise ConfigurationError(f"Command-line login is not enabled on {base_url}.")
-    return parse_response(AuthConfig, response, url)
+    return _parse_response(AuthConfig, response, url)
 
 
 def discover(http: httpx2.Client, issuer: str) -> ProviderMetadata:
     url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
-    metadata = parse_response(ProviderMetadata, _send(http, "GET", url), url)
+    metadata = _parse_response(ProviderMetadata, _send(http, "GET", url), url)
     if metadata.issuer.rstrip("/") != issuer.rstrip("/"):
         raise LoginError(f"{url} describes the issuer {metadata.issuer}, not {issuer}.")
     if not same_origin(metadata.authorization_endpoint, issuer):
@@ -108,18 +119,24 @@ def discover(http: httpx2.Client, issuer: str) -> ProviderMetadata:
     return metadata
 
 
-def post_form(http: httpx2.Client, url: str, form: dict[str, str]) -> httpx2.Response:
-    return _send(http, "POST", url, data=form)
+def post_oauth(
+    http: httpx2.Client, url: str, form: dict[str, str], model: type[_Model]
+) -> _Model | OAuthError:
+    response = _send(http, "POST", url, data=form)
+    if response.is_client_error:
+        return _parse_oauth_error(response, url)
+    return _parse_response(model, response, url)
 
 
 def request_token(http: httpx2.Client, token_endpoint: str, form: dict[str, str]) -> TokenResult:
-    response = post_form(http, token_endpoint, form)
-    if response.is_client_error:
-        return TokenRefused(error=parse_oauth_error(response, token_endpoint))
-    return TokenGranted(token=parse_response(TokenResponse, response, token_endpoint))
+    match post_oauth(http, token_endpoint, form, TokenResponse):
+        case OAuthError() as error:
+            return TokenRefused(error=error)
+        case TokenResponse() as token:
+            return TokenGranted(token=token)
 
 
-def parse_oauth_error(response: httpx2.Response, url: str) -> OAuthError:
+def _parse_oauth_error(response: httpx2.Response, url: str) -> OAuthError:
     try:
         return OAuthError.model_validate_json(response.content)
     except PydanticValidationError:
@@ -140,10 +157,11 @@ def refreshed_login(login: StoredLogin, token: TokenResponse) -> StoredLogin:
 
 
 def revoke_refresh_token(http: httpx2.Client, endpoint: str, login: StoredLogin) -> bool:
-    response = post_form(
+    response = _send(
         http,
+        "POST",
         endpoint,
-        {
+        data={
             "token": login.refresh_token.get_secret_value(),
             "token_type_hint": "refresh_token",
             "client_id": login.client_id,
@@ -161,7 +179,7 @@ def _send(
         raise NoResponseError(f"Could not reach {host_name(url)}: {exc}") from exc
 
 
-def parse_response(model: type[_Model], response: httpx2.Response, url: str) -> _Model:
+def _parse_response(model: type[_Model], response: httpx2.Response, url: str) -> _Model:
     if not response.is_success:
         raise APIError(f"{url} answered HTTP {response.status_code}", response.status_code)
     try:

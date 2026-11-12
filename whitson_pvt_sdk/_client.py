@@ -1,6 +1,6 @@
 from typing import Self
 
-from whitson_pvt_sdk.auth import resolve_base_url, resolve_credential
+from whitson_pvt_sdk.auth import resolve_credential
 from whitson_pvt_sdk.http import HTTPTransport, JSONBody, Params
 from whitson_pvt_sdk.shared.models import ApiResponse, HTTPMethod, RetryConfig
 from whitson_pvt_sdk.v2 import resources
@@ -41,10 +41,10 @@ class WhitsonPVTClient:
         timeout: float = 30.0,
         file_timeout: float = 60.0,
     ) -> None:
-        deployment = resolve_base_url(base_url)
+        resolved = resolve_credential(base_url, token)
         transport = HTTPTransport(
-            resolve_credential(deployment, token).credential,
-            deployment.url,
+            resolved.credential,
+            resolved.url,
             retry_config=retry_config,
             timeout=timeout,
             file_timeout=file_timeout,

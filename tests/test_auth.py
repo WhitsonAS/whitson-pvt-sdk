@@ -1,10 +1,9 @@
 from datetime import timedelta
-from urllib.parse import parse_qs
 
 import httpx2
 import pytest
 
-from tests.conftest import EMPTY_PAGE, TOKEN_ENDPOINT
+from tests.conftest import EMPTY_PAGE, TOKEN_ENDPOINT, form
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk._store import ActiveLogin, InvalidLogin
 from whitson_pvt_sdk.errors import AuthError, ConfigurationError, LoginError
@@ -20,15 +19,11 @@ SOON = timedelta(minutes=2)
 
 
 def _bearers(httpx2_mock, url):
-    return [r.headers["Authorization"] for r in httpx2_mock.get_requests() if str(r.url) == url]
+    return [r.headers["Authorization"] for r in httpx2_mock.get_requests(url=url)]
 
 
 def _token_requests(httpx2_mock):
-    return [
-        parse_qs(r.content.decode())
-        for r in httpx2_mock.get_requests()
-        if str(r.url) == TOKEN_ENDPOINT
-    ]
+    return [form(r) for r in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)]
 
 
 def _active(store, base_url):
@@ -47,9 +42,9 @@ def test_expiring_login_is_renewed_before_the_request(base_url, httpx2_mock, sto
 
     assert _token_requests(httpx2_mock) == [
         {
-            "grant_type": ["refresh_token"],
-            "client_id": ["cli-client"],
-            "refresh_token": ["old-refresh"],
+            "grant_type": "refresh_token",
+            "client_id": "cli-client",
+            "refresh_token": "old-refresh",
         }
     ]
     assert _bearers(httpx2_mock, regions) == ["Bearer new-access"]

@@ -13,6 +13,9 @@ def _not_blank(token: SecretStr) -> SecretStr:
     return token
 
 
+_NonBlankSecret = Annotated[SecretStr, AfterValidator(_not_blank)]
+
+
 def normalise_url(value: str) -> str:
     try:
         url = httpx2.URL(value.strip())
@@ -43,13 +46,17 @@ def origin(url: str | httpx2.URL) -> str:
 
 def same_origin(a: str | httpx2.URL, b: str | httpx2.URL) -> bool:
     first, second = httpx2.URL(a), httpx2.URL(b)
-    return (first.scheme, first.host, first.port) == (second.scheme, second.host, second.port)
+    return (first.scheme, host_name(first), first.port) == (
+        second.scheme,
+        host_name(second),
+        second.port,
+    )
 
 
 class ApiToken(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    token: Annotated[SecretStr, AfterValidator(_not_blank)]
+    token: _NonBlankSecret
 
 
 class StoredLogin(BaseModel):
@@ -61,8 +68,8 @@ class StoredLogin(BaseModel):
     audience: str
     scopes: tuple[str, ...]
     token_endpoint: str
-    access_token: Annotated[SecretStr, AfterValidator(_not_blank)]
-    refresh_token: Annotated[SecretStr, AfterValidator(_not_blank)]
+    access_token: _NonBlankSecret
+    refresh_token: _NonBlankSecret
     expires_at: AwareDatetime
 
     def expiring(self) -> bool:

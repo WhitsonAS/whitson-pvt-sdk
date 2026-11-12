@@ -8,7 +8,7 @@ from fastmcp.server import create_proxy
 from fastmcp.server.providers.proxy import ProxyClient
 
 from whitson_pvt_sdk import __version__
-from whitson_pvt_sdk.auth import BearerSource, resolve_base_url, resolve_credential, set_bearer
+from whitson_pvt_sdk.auth import TOKEN_ENV_VAR, BearerSource, resolve_credential, set_bearer
 from whitson_pvt_sdk.errors import AuthError, NoResponseError, ResponseError, SDKError
 
 CLIENT_HEADER = "X-PVT-Client"
@@ -32,7 +32,7 @@ class LoginBearer(httpx2.Auth):
             if renewed is None:
                 raise AuthError(
                     f"{self._base_url}/mcp refused the API token. MCP currently needs a login: "
-                    f"unset WHITSON_PVT_TOKEN and run `wpvt auth login --url {self._base_url}`. "
+                    f"unset {TOKEN_ENV_VAR} and run `wpvt auth login --url {self._base_url}`. "
                     "If the token should work elsewhere, check it with `wpvt auth status`.",
                     401,
                 )
@@ -51,13 +51,12 @@ class LoginBearer(httpx2.Auth):
 
 
 def serve(url: str | None, *, verbose: bool) -> None:
-    deployment = resolve_base_url(url)
-    base_url = deployment.url
-    credential = resolve_credential(deployment, token=None).credential
+    resolved = resolve_credential(url, token=None)
+    base_url = resolved.url
     transport = StreamableHttpTransport(
         f"{base_url}/mcp",
         headers={CLIENT_HEADER: f"wpvt/{__version__}"},
-        auth=LoginBearer(BearerSource(credential), base_url),
+        auth=LoginBearer(BearerSource(resolved.credential), base_url),
     )
     asyncio.run(_serve(transport, base_url, "DEBUG" if verbose else "WARNING"))
 

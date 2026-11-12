@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from tests.conftest import ISSUER, TOKEN_ENDPOINT, make_login
+from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form, make_login
 from whitson_pvt_sdk._store import ActiveLogin
 from whitson_pvt_sdk.credentials import StoredLogin
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, SDKError
@@ -24,7 +24,6 @@ from whitson_pvt_sdk.login import (
     login,
 )
 
-DISCOVERY = f"{ISSUER}.well-known/openid-configuration"
 DEVICE_ENDPOINT = f"{ISSUER}oauth/device/code"
 AUTHORIZE = f"{ISSUER}authorize"
 ACTIVATE = f"{ISSUER}activate"
@@ -58,15 +57,7 @@ def authorization_server(base_url, httpx2_mock):
             "device_login": True,
         },
     )
-    httpx2_mock.add_response(
-        url=DISCOVERY,
-        json={
-            "issuer": ISSUER,
-            "authorization_endpoint": AUTHORIZE,
-            "token_endpoint": TOKEN_ENDPOINT,
-            "device_authorization_endpoint": DEVICE_ENDPOINT,
-        },
-    )
+    httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
 
 
 def _accept(_: Confirmation) -> bool:
@@ -75,10 +66,6 @@ def _accept(_: Confirmation) -> bool:
 
 def _keep(stored: StoredLogin) -> StoredLogin:
     return stored
-
-
-def _form(request):
-    return {key: value[0] for key, value in parse_qs(request.content.decode()).items()}
 
 
 class _NoRedirects(urllib.request.HTTPRedirectHandler):
@@ -157,7 +144,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         CALLBACK_PORTS[0],
         "/callback",
     )
-    exchange = _form(httpx2_mock.get_requests(url=TOKEN_ENDPOINT)[0])
+    exchange = form(httpx2_mock.get_requests(url=TOKEN_ENDPOINT)[0])
     verifier = exchange.pop("code_verifier")
     digest = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=")
     assert digest.decode() == authorize["code_challenge"]
@@ -208,7 +195,7 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
     visits.pop().join()
 
     assert statuses == [302, 400, 400] + ([200] if then_valid else [])
-    assert [_form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
+    assert [form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
         ["the-code"] if then_valid else []
     )
 
@@ -272,7 +259,7 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
     assert seen == statuses
     assert len(authorized) == 1
     assert authorized[0].startswith(f"{AUTHORIZE}?")
-    assert [_form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
+    assert [form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
         ["the-code"] if failure is None else []
     )
     if failure is None:
@@ -337,16 +324,6 @@ def test_login_refuses_other_hosts_before_any_request(httpx2_mock, url, trust_ho
 
     assert httpx2_mock.get_requests() == []
     assert "secret" not in refusal.value.message
-
-
-def _auth_config(issuer=ISSUER, device_login=True, audience="https://dev.pvt.whitson.com/mcp"):
-    config = {
-        "issuer": issuer,
-        "client_id": "cli-client",
-        "audience": audience,
-        "scopes": ["read:data"],
-    }
-    return config if device_login is None else {**config, "device_login": device_login}
 
 
 LOOPBACK = "http://localhost:4000"
@@ -665,7 +642,7 @@ def test_login_decides_by_deployment_issuer_and_audience(
                 transaction.mark_invalid(deployment, "the refresh token was revoked")
     httpx2_mock.add_response(
         url=f"{deployment}/external/v2/auth/config",
-        json=_auth_config(issuer, audience=f"{deployment}/mcp" if audience == OWN else audience),
+        json=auth_config(issuer, audience=f"{deployment}/mcp" if audience == OWN else audience),
     )
     discovery = f"{issuer}.well-known/openid-configuration"
     if error == PROCEEDS:
@@ -717,7 +694,7 @@ def test_login_decides_by_deployment_issuer_and_audience(
     ],
 )
 def test_a_deployment_signs_in_only_at_a_known_issuer_host(base_url, httpx2_mock, issuer, error):
-    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=_auth_config(issuer))
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=auth_config(issuer))
     if error == PROCEEDS:
         httpx2_mock.add_response(status_code=503)
 
@@ -756,7 +733,7 @@ def test_a_deployment_may_only_ask_for_access_to_itself(
     base_url, httpx2_mock, store, audience, error, trust_host
 ):
     httpx2_mock.add_response(
-        url=f"{base_url}/external/v2/auth/config", json=_auth_config(audience=audience)
+        url=f"{base_url}/external/v2/auth/config", json=auth_config(audience=audience)
     )
     if error == PROCEEDS:
         httpx2_mock.add_response(url=DISCOVERY, status_code=503)
@@ -810,7 +787,7 @@ def test_a_deployment_may_only_ask_for_access_to_itself(
 def test_login_refuses_insecure_login_servers(
     base_url, httpx2_mock, store, issuer, provider, message
 ):
-    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=_auth_config(issuer))
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=auth_config(issuer))
     if issuer == ISSUER:
         httpx2_mock.add_response(
             url=DISCOVERY,
@@ -846,23 +823,23 @@ DEVICE_DISABLED = "Device login is not enabled"
 @pytest.mark.parametrize(
     ("deployment", "config", "error"),
     [
-        pytest.param(BASE, _auth_config(device_login=False), DEVICE_DISABLED, id="disabled"),
-        pytest.param(BASE, _auth_config(device_login=None), DEVICE_DISABLED, id="absent"),
+        pytest.param(BASE, auth_config(device_login=False), DEVICE_DISABLED, id="disabled"),
+        pytest.param(BASE, auth_config(device_login=None), DEVICE_DISABLED, id="absent"),
         pytest.param(
             BASE,
-            _auth_config(OTHER_ISSUER, device_login=False),
+            auth_config(OTHER_ISSUER, device_login=False),
             REFUSED,
             id="unexpected-issuer-first",
         ),
         pytest.param(
             BASE,
-            _auth_config(device_login=False, audience=OTHER_DEPLOYMENT),
+            auth_config(device_login=False, audience=OTHER_DEPLOYMENT),
             OTHER_SERVICE,
             id="unexpected-audience-first",
         ),
         pytest.param(
             LOOPBACK,
-            _auth_config(OTHER_ISSUER, device_login=False),
+            auth_config(OTHER_ISSUER, device_login=False),
             DEVICE_DISABLED,
             id="before-the-question",
         ),
@@ -1081,7 +1058,7 @@ def test_a_malformed_login_server_response_is_a_server_error(
     base_url, httpx2_mock, monkeypatch, store, malformed
 ):
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
-    config = _auth_config()
+    config = auth_config()
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config",
         json={**config, "client_id": None} if malformed == "auth-config" else config,

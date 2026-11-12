@@ -121,26 +121,23 @@ def config_directory() -> Path:
 class StoreTransaction:
     def __init__(self, document: _Document) -> None:
         self._document = document
-        self._written: dict[str, StoredLogin] = {}
+        self._written: set[str] = set()
 
     def get(self, base_url: str) -> StoreEntry | None:
-        key = normalise_url(base_url)
-        written = self._written.get(key)
-        profile = self._document.profiles.get(key)
-        if profile is None:
-            return None
-        if written is not None:
-            return _entry(profile, written.access_token, written.refresh_token)
-        return _load_entry(profile)
+        profile = self._document.profiles.get(normalise_url(base_url))
+        return None if profile is None else _load_entry(profile)
 
     def urls(self) -> list[str]:
         return list(self._document.profiles)
 
     def put(self, login: StoredLogin) -> None:
         self._document.profiles[login.base_url] = _Profile(
-            **login.model_dump(include=_FACT_FIELDS), secrets=_file_secrets(login)
+            **login.model_dump(include=_FACT_FIELDS),
+            secrets=_FileSecrets(
+                access_token=login.access_token, refresh_token=login.refresh_token
+            ),
         )
-        self._written[login.base_url] = login
+        self._written.add(login.base_url)
 
     def set_default(self, base_url: str) -> None:
         key = normalise_url(base_url)
@@ -161,7 +158,7 @@ class StoreTransaction:
         profile = self._document.profiles.pop(key, None)
         if profile is None:
             return None
-        self._written.pop(key, None)
+        self._written.discard(key)
         if self._document.default == key:
             self._document.default = None
         return RemovedLogin(
@@ -223,8 +220,10 @@ class CredentialStore:
     def _commit(self, transaction: StoreTransaction) -> None:
         document = transaction._document
         backend = _keyring()
-        for key, login in transaction._written.items():
-            document.profiles[key].secrets = _secrets(backend, login)
+        for key in transaction._written:
+            profile = document.profiles[key]
+            if isinstance(profile.secrets, _FileSecrets):
+                profile.secrets = _secrets(backend, key, profile.secrets)
         self._write(document)
 
     def _write(self, document: _Document) -> None:
@@ -292,10 +291,6 @@ def _check_private(path: Path, status: os.stat_result) -> None:
         )
 
 
-def _file_secrets(login: StoredLogin) -> _FileSecrets:
-    return _FileSecrets(access_token=login.access_token, refresh_token=login.refresh_token)
-
-
 def _load_entry(profile: _Profile) -> StoreEntry:
     match profile.secrets:
         case _FileSecrets(access_token=access_token, refresh_token=refresh_token):
@@ -330,7 +325,7 @@ def _keyring() -> "KeyringBackend | None":
     return backend
 
 
-def _keyring_names(base_url: str) -> tuple[str, str]:
+def keyring_names(base_url: str) -> tuple[str, str]:
     return f"{base_url} access_token", f"{base_url} refresh_token"
 
 
@@ -342,7 +337,7 @@ def _read_keyring(base_url: str) -> tuple[SecretStr, SecretStr]:
             f'Install the keyring package (pip install "whitson-pvt-sdk[cli]") or run '
             f"`wpvt auth login --url {base_url}` again."
         )
-    access_name, refresh_name = _keyring_names(base_url)
+    access_name, refresh_name = keyring_names(base_url)
     try:
         access_token = backend.get_password(KEYRING_SERVICE, access_name)
         refresh_token = backend.get_password(KEYRING_SERVICE, refresh_name)
@@ -362,22 +357,24 @@ def _read_keyring(base_url: str) -> tuple[SecretStr, SecretStr]:
 
 
 def _secrets(
-    backend: "KeyringBackend | None", login: StoredLogin
+    backend: "KeyringBackend | None", base_url: str, pending: _FileSecrets
 ) -> _FileSecrets | _KeyringSecrets:
     if backend is None:
-        return _file_secrets(login)
-    access_name, refresh_name = _keyring_names(login.base_url)
+        return pending
+    access_name, refresh_name = keyring_names(base_url)
     try:
-        backend.set_password(KEYRING_SERVICE, access_name, login.access_token.get_secret_value())
-        backend.set_password(KEYRING_SERVICE, refresh_name, login.refresh_token.get_secret_value())
+        backend.set_password(KEYRING_SERVICE, access_name, pending.access_token.get_secret_value())
+        backend.set_password(
+            KEYRING_SERVICE, refresh_name, pending.refresh_token.get_secret_value()
+        )
     except Exception as exc:
         logger.warning(
             "Could not store the login for %s in the OS keyring (%s); storing it in the "
             "credentials file instead",
-            login.base_url,
+            base_url,
             type(exc).__name__,
         )
-        return _file_secrets(login)
+        return pending
     return _KeyringSecrets()
 
 
@@ -390,7 +387,7 @@ def _delete_secrets(profile: _Profile) -> KeyringCleanup:
     from keyring.errors import PasswordDeleteError
 
     deleted = True
-    for name in _keyring_names(profile.base_url):
+    for name in keyring_names(profile.base_url):
         try:
             backend.delete_password(KEYRING_SERVICE, name)
         except PasswordDeleteError:

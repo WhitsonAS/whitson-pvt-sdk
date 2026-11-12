@@ -10,6 +10,7 @@ INSTALL_HINT = (
 
 class ExitCode(IntEnum):
     OK = 0
+    ERROR = 1
     USAGE = 2
     AUTHENTICATION = 3
     SERVER = 4

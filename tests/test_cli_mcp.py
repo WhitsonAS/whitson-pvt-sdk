@@ -21,11 +21,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from typer.testing import CliRunner
 
-from tests.conftest import make_login
+from tests.conftest import StoreLogin
 from whitson_pvt_sdk import __version__
-from whitson_pvt_sdk._store import ActiveLogin, CredentialStore, InvalidLogin
+from whitson_pvt_sdk._store import ActiveLogin, InvalidLogin
 from whitson_pvt_sdk.cli._app import app
-from whitson_pvt_sdk.credentials import StoredLogin
 
 runner = CliRunner()
 _message: TypeAdapter[JSONRPCMessage] = TypeAdapter(JSONRPCMessage)
@@ -102,19 +101,14 @@ def backend() -> Iterator[Backend]:
     thread.join(timeout=10)
 
 
-def _save_login(store: CredentialStore, url: str, *, expired: bool) -> None:
-    login = make_login(
+def _save_login(store_login: StoreLogin, url: str, *, expired: bool) -> None:
+    store_login(
         url,
         access="old-access",
-        refresh="refresh-1",
         expires_in=timedelta(hours=-1 if expired else 1),
+        token_endpoint=f"{url}/oauth/token",
+        audience=f"{url}/mcp",
     )
-    login = StoredLogin.model_validate(
-        {**login.model_dump(), "token_endpoint": f"{url}/oauth/token", "audience": f"{url}/mcp"}
-    )
-    with store.transaction() as transaction:
-        transaction.put(login)
-        transaction.set_default(login.base_url)
 
 
 class Proxy:
@@ -189,8 +183,8 @@ def _start_proxy(tmp_path: Path, url: str) -> Proxy:
     return Proxy(process)
 
 
-def test_mcp_proxies_the_remote_tools_with_the_stored_login(backend, store, tmp_path):
-    _save_login(store, backend.url, expired=True)
+def test_mcp_proxies_the_remote_tools_with_the_stored_login(backend, store, store_login, tmp_path):
+    _save_login(store_login, backend.url, expired=True)
     proxy = _start_proxy(tmp_path, backend.url)
 
     proxy.result(
@@ -237,8 +231,10 @@ def test_mcp_proxies_the_remote_tools_with_the_stored_login(backend, store, tmp_
         assert secret not in "".join(proxy.stdout_lines)
 
 
-def test_mcp_renews_an_expiring_login_before_serving_and_keeps_the_rotated_tokens(backend, store):
-    _save_login(store, backend.url, expired=True)
+def test_mcp_renews_an_expiring_login_before_serving_and_keeps_the_rotated_tokens(
+    backend, store, store_login
+):
+    _save_login(store_login, backend.url, expired=True)
     backend.accepted = {}
 
     result = runner.invoke(app, ["mcp", "--url", backend.url])
@@ -268,8 +264,8 @@ def test_mcp_with_a_refused_api_token_says_mcp_needs_a_login(backend, monkeypatc
     assert "whitson_pvt_secret" not in result.stderr
 
 
-def test_mcp_reports_a_login_without_access_to_mcp_as_authentication(backend, store):
-    _save_login(store, backend.url, expired=False)
+def test_mcp_reports_a_login_without_access_to_mcp_as_authentication(backend, store_login):
+    _save_login(store_login, backend.url, expired=False)
     backend.forbidden = True
 
     result = runner.invoke(app, ["mcp", "--url", backend.url])
@@ -288,12 +284,12 @@ def test_mcp_without_a_login_exits_before_serving(backend):
     assert backend.paths == []
 
 
-def test_mcp_reports_an_unreachable_deployment(store):
+def test_mcp_reports_an_unreachable_deployment(store_login):
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     url = f"http://127.0.0.1:{sock.getsockname()[1]}"
     sock.close()
-    _save_login(store, url, expired=False)
+    _save_login(store_login, url, expired=False)
 
     result = runner.invoke(app, ["mcp", "--url", url])
 

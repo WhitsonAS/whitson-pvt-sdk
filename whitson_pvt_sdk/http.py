@@ -145,10 +145,15 @@ class HTTPTransport:
         ).json()
 
 
-def external_path(path: str) -> str:
+def route_segments(path: str) -> list[str]:
     segments = path.removeprefix("/").split("/")
     if segments[:2] == API_PREFIX.lstrip("/").split("/"):
-        segments = segments[2:]
+        return segments[2:]
+    return segments
+
+
+def external_path(path: str) -> str:
+    segments = route_segments(path)
     if not segments or any(
         segment in (".", "..") or not _SEGMENT.fullmatch(segment) for segment in segments
     ):

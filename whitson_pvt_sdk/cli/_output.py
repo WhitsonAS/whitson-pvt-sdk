@@ -76,14 +76,14 @@ def reporting(*, json_output: bool) -> Iterator[None]:
     except ResponseError as exc:
         _fail("server", exc.message, ExitCode.SERVER, json_output)
     except SDKError as exc:
-        _fail("error", exc.message, 1, json_output)
+        _fail("error", exc.message, ExitCode.ERROR, json_output)
     except PydanticValidationError as exc:
         _fail("server", f"Unexpected response from the API: {exc}", ExitCode.SERVER, json_output)
     finally:
         _SDK_LOGGER.removeHandler(log_handler)
 
 
-def _fail(kind: ErrorKind, message: str, code: int, json_output: bool) -> None:
+def _fail(kind: ErrorKind, message: str, code: ExitCode, json_output: bool) -> None:
     report = ErrorReport(error=kind, message=message)
     typer.echo(
         report.model_dump_json() if json_output else _printable(f"Error: {message}"), err=True

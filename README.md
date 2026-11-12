@@ -53,7 +53,7 @@ HTTPS: a plain `http://` URL is refused with `ConfigurationError` unless it is t
 (`localhost`, a name under `localhost`, `127.0.0.1` or `::1`).
 
 An API token is sent as the bearer token on every request and wins even when a stored login
-exists for the same deployment, but only to a deployment you named: `base_url=` (`--url`) or
+exists for the same deployment, but only to a deployment you named: `base_url=` or
 `WHITSON_PVT_URL`. When the URL would come from the default login and `token=` or
 `WHITSON_PVT_TOKEN` is set, creating the client raises `ConfigurationError` naming both, so a
 token kept in the environment is never sent to whichever deployment happens to be the default
@@ -65,7 +65,8 @@ a fall-through. A stored login that the authorization server no longer accepts r
 
 ### Upgrading from 1.x
 
-2.0 authenticates only with API tokens and talks only to external API v2.
+2.0 authenticates with API tokens or a `wpvt auth login`, no longer with client credentials,
+and talks only to external API v2.
 
 - Python 3.11 or newer is required; 3.10 is no longer supported. Stay on 1.x for Python 3.10.
 - Removed: `ClientCredentials`, the `credentials=` argument, the `/auth/token`

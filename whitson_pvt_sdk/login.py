@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from whitson_pvt_sdk._oauth import (
     AuthConfig,
+    DeviceAuthorization,
     OAuthError,
     ProviderMetadata,
     TokenGranted,
@@ -24,9 +25,7 @@ from whitson_pvt_sdk._oauth import (
     discover,
     fetch_auth_config,
     oauth_client,
-    parse_oauth_error,
-    parse_response,
-    post_form,
+    post_oauth,
     request_token,
     revoke_refresh_token,
 )
@@ -37,7 +36,6 @@ from whitson_pvt_sdk._trust import (
     FirstUse,
     IssuerChanged,
     Proceed,
-    SecureUrl,
     host_trust,
     login_decision,
 )
@@ -129,8 +127,8 @@ def login(
                     raise LoginError(f"The login to {url} was cancelled; nothing was stored.")
         provider = discover(http, config.issuer)
         match method:
-            case BrowserLogin(open_browser=open_browser, timeout=timeout):
-                token = _browser_flow(http, config, provider, open_browser, output, timeout)
+            case BrowserLogin():
+                token = _browser_flow(http, config, provider, method, output)
             case DeviceLogin():
                 token = _device_flow(http, config, provider, output)
     if token.refresh_token is None:
@@ -232,9 +230,8 @@ def _browser_flow(
     http: httpx2.Client,
     config: AuthConfig,
     provider: ProviderMetadata,
-    open_browser: Callable[[str], bool] | None,
+    method: BrowserLogin,
     output: Callable[[str], None],
-    timeout: float,
 ) -> TokenResponse:
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
@@ -256,14 +253,14 @@ def _browser_flow(
         return str(httpx2.URL(provider.authorization_endpoint).copy_merge_params(params))
 
     with _callback_server(state, authorize_url) as server:
-        if open_browser is not None and open_browser(server.start_url):
+        if method.open_browser is not None and method.open_browser(server.start_url):
             output(f"Opened a browser to log in. If it did not open, visit:\n{server.start_url}")
         else:
             output(
                 f"Open this URL in a browser on this machine to log in:\n{server.start_url}\n"
                 + _without_a_browser(config)
             )
-        outcome = server.wait(timeout)
+        outcome = server.wait(method.timeout)
     match outcome:
         case _CodeReceived(code=code):
             result = request_token(
@@ -290,7 +287,9 @@ def _browser_flow(
                 "may have used it first; the login was stopped. Log in again."
             )
         case _CallbackTimedOut():
-            raise LoginError(f"Timed out after {timeout:.0f} s waiting for the browser login.")
+            raise LoginError(
+                f"Timed out after {method.timeout:.0f} s waiting for the browser login."
+            )
 
 
 def _callback_server(state: str, authorize_url: Callable[[str], str]) -> "_CallbackServer":
@@ -426,17 +425,6 @@ def _single(query: dict[str, list[str]], name: str) -> str | None:
     return values[0] if values is not None and len(values) == 1 else None
 
 
-class _DeviceAuthorization(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    device_code: SecretStr
-    user_code: str
-    verification_uri: SecureUrl
-    verification_uri_complete: SecureUrl | None = None
-    expires_in: int = Field(gt=0)
-    interval: int = Field(default=5, gt=0)
-
-
 _SLOW_DOWN_SECONDS = 5
 
 
@@ -449,15 +437,14 @@ def _device_flow(
     endpoint = provider.device_authorization_endpoint
     if endpoint is None:
         raise LoginError(f"{config.issuer} does not offer device login; log in with a browser.")
-    response = post_form(
+    authorization = post_oauth(
         http,
         endpoint,
         {"client_id": config.client_id, "scope": _scope(config), "audience": config.audience},
+        DeviceAuthorization,
     )
-    if response.is_client_error:
-        error = parse_oauth_error(response, endpoint)
-        raise LoginError(f"Device login could not start: {error.describe()}.")
-    authorization = parse_response(_DeviceAuthorization, response, endpoint)
+    if isinstance(authorization, OAuthError):
+        raise LoginError(f"Device login could not start: {authorization.describe()}.")
     for page in (authorization.verification_uri, authorization.verification_uri_complete):
         if page is not None and not same_origin(page, config.issuer):
             raise LoginError(

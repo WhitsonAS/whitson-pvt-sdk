@@ -15,10 +15,6 @@ from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.shared.models import RetryConfig
 
 
-def _requests_to(httpx2_mock, url: str):
-    return [request for request in httpx2_mock.get_requests() if str(request.url) == url]
-
-
 @pytest.fixture
 def recorded_sleeps(monkeypatch):
     sleeps = []
@@ -275,7 +271,7 @@ def test_get_retries_500_then_succeeds(transport, httpx2_mock):
     httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
-    assert len(_requests_to(httpx2_mock, url)) == 2
+    assert len(httpx2_mock.get_requests(url=url)) == 2
 
 
 def test_get_retries_429_then_succeeds(transport, httpx2_mock, recorded_sleeps):
@@ -289,7 +285,7 @@ def test_get_retries_429_then_succeeds(transport, httpx2_mock, recorded_sleeps):
     httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
-    assert len(_requests_to(httpx2_mock, url)) == 2
+    assert len(httpx2_mock.get_requests(url=url)) == 2
     assert recorded_sleeps == [0]
 
 
@@ -305,7 +301,7 @@ def test_post_retries_429_then_succeeds(transport, httpx2_mock, recorded_sleeps)
     httpx2_mock.add_response(method="POST", url=url, json={"ok": True})
 
     assert transport.post("/test", body={"name": "test"}) == {"ok": True}
-    assert len(_requests_to(httpx2_mock, url)) == 2
+    assert len(httpx2_mock.get_requests(url=url)) == 2
     assert recorded_sleeps == [0]
 
 
@@ -375,7 +371,7 @@ def test_get_retries_timeout_then_succeeds(transport, httpx2_mock):
     httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
-    assert len(_requests_to(httpx2_mock, url)) == 2
+    assert len(httpx2_mock.get_requests(url=url)) == 2
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
@@ -387,7 +383,7 @@ def test_get_final_timeout_raises_no_response_error(transport, httpx2_mock):
     with pytest.raises(NoResponseError, match="Timed out"):
         transport.get("/test")
 
-    assert len(_requests_to(httpx2_mock, url)) == 3
+    assert len(httpx2_mock.get_requests(url=url)) == 3
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
@@ -400,7 +396,7 @@ def test_get_final_retryable_status_raises_api_error(transport, httpx2_mock):
         transport.get("/test")
 
     assert exc.value.status_code == 503
-    assert len(_requests_to(httpx2_mock, url)) == 3
+    assert len(httpx2_mock.get_requests(url=url)) == 3
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
@@ -419,7 +415,7 @@ def test_final_429_raises_rate_limit_error(transport, httpx2_mock):
 
     assert exc.value.status_code == 429
     assert exc.value.retry_after_seconds == 2
-    assert len(_requests_to(httpx2_mock, url)) == 3
+    assert len(httpx2_mock.get_requests(url=url)) == 3
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
@@ -433,7 +429,7 @@ def test_post_does_not_retry_500_by_default(transport, httpx2_mock):
         transport.post("/test", body={"name": "test"})
 
     assert exc.value.status_code == 500
-    assert len(_requests_to(httpx2_mock, url)) == 1
+    assert len(httpx2_mock.get_requests(url=url)) == 1
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
@@ -443,7 +439,7 @@ def test_get_bytes_retries_502_then_succeeds(transport, httpx2_mock):
     httpx2_mock.add_response(url=url, content=b"binary-data")
 
     assert transport.get_bytes("/reports/1/export") == b"binary-data"
-    assert len(_requests_to(httpx2_mock, url)) == 2
+    assert len(httpx2_mock.get_requests(url=url)) == 2
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
@@ -455,7 +451,7 @@ def test_retry_config_max_attempts_one_disables_retries(credential, base_url, ht
     with pytest.raises(APIError, match="Unavailable"):
         transport.get("/test")
 
-    assert len(_requests_to(httpx2_mock, url)) == 1
+    assert len(httpx2_mock.get_requests(url=url)) == 1
 
 
 def test_file_timeout_configures_download_timeout(credential, base_url, httpx2_mock):

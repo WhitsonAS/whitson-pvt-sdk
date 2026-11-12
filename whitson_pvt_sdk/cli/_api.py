@@ -11,7 +11,7 @@ from pydantic import ValidationError as PydanticValidationError
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.cli._output import emit, note, reporting
 from whitson_pvt_sdk.errors import ConfigurationError
-from whitson_pvt_sdk.http import API_PREFIX
+from whitson_pvt_sdk.http import API_PREFIX, route_segments
 from whitson_pvt_sdk.shared.models import ApiResponse, HTTPMethod
 from whitson_pvt_sdk.shared.pagination import Paginator
 from whitson_pvt_sdk.v2.models import PaginationMeta
@@ -72,7 +72,7 @@ class RouteDetail(Route):
 
 
 class Routes(BaseModel):
-    routes: list[Route]
+    routes: tuple[Route, ...]
 
 
 class RouteDetails(BaseModel):
@@ -167,9 +167,7 @@ def api_command(
                 case ListRoutes():
                     routes = _routes(client)
                     emit(
-                        Routes(
-                            routes=[Route.model_validate(route.model_dump()) for route in routes]
-                        ),
+                        Routes(routes=tuple(routes)),
                         "\n".join(
                             f"{route.method:<7}{route.path:<55}{route.summary or ''}".rstrip()
                             for route in routes
@@ -397,9 +395,7 @@ def _schema_name(schema: dict[str, JsonValue]) -> str | None:
 
 
 def _matches(template: str, path: str) -> bool:
-    wanted = path.removeprefix("/").split("/")
-    if wanted[:2] == API_PREFIX.lstrip("/").split("/"):
-        wanted = wanted[2:]
+    wanted = route_segments(path)
     pattern = template.removeprefix("/").split("/")
     return len(pattern) == len(wanted) and all(
         given == expected or (expected.startswith("{") and expected.endswith("}"))

@@ -3,7 +3,7 @@ from collections.abc import Generator, MutableMapping
 from typing import Literal
 
 import httpx2
-from pydantic import BaseModel, ConfigDict, SecretStr, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
 
 from whitson_pvt_sdk._refresh import (
     NoLongerValid,
@@ -17,8 +17,8 @@ from whitson_pvt_sdk._trust import is_secure_url
 from whitson_pvt_sdk.credentials import (
     ApiToken,
     Credential,
-    DeploymentUrl,
     StoredLogin,
+    normalise_url,
     origin,
     same_origin,
 )
@@ -27,13 +27,12 @@ from whitson_pvt_sdk.errors import ConfigurationError, LoginError
 TOKEN_ENV_VAR = "WHITSON_PVT_TOKEN"
 URL_ENV_VAR = "WHITSON_PVT_URL"
 
-_deployment_url: TypeAdapter[str] = TypeAdapter(DeploymentUrl)
-
 
 class FromArgument(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     source: Literal["argument"] = "argument"
+    url: str
     credential: ApiToken
 
 
@@ -41,6 +40,7 @@ class FromEnvironment(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     source: Literal["environment"] = "environment"
+    url: str
     credential: ApiToken
 
 
@@ -48,6 +48,7 @@ class FromStore(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     source: Literal["store"] = "store"
+    url: str
     credential: StoredLogin
 
 
@@ -57,21 +58,18 @@ ResolvedCredential = FromArgument | FromEnvironment | FromStore
 class UrlFromArgument(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    source: Literal["argument"] = "argument"
     url: str
 
 
 class UrlFromEnvironment(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    source: Literal["environment"] = "environment"
     url: str
 
 
 class UrlFromDefaultLogin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    source: Literal["default_login"] = "default_login"
     url: str
 
 
@@ -88,18 +86,20 @@ def resolve_base_url(base_url: str | None) -> ResolvedUrl:
     if default is not None:
         return UrlFromDefaultLogin(url=default)
     raise ConfigurationError(
-        "No deployment URL configured. Provide one of: the base_url argument (--url), "
-        f"the {URL_ENV_VAR} environment variable, or a default login from "
+        "No deployment URL configured. Provide one of: the base_url argument (--url on "
+        f"wpvt auth and wpvt mcp), the {URL_ENV_VAR} environment variable, or a default login from "
         "`wpvt auth login --url <url>`."
     )
 
 
-def resolve_credential(deployment: ResolvedUrl, token: str | None) -> ResolvedCredential:
-    given = _given_api_token(token)
+def resolve_credential(base_url: str | None, token: str | None) -> ResolvedCredential:
+    deployment = resolve_base_url(base_url)
+    url = deployment.url
+    given = _given_api_token(url, token)
     if given is None:
-        return FromStore(credential=_stored_login(deployment.url))
+        return FromStore(url=url, credential=_stored_login(url))
     match deployment:
-        case UrlFromDefaultLogin(url=url):
+        case UrlFromDefaultLogin():
             given_by = (
                 "The token= argument was given"
                 if isinstance(given, FromArgument)
@@ -108,9 +108,10 @@ def resolve_credential(deployment: ResolvedUrl, token: str | None) -> ResolvedCr
             raise ConfigurationError(
                 f"{given_by} without a deployment URL, so the URL would come from the default "
                 f"login ({url}). An API token is only sent to a URL given explicitly: set "
-                f"{URL_ENV_VAR} (or pass --url or base_url=), or drop the token to use the login."
+                f"{URL_ENV_VAR} (or base_url=, or --url on wpvt auth and wpvt mcp), or drop the "
+                "token to use the login."
             )
-        case UrlFromArgument(url=url) | UrlFromEnvironment(url=url):
+        case UrlFromArgument() | UrlFromEnvironment():
             if not is_secure_url(url):
                 raise ConfigurationError(
                     f"Refusing to send an API token over plain HTTP to {url}; use https:// "
@@ -119,13 +120,13 @@ def resolve_credential(deployment: ResolvedUrl, token: str | None) -> ResolvedCr
             return given
 
 
-def _given_api_token(token: str | None) -> FromArgument | FromEnvironment | None:
+def _given_api_token(url: str, token: str | None) -> FromArgument | FromEnvironment | None:
     if token is not None:
-        return FromArgument(credential=_api_token(token, "The token= argument is empty"))
+        return FromArgument(url=url, credential=_api_token(token, "The token= argument is empty"))
     env_token = os.environ.get(TOKEN_ENV_VAR)
     if env_token is not None:
         return FromEnvironment(
-            credential=_api_token(env_token, f"{TOKEN_ENV_VAR} is set but empty")
+            url=url, credential=_api_token(env_token, f"{TOKEN_ENV_VAR} is set but empty")
         )
     return None
 
@@ -148,8 +149,8 @@ def _url(value: str, source: str) -> str:
     if not value.strip():
         raise ConfigurationError(f"{source} is set but empty")
     try:
-        return _deployment_url.validate_python(value)
-    except ValidationError:
+        return normalise_url(value)
+    except ValueError:
         raise ConfigurationError(
             f"{source} must be an http(s) URL such as https://example.pvt.whitson.com"
         ) from None
