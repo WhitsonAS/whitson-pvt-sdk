@@ -37,27 +37,29 @@ class ImportArchiveOptions(BaseModel):
 
 # Hand-written until GET /external/v2/me is in the OpenAPI document; then replace with the
 # generated models.
-class _TokenIdentity(BaseModel):
-    user_id: int | str
-    name: str | None = None
-    email: str | None = None
-    role: str | None = None
-    scopes: list[str] = Field(default_factory=list)
+class _UserIdentity(BaseModel):
+    user_id: int
+    name: str | None
+    email: str | None
+    role: str
+    scopes: list[str]
 
 
-class ApiTokenIdentity(_TokenIdentity):
+class ApiTokenIdentity(_UserIdentity):
     kind: Literal["api_token"]
+    token_id: int
+    token_name: str
 
 
-class UserTokenIdentity(_TokenIdentity):
+class UserTokenIdentity(_UserIdentity):
     kind: Literal["user_token"]
-    client_id: str | None = None
+    client_id: str | None
 
 
 class LegacyClientIdentity(BaseModel):
     kind: Literal["legacy_client"]
-    client_id: str | None = None
-    scopes: list[str] = Field(default_factory=list)
+    client_subject: str | None
+    full_access: Literal[True]
 
 
 Identity = Annotated[

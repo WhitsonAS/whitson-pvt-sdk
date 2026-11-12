@@ -237,27 +237,31 @@ Without the extra, `wpvt` prints this install command and exits with code 2.
 
 ```console
 $ wpvt auth login --url https://example.pvt.whitson.com
+First login to example.pvt.whitson.com from this machine. You will sign in at login.example.com, the login server that example.pvt.whitson.com names. Continue only if you trust both hosts.
+Continue? [y/N]: y
 Opened a browser to log in. If it did not open, visit:
 https://login.example.com/authorize?...
-Logged in to https://example.pvt.whitson.com as Ada Lovelace <ada@example.com> (role: engineer). This login is now the default.
+Logged in to https://example.pvt.whitson.com as Ada Lovelace <ada@example.com> (role: project_editor). This login is now the default.
 
 $ wpvt auth status
 Deployment: https://example.pvt.whitson.com
 Credential: stored login (wpvt auth login)
-Identity:   Ada Lovelace <ada@example.com> (role: engineer)
+Identity:   Ada Lovelace <ada@example.com> (role: project_editor)
 Scopes:     read:data, write:data
 
 $ wpvt auth logout
 Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
 ```
 
-- `wpvt auth login [--url URL] [--device]` logs in with the authorization code flow and PKCE
-  through a one-off listener on `127.0.0.1`. It opens a browser only when attached to a
-  terminal; otherwise it prints the URL. `--device` logs in with a code entered on another
-  device, for SSH sessions, containers and sandboxes. The new login becomes the default.
+- `wpvt auth login [--url URL] [--device] [--trust-host] [--yes]` logs in with the
+  authorization code flow and PKCE through a one-off listener on `127.0.0.1`. It opens a browser
+  only when attached to a terminal; otherwise it prints the URL. `--device` logs in with a code
+  entered on another device, for SSH sessions, containers and sandboxes, on deployments that
+  enable it. The new login becomes the default.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
   came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
-  API reports. It never prints a token.
+  API reports: the API token's name for an API token, and "legacy client <subject>, full
+  access" for a legacy client. It never prints a token.
 - `wpvt auth logout [--url URL | --all]` removes stored logins and revokes their refresh
   tokens when the authorization server offers revocation.
 - `wpvt --version` prints the version.
@@ -273,6 +277,41 @@ Progress messages (the login URL, the device code) go to stderr.
 | 2 | Usage or configuration: a bad option, no URL or credential configured, login not enabled on the deployment, a credentials file with loose permissions, the `cli` extra missing |
 | 3 | Authentication: the login was refused or is no longer valid, or the API rejected the credential |
 | 4 | Network or server: no response, or an unexpected status from the API or the authorization server |
+
+### Which deployments a login trusts
+
+`wpvt auth login` asks the deployment where to sign in and sends your browser there, so it only
+starts for hosts it can expect you to trust:
+
+- HTTPS hosts under `pvt.whitson.com`, such as `example.pvt.whitson.com` or
+  `eu.example.pvt.whitson.com` (not `pvt.whitson.com` itself, and not lookalikes such as
+  `evilpvt.whitson.com` or `pvt.whitson.com.example.org`);
+- this machine, over http or https: `localhost`, names under `localhost` (such as
+  `api.pvt.localhost`), `127.0.0.1` and `::1`.
+
+Host names are compared lower-case without a trailing dot. A URL with a user name or password,
+a non-ASCII or punycode (`xn--`) host name, or plain HTTP to another host is refused. For any
+other host, the login stops before contacting it and names the host. If you know and trust it,
+run the login again with `--trust-host` and the URL in `--url` (in Python,
+`login(..., trust_host=True)`). The override applies to that one command and that URL only; no
+environment variable or setting widens the list.
+
+The first login to a deployment from this machine, and a login after the deployment's login
+server changed, shows the deployment host and the login server host (the issuer) your browser
+will be sent to, and asks to continue (default no). Without a terminal, the login is refused
+unless you pass `--yes`. In Python, pass `confirm=`, a function that receives `FirstUse` or
+`IssuerChanged` (each with `deployment_host`, `issuer_host` and `describe()`) and returns whether
+to continue; without it, a first login raises `ConfigurationError`.
+
+The issuer, and the authorization, token, device and revocation endpoints it publishes, must be
+HTTPS (http only on this machine), and the browser is only sent to the issuer's own host.
+
+Device login (`--device`) is available only on deployments that enable it (`device_login` in
+`/external/v2/auth/config`), since a device code can be phished. Elsewhere, log in from a
+machine with a browser or use an API token in `WHITSON_PVT_TOKEN`.
+
+These checks apply to logging in. An API token (`token=` or `WHITSON_PVT_TOKEN`) is sent to
+whatever `base_url` you configure, and a stored login only ever to its own deployment.
 
 Library code never starts a login. Scripts and agents should use `WHITSON_PVT_TOKEN`; a login
 made with `wpvt auth login` is for people at a terminal, and every SDK client on the machine then
@@ -303,8 +342,8 @@ a write, the tokens are kept in the file. To keep tokens out of the keyring, set
   (another process may have renewed already), and saves the rotated refresh token before it lets
   go, so a script and another `wpvt` process can share one login.
 - **No browser from library code.** Only `wpvt auth login`, or an explicit call to
-  `whitson_pvt_sdk.login.login`, starts a login. Login over plain HTTP is refused except to
-  `localhost`.
+  `whitson_pvt_sdk.login.login`, starts a login, and only to a trusted deployment after the
+  first-use confirmation (see above).
 - Tokens, refresh tokens, authorization codes and PKCE verifiers are never logged or printed.
 
 ## Development

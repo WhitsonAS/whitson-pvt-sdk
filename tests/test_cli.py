@@ -12,17 +12,27 @@ from whitson_pvt_sdk.cli._app import app
 
 DISCOVERY = f"{ISSUER}.well-known/openid-configuration"
 REVOKE = "https://login.example.com/oauth/revoke"
-ME = {
+IDENTITY = {
     "kind": "user_token",
     "user_id": 7,
     "name": "Ada Lovelace",
     "email": "ada@example.com",
-    "role": "engineer",
+    "role": "project_editor",
     "scopes": ["read:data"],
     "client_id": "cli-client",
-    "added_later": {"ignored": True},
 }
-IDENTITY = {key: value for key, value in ME.items() if key != "added_later"}
+API_TOKEN_IDENTITY = {
+    "kind": "api_token",
+    "user_id": 7,
+    "name": None,
+    "email": "ada@example.com",
+    "role": "reader",
+    "scopes": ["read:data"],
+    "token_id": 12,
+    "token_name": "nightly export",
+}
+LEGACY_IDENTITY = {"kind": "legacy_client", "client_subject": "abc@clients", "full_access": True}
+ME = {**IDENTITY, "added_later": {"ignored": True}}
 SECRETS = ("stored-access", "stored-refresh", "env-token")
 
 runner = CliRunner()
@@ -35,20 +45,25 @@ def _no_secrets(result) -> None:
 
 
 @pytest.mark.parametrize(
-    ("use_env_token", "credential"),
+    ("use_env_token", "credential", "identity"),
     [
-        (False, {"kind": "stored_login", "source": "store"}),
-        (True, {"kind": "api_token", "source": "environment"}),
+        (False, {"kind": "stored_login", "source": "store"}, IDENTITY),
+        (True, {"kind": "api_token", "source": "environment"}, API_TOKEN_IDENTITY),
+        (True, {"kind": "api_token", "source": "environment"}, LEGACY_IDENTITY),
     ],
-    ids=["stored-login", "env-token"],
+    ids=["stored-login", "env-token", "legacy-client"],
 )
 def test_status_reports_the_credential_and_identity(
-    base_url, httpx_mock, monkeypatch, store_login, use_env_token, credential
+    base_url, httpx_mock, monkeypatch, store_login, use_env_token, credential, identity
 ):
     store_login(base_url, access="stored-access", refresh="stored-refresh")
     if use_env_token:
         monkeypatch.setenv("WHITSON_PVT_TOKEN", "env-token")
-    httpx_mock.add_response(url=f"{base_url}/external/v2/me", json=ME, is_reusable=True)
+    httpx_mock.add_response(
+        url=f"{base_url}/external/v2/me",
+        json={**identity, "added_later": {"ignored": True}},
+        is_reusable=True,
+    )
 
     result = runner.invoke(app, ["auth", "status", "--json"])
 
@@ -56,7 +71,7 @@ def test_status_reports_the_credential_and_identity(
     assert json.loads(result.stdout) == {
         "url": base_url,
         "credential": credential,
-        "identity": IDENTITY,
+        "identity": identity,
     }
     _no_secrets(result)
 
@@ -163,19 +178,43 @@ def test_logout_all_without_revocation_removes_every_login(httpx_mock, store, st
     assert all(store.get(url) is None for url in urls)
 
 
+AUTH_CONFIG = {
+    "issuer": ISSUER,
+    "client_id": "cli-client",
+    "audience": "https://dev.pvt.whitson.com/external",
+    "scopes": ["read:data"],
+    "device_login": True,
+}
+
+
+def test_login_without_a_terminal_needs_yes_for_a_new_deployment(base_url, httpx_mock, store):
+    httpx_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=AUTH_CONFIG)
+
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
+
+    assert result.exit_code == 2
+    assert "--yes" in json.loads(result.stderr.splitlines()[-1])["message"]
+    assert [str(r.url) for r in httpx_mock.get_requests()] == [
+        f"{base_url}/external/v2/auth/config"
+    ]
+    assert store.get(base_url) is None
+
+
+def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx_mock, monkeypatch):
+    monkeypatch.setenv("WHITSON_PVT_URL", "https://pvt.example.org")
+
+    result = runner.invoke(app, ["auth", "login", "--trust-host", "--yes", "--json"])
+
+    assert result.exit_code == 2
+    assert "--url" in json.loads(result.stderr.splitlines()[-1])["message"]
+    assert httpx_mock.get_requests() == []
+
+
 def test_device_login_makes_the_login_the_default_and_prints_who(
     base_url, httpx_mock, monkeypatch, store
 ):
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
-    httpx_mock.add_response(
-        url=f"{base_url}/external/v2/auth/config",
-        json={
-            "issuer": ISSUER,
-            "client_id": "cli-client",
-            "audience": "https://dev.pvt.whitson.com/external",
-            "scopes": ["read:data"],
-        },
-    )
+    httpx_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=AUTH_CONFIG)
     httpx_mock.add_response(
         url=DISCOVERY,
         json={
@@ -207,7 +246,7 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
     )
     httpx_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
 
-    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--yes", "--json"])
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(result.stdout) == {"url": base_url, "identity": IDENTITY}

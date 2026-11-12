@@ -174,6 +174,10 @@ class CredentialStore:
         profile = self._read().profiles.get(normalise_url(base_url))
         return None if profile is None else _load_entry(profile)
 
+    def issuer(self, base_url: str) -> str | None:
+        profile = self._read().profiles.get(normalise_url(base_url))
+        return None if profile is None else profile.issuer
+
     def default_url(self) -> str | None:
         return self._read().default
 

@@ -30,10 +30,21 @@ from whitson_pvt_sdk._oauth import (
     revoke_refresh_token,
 )
 from whitson_pvt_sdk._store import CredentialStore, RemovedLogin
-from whitson_pvt_sdk.credentials import StoredLogin, normalise_url
+from whitson_pvt_sdk._trust import (
+    Confirmation,
+    FirstUse,
+    IssuerChanged,
+    KnownDeployment,
+    Refused,
+    TrustedByAllowlist,
+    TrustedByOverride,
+    familiarity,
+    host_trust,
+)
+from whitson_pvt_sdk.auth import TOKEN_ENV_VAR
+from whitson_pvt_sdk.credentials import StoredLogin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
-LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 
 
@@ -58,10 +69,36 @@ class LoggedOut(BaseModel):
     revocation: Literal["revoked", "not_offered", "failed", "skipped"]
 
 
-def login(base_url: str, method: LoginMethod, *, output: Callable[[str], None]) -> StoredLogin:
-    url = _login_url(base_url)
+def login(
+    base_url: str,
+    method: LoginMethod,
+    *,
+    output: Callable[[str], None],
+    confirm: Callable[[Confirmation], bool] | None = None,
+    trust_host: bool = False,
+) -> StoredLogin:
+    match host_trust(base_url, trust_host=trust_host):
+        case TrustedByAllowlist(url=url) | TrustedByOverride(url=url):
+            pass
+        case Refused(reason=reason):
+            raise ConfigurationError(reason)
     with oauth_client() as http:
         config = fetch_auth_config(http, url)
+        if isinstance(method, DeviceLogin) and not config.device_login:
+            raise ConfigurationError(
+                f"Device login is not enabled on {url}. Log in with a browser from a machine "
+                f"that has one, or use an API token in {TOKEN_ENV_VAR}."
+            )
+        match familiarity(url, config.issuer):
+            case FirstUse() | IssuerChanged() as confirmation:
+                if confirm is None:
+                    raise ConfigurationError(
+                        f"{confirmation.describe()} Pass confirm= to login() to ask the user."
+                    )
+                if not confirm(confirmation):
+                    raise LoginError(f"The login to {url} was cancelled; nothing was stored.")
+            case KnownDeployment():
+                pass
         provider = discover(http, config.issuer)
         match method:
             case BrowserLogin(open_browser=open_browser, timeout=timeout):
@@ -102,17 +139,13 @@ def logout_all() -> list[LoggedOut]:
     return [_revoke(entry) for entry in removed if entry is not None]
 
 
-def _login_url(base_url: str) -> str:
-    try:
-        url = normalise_url(base_url)
-    except ValueError:
-        raise ConfigurationError(
-            f"{base_url!r} is not a deployment URL such as https://example.pvt.whitson.com"
-        ) from None
-    parsed = httpx.URL(url)
-    if parsed.scheme != "https" and parsed.host not in LOOPBACK_HOSTS:
-        raise ConfigurationError(f"Refusing to log in over plain HTTP to {url}; use https://.")
-    return url
+def _without_a_browser(config: AuthConfig) -> str:
+    if config.device_login:
+        return (
+            "Without a browser on this machine, log in with a code instead "
+            "(wpvt auth login --device)."
+        )
+    return f"Without a browser on this machine, use an API token in {TOKEN_ENV_VAR} instead."
 
 
 def _scope(config: AuthConfig) -> str:
@@ -171,7 +204,10 @@ def _browser_flow(
         if open_browser is not None and open_browser(authorize_url):
             output(f"Opened a browser to log in. If it did not open, visit:\n{authorize_url}")
         else:
-            output(f"Open this URL in a browser on this machine to log in:\n{authorize_url}")
+            output(
+                f"Open this URL in a browser on this machine to log in:\n{authorize_url}\n"
+                + _without_a_browser(config)
+            )
         callback = server.wait(timeout)
     match callback:
         case _CodeReceived(code=code):

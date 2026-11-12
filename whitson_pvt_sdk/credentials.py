@@ -22,6 +22,10 @@ def normalise_url(value: str) -> str:
         raise ValueError(f"{value!r} is not an http(s) URL")
     if url.userinfo or url.query or url.fragment:
         raise ValueError(f"{value!r} must not contain credentials, a query or a fragment")
+    host = url.host.rstrip(".")
+    if "" in host.split("."):
+        raise ValueError(f"{value!r} has an empty host name label")
+    url = url.copy_with(host=host)
     return f"{url.scheme}://{url.netloc.decode()}{url.path.rstrip('/')}"
 
 

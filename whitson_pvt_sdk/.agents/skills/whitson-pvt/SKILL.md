@@ -38,7 +38,7 @@ Leaving the `with` block closes the connections. A long-lived client (a module-l
 
 The deployment is `base_url=`, else `WHITSON_PVT_URL`, else the default `wpvt` login. The credential is `token=`, else `WHITSON_PVT_TOKEN`, else the login stored by `wpvt auth login` for that deployment. An API token always wins over a stored login. With none configured, or with the token in use empty, creating the client raises `ConfigurationError`; a stored login the server no longer accepts raises `LoginError`. Tokens start with `whitson_pvt_`; never print or log them, and never read or print the credentials file or keyring entries.
 
-`client.me.get()` returns who the credential belongs to: `kind` (`api_token`, `user_token` or `legacy_client`), `user_id`, `name`, `email`, `role` and `scopes`.
+`client.me.get()` returns who the credential belongs to, by `kind`: `api_token` (`user_id`, `name`, `email`, `role`, `scopes`, `token_id`, `token_name`), `user_token` (the same identity fields plus `client_id`) or `legacy_client` (`client_subject`, `full_access`).
 
 ## Logins And The wpvt Command
 
@@ -46,7 +46,8 @@ The deployment is `base_url=`, else `WHITSON_PVT_URL`, else the default `wpvt` l
 
 - In scripts, CI and agent sessions, authenticate with `WHITSON_PVT_TOKEN` (and `WHITSON_PVT_URL` for the deployment).
 - To check what is configured, run `wpvt auth status --json`. Exit code 0 prints `url`, `credential` (`kind`, `source`) and `identity`; 2 means nothing is configured, 3 means the login is no longer valid or the API rejected the credential, 4 means a network or server error. Errors arrive on stderr as JSON with `error` and `message`.
-- Never run `wpvt auth login` from a non-interactive host such as an agent's shell: it waits for a person in a browser. Ask the user to run `wpvt auth login --url <deployment>` in their own terminal (or with `--device` on a machine without a browser), then check again with `wpvt auth status --json`.
+- Never run `wpvt auth login` from a non-interactive host such as an agent's shell: it waits for a person in a browser. Ask the user to run `wpvt auth login --url <deployment>` in their own terminal (or with `--device` on a machine without a browser, where the deployment enables device login), then check again with `wpvt auth status --json`.
+- Never pass `--trust-host` or `--yes` to `wpvt auth login`, or `trust_host=True` or an always-yes `confirm=` to `login()`, on your own initiative, and never suggest them to get past a refusal. They decide whether to trust a host outside `*.pvt.whitson.com` and whether to sign in at the login server it names: those are the user's decisions. Show the user the refusal or the hosts and let them decide.
 - A stored login is bound to its deployment URL and is never sent to another one. It renews itself; when it cannot, the error says to log in again.
 
 SDK 2.x has no client credentials, no `version=` argument and no v1 API. Code that passes `credentials=ClientCredentials(...)` or `version=` needs SDK 1.x.

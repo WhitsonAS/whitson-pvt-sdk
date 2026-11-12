@@ -5,7 +5,8 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic import ValidationError as PydanticValidationError
 
-from whitson_pvt_sdk.credentials import StoredLogin
+from whitson_pvt_sdk._trust import SecureUrl
+from whitson_pvt_sdk.credentials import StoredLogin, same_origin
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, NoResponseError
 
 HTTP_TIMEOUT_SECONDS = 30.0
@@ -16,21 +17,22 @@ _Model = TypeVar("_Model", bound=BaseModel)
 class AuthConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    issuer: str
+    issuer: SecureUrl
     client_id: str
     audience: str
     scopes: tuple[str, ...]
     connection: str | None = None
+    device_login: bool = False
 
 
 class ProviderMetadata(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     issuer: str
-    authorization_endpoint: str
-    token_endpoint: str
-    device_authorization_endpoint: str | None = None
-    revocation_endpoint: str | None = None
+    authorization_endpoint: SecureUrl
+    token_endpoint: SecureUrl
+    device_authorization_endpoint: SecureUrl | None = None
+    revocation_endpoint: SecureUrl | None = None
 
 
 class TokenResponse(BaseModel):
@@ -95,6 +97,11 @@ def discover(http: httpx.Client, issuer: str) -> ProviderMetadata:
     metadata = _parse(ProviderMetadata, _send(http, "GET", url), url)
     if metadata.issuer.rstrip("/") != issuer.rstrip("/"):
         raise LoginError(f"{url} describes the issuer {metadata.issuer}, not {issuer}.")
+    if not same_origin(metadata.authorization_endpoint, issuer):
+        raise LoginError(
+            f"{url} sends the browser to {httpx.URL(metadata.authorization_endpoint).host}, "
+            f"not to the login server {httpx.URL(issuer).host}; refusing to log in."
+        )
     return metadata
 
 
@@ -156,5 +163,9 @@ def _parse(model: type[_Model], response: httpx.Response, url: str) -> _Model:
         raise APIError(f"{url} answered HTTP {response.status_code}", response.status_code)
     try:
         return model.model_validate_json(response.content)
-    except PydanticValidationError:
-        raise LoginError(f"{url} returned a response this SDK cannot use.") from None
+    except PydanticValidationError as exc:
+        problems = "; ".join(
+            f"{'.'.join(map(str, error['loc']))}: {error['msg']}"
+            for error in exc.errors(include_url=False, include_input=False, include_context=False)
+        )
+        raise LoginError(f"{url} returned a response this SDK cannot use ({problems}).") from None

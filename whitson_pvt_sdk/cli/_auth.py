@@ -18,7 +18,15 @@ from whitson_pvt_sdk.cli._output import emit, note, reporting
 from whitson_pvt_sdk.credentials import Credential
 from whitson_pvt_sdk.errors import AuthError, ConfigurationError
 from whitson_pvt_sdk.http import HTTPTransport
-from whitson_pvt_sdk.login import BrowserLogin, DeviceLogin, LoggedOut, login, logout, logout_all
+from whitson_pvt_sdk.login import (
+    BrowserLogin,
+    Confirmation,
+    DeviceLogin,
+    LoggedOut,
+    login,
+    logout,
+    logout_all,
+)
 from whitson_pvt_sdk.shared.models import (
     ApiTokenIdentity,
     Identity,
@@ -72,21 +80,50 @@ def login_command(
             "--device", help="Log in with a code on another device, for machines without a browser."
         ),
     ] = False,
+    trust_host: Annotated[
+        bool,
+        typer.Option(
+            "--trust-host",
+            help="Log in to the --url host although it is not a whitson PVT deployment "
+            "(*.pvt.whitson.com) or this machine. Only for a host you know and trust.",
+        ),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Skip the question before the first login to a deployment (or after its login "
+            "server changed). Required without a terminal.",
+        ),
+    ] = False,
     json_output: JsonOption = False,
 ) -> None:
     """Log in through the browser (or --device) and make this login the default."""
     with reporting(json_output=json_output):
+        if trust_host and url is None:
+            raise ConfigurationError("--trust-host applies only to a URL given with --url.")
         target = resolve_base_url(url)
+        interactive = sys.stdin.isatty() and sys.stderr.isatty()
         if device:
             method: BrowserLogin | DeviceLogin = DeviceLogin()
-        elif sys.stdin.isatty() and sys.stderr.isatty():
+        elif interactive:
             method = BrowserLogin(open_browser=webbrowser.open)
         else:
-            note(
-                "No terminal is attached, so no browser is opened. Without a browser, use --device."
-            )
+            note("No terminal is attached, so no browser is opened.")
             method = BrowserLogin()
-        stored = login(target, method, output=note)
+
+        def confirm(confirmation: Confirmation) -> bool:
+            note(confirmation.describe())
+            if yes:
+                return True
+            if not interactive:
+                raise ConfigurationError(
+                    "Confirming a login needs a terminal. Check the hosts above and pass --yes "
+                    "to continue."
+                )
+            return typer.confirm("Continue?", default=False, err=True)
+
+        stored = login(target, method, output=note, confirm=confirm, trust_host=trust_host)
         identity = _identity(stored, stored.base_url)
         if os.environ.get(TOKEN_ENV_VAR):
             note(
@@ -126,7 +163,7 @@ def status_command(url: UrlOption = None, json_output: JsonOption = False) -> No
                     f"Deployment: {target}",
                     f"Credential: {_describe(credential)}",
                     f"Identity:   {_who(identity)}",
-                    f"Scopes:     {', '.join(identity.scopes) or '(none)'}",
+                    f"Scopes:     {_scopes(identity)}",
                 ]
             ),
             json_output=json_output,
@@ -166,13 +203,25 @@ def _identity(credential: Credential, base_url: str) -> Identity:
 
 def _who(identity: Identity) -> str:
     match identity:
-        case ApiTokenIdentity() | UserTokenIdentity():
-            person = identity.name or str(identity.user_id)
-            email = f" <{identity.email}>" if identity.email else ""
-            role = f" (role: {identity.role})" if identity.role else ""
-            return f"{person}{email}{role}"
+        case ApiTokenIdentity():
+            return f'{_person(identity)}, API token "{identity.token_name}"'
+        case UserTokenIdentity():
+            return _person(identity)
         case LegacyClientIdentity():
-            return f"legacy client {identity.client_id or '(unknown)'}"
+            return f"legacy client {identity.client_subject or '(unknown)'}, full access"
+
+
+def _person(identity: ApiTokenIdentity | UserTokenIdentity) -> str:
+    email = f" <{identity.email}>" if identity.email else ""
+    return f"{identity.name or f'user {identity.user_id}'}{email} (role: {identity.role})"
+
+
+def _scopes(identity: Identity) -> str:
+    match identity:
+        case ApiTokenIdentity() | UserTokenIdentity():
+            return ", ".join(identity.scopes) or "(none)"
+        case LegacyClientIdentity():
+            return "all (legacy client)"
 
 
 def _describe(credential: CredentialReport) -> str:
