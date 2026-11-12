@@ -11,7 +11,7 @@ from tests.conftest import ISSUER, TOKEN_ENDPOINT
 from whitson_pvt_sdk.cli._app import app
 
 DISCOVERY = f"{ISSUER}.well-known/openid-configuration"
-REVOKE = "https://login.example.com/oauth/revoke"
+REVOKE = f"{ISSUER}oauth/revoke"
 IDENTITY = {
     "kind": "user_token",
     "user_id": 7,
@@ -132,7 +132,7 @@ def test_logout_removes_the_login_and_revokes_its_refresh_token(
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
-            "authorization_endpoint": "https://login.example.com/authorize",
+            "authorization_endpoint": f"{ISSUER}authorize",
             "token_endpoint": TOKEN_ENDPOINT,
             "revocation_endpoint": REVOKE,
         },
@@ -163,7 +163,7 @@ def test_logout_all_without_revocation_removes_every_login(httpx_mock, store, st
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
-            "authorization_endpoint": "https://login.example.com/authorize",
+            "authorization_endpoint": f"{ISSUER}authorize",
             "token_endpoint": TOKEN_ENDPOINT,
         },
         is_reusable=True,
@@ -187,17 +187,30 @@ AUTH_CONFIG = {
 }
 
 
-def test_login_without_a_terminal_needs_yes_for_a_new_deployment(base_url, httpx_mock, store):
-    httpx_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=AUTH_CONFIG)
+@pytest.mark.parametrize(
+    ("url", "options", "exit_code", "message"),
+    [
+        ("https://pvt.example.org", ["--trust-host"], 2, "--yes"),
+        ("http://localhost:4000", [], 2, "--yes"),
+        ("https://dev.pvt.whitson.com", ["--yes"], 3, "unexpected login server"),
+        ("https://dev.pvt.whitson.com", ["--yes", "--trust-host"], 3, "unexpected login server"),
+    ],
+    ids=["trust-host-without-yes", "localhost-without-yes", "deployment", "deployment-trust-host"],
+)
+def test_login_to_another_login_server_asks_or_is_refused(
+    httpx_mock, store, url, options, exit_code, message
+):
+    httpx_mock.add_response(
+        url=f"{url}/external/v2/auth/config",
+        json={**AUTH_CONFIG, "issuer": "https://login.example.com/"},
+    )
 
-    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
+    result = runner.invoke(app, ["auth", "login", "--url", url, "--device", "--json", *options])
 
-    assert result.exit_code == 2
-    assert "--yes" in json.loads(result.stderr.splitlines()[-1])["message"]
-    assert [str(r.url) for r in httpx_mock.get_requests()] == [
-        f"{base_url}/external/v2/auth/config"
-    ]
-    assert store.get(base_url) is None
+    assert result.exit_code == exit_code
+    assert message in json.loads(result.stderr.splitlines()[-1])["message"]
+    assert [str(r.url) for r in httpx_mock.get_requests()] == [f"{url}/external/v2/auth/config"]
+    assert store.get(url) is None
 
 
 def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx_mock, monkeypatch):
@@ -219,18 +232,18 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
-            "authorization_endpoint": "https://login.example.com/authorize",
+            "authorization_endpoint": f"{ISSUER}authorize",
             "token_endpoint": TOKEN_ENDPOINT,
-            "device_authorization_endpoint": "https://login.example.com/oauth/device/code",
+            "device_authorization_endpoint": f"{ISSUER}oauth/device/code",
         },
     )
     httpx_mock.add_response(
         method="POST",
-        url="https://login.example.com/oauth/device/code",
+        url=f"{ISSUER}oauth/device/code",
         json={
             "device_code": "device-secret",
             "user_code": "WXYZ-1234",
-            "verification_uri": "https://login.example.com/activate",
+            "verification_uri": f"{ISSUER}activate",
             "expires_in": 600,
         },
     )
@@ -246,7 +259,7 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
     )
     httpx_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
 
-    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--yes", "--json"])
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(result.stdout) == {"url": base_url, "identity": IDENTITY}

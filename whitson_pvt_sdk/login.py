@@ -34,15 +34,18 @@ from whitson_pvt_sdk._trust import (
     Confirmation,
     FirstUse,
     IssuerChanged,
-    KnownDeployment,
+    Proceed,
     Refused,
-    TrustedByAllowlist,
+    SecureUrl,
     TrustedByOverride,
-    familiarity,
+    TrustedDeployment,
+    TrustedLoopback,
+    UnexpectedIssuer,
     host_trust,
+    login_decision,
 )
 from whitson_pvt_sdk.auth import TOKEN_ENV_VAR
-from whitson_pvt_sdk.credentials import StoredLogin
+from whitson_pvt_sdk.credentials import StoredLogin, same_origin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
@@ -78,8 +81,8 @@ def login(
     trust_host: bool = False,
 ) -> StoredLogin:
     match host_trust(base_url, trust_host=trust_host):
-        case TrustedByAllowlist(url=url) | TrustedByOverride(url=url):
-            pass
+        case TrustedDeployment() | TrustedLoopback() | TrustedByOverride() as trusted:
+            url = trusted.url
         case Refused(reason=reason):
             raise ConfigurationError(reason)
     with oauth_client() as http:
@@ -89,7 +92,11 @@ def login(
                 f"Device login is not enabled on {url}. Log in with a browser from a machine "
                 f"that has one, or use an API token in {TOKEN_ENV_VAR}."
             )
-        match familiarity(url, config.issuer):
+        match login_decision(trusted, config.issuer):
+            case Proceed():
+                pass
+            case UnexpectedIssuer() as unexpected:
+                raise LoginError(unexpected.describe())
             case FirstUse() | IssuerChanged() as confirmation:
                 if confirm is None:
                     raise ConfigurationError(
@@ -97,8 +104,6 @@ def login(
                     )
                 if not confirm(confirmation):
                     raise LoginError(f"The login to {url} was cancelled; nothing was stored.")
-            case KnownDeployment():
-                pass
         provider = discover(http, config.issuer)
         match method:
             case BrowserLogin(open_browser=open_browser, timeout=timeout):
@@ -318,8 +323,8 @@ class _DeviceAuthorization(BaseModel):
 
     device_code: SecretStr
     user_code: str
-    verification_uri: str
-    verification_uri_complete: str | None = None
+    verification_uri: SecureUrl
+    verification_uri_complete: SecureUrl | None = None
     expires_in: int = Field(gt=0)
     interval: int = Field(default=5, gt=0)
 
@@ -378,6 +383,12 @@ def _device_flow(
         authorization = _DeviceAuthorization.model_validate_json(response.content)
     except PydanticValidationError:
         raise LoginError(f"{endpoint} returned a response this SDK cannot use.") from None
+    for page in (authorization.verification_uri, authorization.verification_uri_complete):
+        if page is not None and not same_origin(page, config.issuer):
+            raise LoginError(
+                f"{endpoint} asks you to enter the code at {httpx.URL(page).host}, not at the "
+                f"login server {httpx.URL(config.issuer).host}; refusing to log in."
+            )
     output(
         f"To log in, open {authorization.verification_uri} and enter the code "
         f"{authorization.user_code}"

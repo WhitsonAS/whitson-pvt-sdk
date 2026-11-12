@@ -237,10 +237,8 @@ Without the extra, `wpvt` prints this install command and exits with code 2.
 
 ```console
 $ wpvt auth login --url https://example.pvt.whitson.com
-First login to example.pvt.whitson.com from this machine. You will sign in at login.example.com, the login server that example.pvt.whitson.com names. Continue only if you trust both hosts.
-Continue? [y/N]: y
 Opened a browser to log in. If it did not open, visit:
-https://login.example.com/authorize?...
+https://whitson.eu.auth0.com/authorize?...
 Logged in to https://example.pvt.whitson.com as Ada Lovelace <ada@example.com> (role: project_editor). This login is now the default.
 
 $ wpvt auth status
@@ -296,15 +294,33 @@ run the login again with `--trust-host` and the URL in `--url` (in Python,
 `login(..., trust_host=True)`). The override applies to that one command and that URL only; no
 environment variable or setting widens the list.
 
-The first login to a deployment from this machine, and a login after the deployment's login
-server changed, shows the deployment host and the login server host (the issuer) your browser
-will be sent to, and asks to continue (default no). Without a terminal, the login is refused
-unless you pass `--yes`. In Python, pass `confirm=`, a function that receives `FirstUse` or
+The deployment also names the login server (the issuer) your browser is sent to, and that
+decides what happens next:
+
+| Deployment | Login server it names | Result |
+| --- | --- | --- |
+| Under `pvt.whitson.com` | whitson's (`whitson.eu.auth0.com`) | Logs in, no question |
+| Under `pvt.whitson.com` | any other | Refused, also with `--trust-host` or `--yes` |
+| This machine | whitson's | Logs in, no question |
+| This machine | any other | Asks first (see below) |
+| Another host, with `--trust-host` | any | Asks first (see below) |
+
+The login server's host must match exactly: `whitson.eu.auth0.com` with the default HTTPS port,
+not a subdomain, a lookalike or another Auth0 tenant. A deployment under `pvt.whitson.com` that
+names another login server may have been taken over or misconfigured, so the refusal names both
+hosts and asks you to report it to whitson; there is no option to continue.
+
+Asking first means: the first login to such a deployment from this machine, and a login after its
+login server changed, shows the deployment host and the login server host and asks to continue
+(default no). Without a terminal, the login is refused unless you pass `--yes`, which only
+answers this question. In Python, pass `confirm=`, a function that receives `FirstUse` or
 `IssuerChanged` (each with `deployment_host`, `issuer_host` and `describe()`) and returns whether
-to continue; without it, a first login raises `ConfigurationError`.
+to continue; without it, such a login raises `ConfigurationError`. A login that needs no
+question needs no `confirm=`.
 
 The issuer, and the authorization, token, device and revocation endpoints it publishes, must be
-HTTPS (http only on this machine), and the browser is only sent to the issuer's own host.
+HTTPS (http only on this machine). The browser, and the page where a device code is entered, are
+only ever on the issuer's own scheme, host and port.
 
 Device login (`--device`) is available only on deployments that enable it (`device_login` in
 `/external/v2/auth/config`), since a device code can be phished. Elsewhere, log in from a
@@ -342,8 +358,8 @@ a write, the tokens are kept in the file. To keep tokens out of the keyring, set
   (another process may have renewed already), and saves the rotated refresh token before it lets
   go, so a script and another `wpvt` process can share one login.
 - **No browser from library code.** Only `wpvt auth login`, or an explicit call to
-  `whitson_pvt_sdk.login.login`, starts a login, and only to a trusted deployment after the
-  first-use confirmation (see above).
+  `whitson_pvt_sdk.login.login`, starts a login, and only to a trusted deployment that names
+  whitson's login server, or after you confirm the hosts (see above).
 - Tokens, refresh tokens, authorization codes and PKCE verifiers are never logged or printed.
 
 ## Development

@@ -61,7 +61,7 @@ def test_keyring_holds_the_tokens_when_it_is_usable(base_url, httpx_mock, store,
     assert sorted(backend.passwords.values()) == ["keyring-access", "keyring-refresh"]
 
     httpx_mock.add_response(
-        url="https://login.example.com/.well-known/openid-configuration", status_code=503
+        url="https://whitson.eu.auth0.com/.well-known/openid-configuration", status_code=503
     )
     logout(base_url)
     assert backend.passwords == {}

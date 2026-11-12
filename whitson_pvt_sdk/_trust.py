@@ -30,12 +30,35 @@ ALLOWLIST = HostAllowlist(
 )
 
 
+class KnownIssuers(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    hosts: frozenset[str]
+
+    def includes(self, issuer: str) -> bool:
+        try:
+            url = httpx.URL(normalise_url(issuer))
+        except ValueError:
+            return False
+        return url.scheme == "https" and url.port is None and url.host in self.hosts
+
+
+# A new login domain needs an SDK release before deployments switch to it.
+KNOWN_ISSUERS = KnownIssuers(hosts=frozenset({"whitson.eu.auth0.com"}))
+
+
 def _strictly_under(host: str, domain: str) -> bool:
     # Match on a label boundary only: "evilpvt.whitson.com" and the apex itself are not under it.
     return host.endswith(f".{domain}")
 
 
-class TrustedByAllowlist(BaseModel):
+class TrustedDeployment(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    url: str
+
+
+class TrustedLoopback(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     url: str
@@ -53,7 +76,8 @@ class Refused(BaseModel):
     reason: str
 
 
-HostTrust = TrustedByAllowlist | TrustedByOverride | Refused
+TrustedHost = TrustedDeployment | TrustedLoopback | TrustedByOverride
+HostTrust = TrustedHost | Refused
 
 
 def host_trust(base_url: str, *, trust_host: bool) -> HostTrust:
@@ -73,11 +97,11 @@ def host_trust(base_url: str, *, trust_host: bool) -> HostTrust:
             "logins are only started for plain ASCII host names."
         )
     if ALLOWLIST.is_loopback(host):
-        return TrustedByAllowlist(url=url)
+        return TrustedLoopback(url=url)
     if parsed.scheme != "https":
         return Refused(reason=f"Refusing to log in over plain HTTP to {url}; use https://.")
     if ALLOWLIST.is_deployment(host):
-        return TrustedByAllowlist(url=url)
+        return TrustedDeployment(url=url)
     if trust_host:
         return TrustedByOverride(url=url)
     return Refused(
@@ -87,6 +111,10 @@ def host_trust(base_url: str, *, trust_host: bool) -> HostTrust:
         f"{host} and meant to log in to it, run the login again with --trust-host "
         "(trust_host=True in Python)."
     )
+
+
+class Proceed(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
 
 class FirstUse(BaseModel):
@@ -118,15 +146,37 @@ class IssuerChanged(BaseModel):
         )
 
 
-class KnownDeployment(BaseModel):
+class UnexpectedIssuer(BaseModel):
     model_config = ConfigDict(frozen=True)
+
+    deployment_host: str
+    issuer: str
+
+    def describe(self) -> str:
+        return (
+            f"{self.deployment_host} named an unexpected login server, {self.issuer}, so the "
+            "login was stopped before contacting it. Please report this to whitson."
+        )
 
 
 Confirmation = FirstUse | IssuerChanged
-Familiarity = FirstUse | IssuerChanged | KnownDeployment
+LoginDecision = Proceed | FirstUse | IssuerChanged | UnexpectedIssuer
 
 
-def familiarity(url: str, issuer: str) -> Familiarity:
+def login_decision(host: TrustedHost, issuer: str) -> LoginDecision:
+    pinned = KNOWN_ISSUERS.includes(issuer)
+    match host:
+        case TrustedDeployment(url=url):
+            if pinned:
+                return Proceed()
+            return UnexpectedIssuer(deployment_host=httpx.URL(url).host, issuer=_origin(issuer))
+        case TrustedLoopback() if pinned:
+            return Proceed()
+        case TrustedLoopback(url=url) | TrustedByOverride(url=url):
+            return _familiarity(url, issuer)
+
+
+def _familiarity(url: str, issuer: str) -> LoginDecision:
     deployment_host = httpx.URL(url).host
     issuer_host = httpx.URL(issuer).host
     previous = CredentialStore.from_environment().issuer(url)
@@ -138,7 +188,12 @@ def familiarity(url: str, issuer: str) -> Familiarity:
             issuer_host=issuer_host,
             previous_issuer_host=httpx.URL(previous).host,
         )
-    return KnownDeployment()
+    return Proceed()
+
+
+def _origin(value: str) -> str:
+    url = httpx.URL(value)
+    return f"{url.scheme}://{url.netloc.decode()}"
 
 
 def _secure_url(value: str) -> str:

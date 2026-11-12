@@ -12,8 +12,8 @@ from whitson_pvt_sdk._store import CredentialStore
 from whitson_pvt_sdk.credentials import ApiToken, StoredLogin
 from whitson_pvt_sdk.http import HTTPTransport
 
-ISSUER = "https://login.example.com/"
-TOKEN_ENDPOINT = "https://login.example.com/oauth/token"
+ISSUER = "https://whitson.eu.auth0.com/"
+TOKEN_ENDPOINT = "https://whitson.eu.auth0.com/oauth/token"
 
 StoreLogin = Callable[..., StoredLogin]
 
