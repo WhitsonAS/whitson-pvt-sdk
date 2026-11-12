@@ -11,8 +11,8 @@ def _pagination_json(collection_name: str) -> dict:
     }
 
 
-def test_list_wells_passes_cursor(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_list_wells_passes_cursor(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions/1/wells?cursor=nxt&limit=25",
         json=_pagination_json("wells"),
     )
@@ -21,8 +21,8 @@ def test_list_wells_passes_cursor(transport, httpx_mock):
     assert result.pagination.prev_cursor == "prv"
 
 
-def test_list_black_oil_tables_passes_cursor(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_list_black_oil_tables_passes_cursor(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url=(
             "https://dev.pvt.whitson.com/external/v2/"
             "fluid-models/3/black-oil-tables?cursor=nxt&limit=25"
@@ -33,15 +33,15 @@ def test_list_black_oil_tables_passes_cursor(transport, httpx_mock):
     assert result.pagination.prev_cursor == "prv"
 
 
-def test_regions_list_all_walks_all_pages(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_regions_list_all_walks_all_pages(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions?limit=25",
         json={
             "regions": [],
             "pagination": {"next_cursor": "nxt", "prev_cursor": None},
         },
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions?cursor=nxt&limit=25",
         json={
             "regions": [],
@@ -50,7 +50,7 @@ def test_regions_list_all_walks_all_pages(transport, httpx_mock):
     )
 
     assert Regions(transport).list_all(limit=25) == []
-    get_requests = [request for request in httpx_mock.get_requests() if request.method == "GET"]
+    get_requests = [request for request in httpx2_mock.get_requests() if request.method == "GET"]
     assert len(get_requests) == 2
 
 
@@ -65,14 +65,14 @@ def test_regions_list_all_walks_all_pages(transport, httpx_mock):
     ],
 )
 @pytest.mark.parametrize("method", ["list", "iterate", "list_all"])
-def test_name_filter_is_sent_on_every_page(client, httpx_mock, resource, path, args, method):
+def test_name_filter_is_sent_on_every_page(client, httpx2_mock, resource, path, args, method):
     url = f"https://dev.pvt.whitson.com/external/v2{path}"
     pages = 1 if method == "list" else 2
     for index in range(pages):
         query = "limit=2&name=Exact+name"
         if index:
             query += "&cursor=next"
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             method="GET",
             url=f"{url}?{query}",
             json={
@@ -87,4 +87,4 @@ def test_name_filter_is_sent_on_every_page(client, httpx_mock, resource, path, a
     result = getattr(facade, method)(**args, name="Exact name", limit=2)
     if method != "list":
         assert list(result) == []
-    assert len([req for req in httpx_mock.get_requests() if req.method == "GET"]) == pages
+    assert len([req for req in httpx2_mock.get_requests() if req.method == "GET"]) == pages

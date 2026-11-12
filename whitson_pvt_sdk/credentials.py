@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-import httpx
+import httpx2
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, SecretStr
 
 REFRESH_MARGIN = timedelta(minutes=5)
@@ -15,14 +15,14 @@ def _not_blank(token: SecretStr) -> SecretStr:
 
 def normalise_url(value: str) -> str:
     try:
-        url = httpx.URL(value.strip())
-    except httpx.InvalidURL:
+        url = httpx2.URL(value.strip())
+    except httpx2.InvalidURL:
         raise ValueError(f"{value!r} is not a URL") from None
     if url.scheme not in ("http", "https") or not url.host:
         raise ValueError(f"{value!r} is not an http(s) URL")
     if url.userinfo or url.query or url.fragment:
         raise ValueError(f"{value!r} must not contain credentials, a query or a fragment")
-    host = url.host.rstrip(".")
+    host = host_name(url).rstrip(".")
     if "" in host.split("."):
         raise ValueError(f"{value!r} has an empty host name label")
     return origin(url.copy_with(host=host)) + url.path.rstrip("/")
@@ -31,13 +31,18 @@ def normalise_url(value: str) -> str:
 DeploymentUrl = Annotated[str, AfterValidator(normalise_url)]
 
 
-def origin(url: str | httpx.URL) -> str:
-    parsed = httpx.URL(url)
+def host_name(url: str | httpx2.URL) -> str:
+    # The IDNA (ASCII) form: httpx2's URL.host shows any punycode label as Unicode.
+    return httpx2.URL(url).raw_host.decode("ascii")
+
+
+def origin(url: str | httpx2.URL) -> str:
+    parsed = httpx2.URL(url)
     return f"{parsed.scheme}://{parsed.netloc.decode()}"
 
 
-def same_origin(a: str | httpx.URL, b: str | httpx.URL) -> bool:
-    first, second = httpx.URL(a), httpx.URL(b)
+def same_origin(a: str | httpx2.URL, b: str | httpx2.URL) -> bool:
+    first, second = httpx2.URL(a), httpx2.URL(b)
     return (first.scheme, first.host, first.port) == (second.scheme, second.host, second.port)
 
 

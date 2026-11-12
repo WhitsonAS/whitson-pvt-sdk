@@ -16,7 +16,7 @@ MCP_INSTALL_HINT = (
     '  pip install "whitson-pvt-sdk[mcp]"\n'
     'or: uv tool install "whitson-pvt-sdk[mcp]"'
 )
-MCP_MODULES = frozenset({"fastmcp", "httpx2"})
+MCP_MODULES = frozenset({"fastmcp"})
 
 app = typer.Typer(
     name="wpvt",

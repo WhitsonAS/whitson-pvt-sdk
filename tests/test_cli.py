@@ -3,7 +3,7 @@ import subprocess
 import sys
 from urllib.parse import parse_qs
 
-import httpx
+import httpx2
 import pytest
 from typer.testing import CliRunner
 
@@ -54,12 +54,12 @@ def _no_secrets(result) -> None:
     ids=["stored-login", "env-token", "legacy-client"],
 )
 def test_status_reports_the_credential_and_identity(
-    base_url, httpx_mock, monkeypatch, store_login, use_env_token, credential, identity
+    base_url, httpx2_mock, monkeypatch, store_login, use_env_token, credential, identity
 ):
     store_login(base_url, access="stored-access", refresh="stored-refresh")
     if use_env_token:
         monkeypatch.setenv("WHITSON_PVT_TOKEN", "env-token")
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=f"{base_url}/external/v2/me",
         json={**identity, "added_later": {"ignored": True}},
         is_reusable=True,
@@ -91,7 +91,7 @@ def test_status_reports_the_credential_and_identity(
 )
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_status_failures_have_distinct_exit_codes(
-    base_url, httpx_mock, monkeypatch, store, store_login, setup, exit_code, kind, message
+    base_url, httpx2_mock, monkeypatch, store, store_login, setup, exit_code, kind, message
 ):
     monkeypatch.setenv("WHITSON_PVT_URL", base_url)
     me = f"{base_url}/external/v2/me"
@@ -102,10 +102,10 @@ def test_status_failures_have_distinct_exit_codes(
                 transaction.mark_invalid(base_url, "the refresh token was revoked")
         case "rejected-token":
             monkeypatch.setenv("WHITSON_PVT_TOKEN", "env-token")
-            httpx_mock.add_response(url=me, status_code=401, json={"message": "Invalid token"})
+            httpx2_mock.add_response(url=me, status_code=401, json={"message": "Invalid token"})
         case "unreachable":
             monkeypatch.setenv("WHITSON_PVT_TOKEN", "env-token")
-            httpx_mock.add_exception(httpx.ConnectError("refused"), url=me, is_reusable=True)
+            httpx2_mock.add_exception(httpx2.ConnectError("refused"), url=me, is_reusable=True)
 
     result = runner.invoke(app, ["auth", "status", "--json"])
 
@@ -118,12 +118,12 @@ def test_status_failures_have_distinct_exit_codes(
 
 
 def test_logout_removes_the_login_and_revokes_its_refresh_token(
-    base_url, httpx_mock, store, store_login
+    base_url, httpx2_mock, store, store_login
 ):
     other = "https://other.pvt.whitson.com"
     store_login(other, refresh="other-refresh")
     store_login(base_url, access="stored-access", refresh="stored-refresh")
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
@@ -132,13 +132,13 @@ def test_logout_removes_the_login_and_revokes_its_refresh_token(
             "revocation_endpoint": REVOKE,
         },
     )
-    httpx_mock.add_response(method="POST", url=REVOKE)
+    httpx2_mock.add_response(method="POST", url=REVOKE)
 
     result = runner.invoke(app, ["auth", "logout", "--json"])
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(result.stdout) == {"removed": [{"url": base_url, "revocation": "revoked"}]}
-    revocation = parse_qs(httpx_mock.get_requests(url=REVOKE)[0].content.decode())
+    revocation = parse_qs(httpx2_mock.get_requests(url=REVOKE)[0].content.decode())
     assert revocation == {
         "token": ["stored-refresh"],
         "token_type_hint": ["refresh_token"],
@@ -150,11 +150,11 @@ def test_logout_removes_the_login_and_revokes_its_refresh_token(
     _no_secrets(result)
 
 
-def test_logout_all_without_revocation_removes_every_login(httpx_mock, store, store_login):
+def test_logout_all_without_revocation_removes_every_login(httpx2_mock, store, store_login):
     urls = ["https://a.pvt.whitson.com", "https://b.pvt.whitson.com"]
     for url in urls:
         store_login(url)
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
@@ -224,35 +224,35 @@ OTHER_DEPLOYMENT = {"audience": "https://prod.pvt.whitson.com/mcp"}
     ],
 )
 def test_login_to_another_login_server_asks_or_is_refused(
-    httpx_mock, store, url, config, options, exit_code, message
+    httpx2_mock, store, url, config, options, exit_code, message
 ):
-    httpx_mock.add_response(url=f"{url}/external/v2/auth/config", json={**AUTH_CONFIG, **config})
+    httpx2_mock.add_response(url=f"{url}/external/v2/auth/config", json={**AUTH_CONFIG, **config})
 
     result = runner.invoke(app, ["auth", "login", "--url", url, "--device", "--json", *options])
 
     assert result.exit_code == exit_code
     assert message in result.stderr
     assert "message" in json.loads(result.stderr.splitlines()[-1])
-    assert [str(r.url) for r in httpx_mock.get_requests()] == [f"{url}/external/v2/auth/config"]
+    assert [str(r.url) for r in httpx2_mock.get_requests()] == [f"{url}/external/v2/auth/config"]
     assert store.get(url) is None
 
 
-def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx_mock, monkeypatch):
+def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx2_mock, monkeypatch):
     monkeypatch.setenv("WHITSON_PVT_URL", "https://pvt.example.org")
 
     result = runner.invoke(app, ["auth", "login", "--trust-host", "--yes", "--json"])
 
     assert result.exit_code == 2
     assert "--url" in json.loads(result.stderr.splitlines()[-1])["message"]
-    assert httpx_mock.get_requests() == []
+    assert httpx2_mock.get_requests() == []
 
 
 def test_device_login_makes_the_login_the_default_and_prints_who(
-    base_url, httpx_mock, monkeypatch, store
+    base_url, httpx2_mock, monkeypatch, store
 ):
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
-    httpx_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=AUTH_CONFIG)
-    httpx_mock.add_response(
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=AUTH_CONFIG)
+    httpx2_mock.add_response(
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
@@ -261,7 +261,7 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
             "device_authorization_endpoint": f"{ISSUER}oauth/device/code",
         },
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url=f"{ISSUER}oauth/device/code",
         json={
@@ -271,7 +271,7 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
             "expires_in": 600,
         },
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url=TOKEN_ENDPOINT,
         json={
@@ -281,7 +281,7 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
             "expires_in": 3600,
         },
     )
-    httpx_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
 
     result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
 
@@ -290,7 +290,7 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
     assert "WXYZ-1234" in result.stderr
     assert [
         r.headers["Authorization"]
-        for r in httpx_mock.get_requests(url=f"{base_url}/external/v2/me")
+        for r in httpx2_mock.get_requests(url=f"{base_url}/external/v2/me")
     ] == ["Bearer stored-access"]
     assert store.default_url() == base_url
     _no_secrets(result)

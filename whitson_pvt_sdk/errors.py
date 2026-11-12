@@ -70,6 +70,11 @@ class RateLimitError(ResponseError):
         )
 
 
+class MissingDataError(SDKError):
+    """The input refers to data that does not exist, such as a sample without an adjusted
+    composition in the fluid model."""
+
+
 class CalculationError(SDKError):
     """A calculation endpoint returned a failed calculation result."""
 

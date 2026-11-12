@@ -1,6 +1,6 @@
 import pytest
 
-from whitson_pvt_sdk.errors import CalculationError
+from whitson_pvt_sdk.errors import CalculationError, MissingDataError
 from whitson_pvt_sdk.v2.resources import Calculations
 
 
@@ -63,8 +63,8 @@ def make_adjusted_composition(composition_id, sample_id, c1_molar_amount, c2_mol
     }
 
 
-def test_get_sample_feed_compositions_converts_slate_to_slate_response(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_get_sample_feed_compositions_converts_slate_to_slate_response(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/calculations/sample-to-eos-slate-conversion",
         json={
@@ -101,8 +101,8 @@ def test_get_sample_feed_compositions_converts_slate_to_slate_response(transport
     }
 
 
-def test_get_sample_feed_composition_returns_single_sample_composition(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_get_sample_feed_composition_returns_single_sample_composition(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/calculations/sample-to-eos-slate-conversion",
         json={
@@ -134,8 +134,8 @@ def test_get_sample_feed_composition_returns_single_sample_composition(transport
     ]
 
 
-def test_get_sample_feed_compositions_raises_on_conversion_error(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_get_sample_feed_compositions_raises_on_conversion_error(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/calculations/sample-to-eos-slate-conversion",
         json={
@@ -160,9 +160,9 @@ def test_get_sample_feed_compositions_raises_on_conversion_error(transport, http
 
 
 def test_get_sample_feed_compositions_converts_adjusted_compositions_in_sample_order(
-    transport, httpx_mock
+    transport, httpx2_mock
 ):
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/fluid-models/123",
         json=make_fluid_model_json(
             [
@@ -194,14 +194,14 @@ def test_get_sample_feed_compositions_converts_adjusted_compositions_in_sample_o
 
 
 def test_get_sample_feed_compositions_raises_on_missing_adjusted_composition(
-    transport, httpx_mock
+    transport, httpx2_mock
 ):
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/fluid-models/123",
         json=make_fluid_model_json([]),
     )
 
-    with pytest.raises(ValueError, match="Missing adjusted compositions for sample ids: 456"):
+    with pytest.raises(MissingDataError, match="Missing adjusted compositions for sample ids: 456"):
         Calculations(transport).get_sample_feed_compositions(
             fluid_model_id=123,
             sample_ids=[456],

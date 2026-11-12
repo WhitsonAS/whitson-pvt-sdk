@@ -51,11 +51,11 @@ def _page(field, items, next_cursor=None):
     ],
     ids=["regions", "wells", "projects", "fluid-models", "bot", "bot-alias"],
 )
-def test_list_all_follows_the_pages_and_prints_one_document(httpx_mock, args, route, field, item):
-    httpx_mock.add_response(
+def test_list_all_follows_the_pages_and_prints_one_document(httpx2_mock, args, route, field, item):
+    httpx2_mock.add_response(
         url=f"{API}{route}?limit=1", json=_page(field, [{**item, "id": 1}], "c2")
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=f"{API}{route}?cursor=c2&limit=1", json=_page(field, [{**item, "id": 2}])
     )
 
@@ -65,11 +65,11 @@ def test_list_all_follows_the_pages_and_prints_one_document(httpx_mock, args, ro
     document = json.loads(result.stdout)
     assert [entry["id"] for entry in document["items"]] == [1, 2]
     assert document["next_cursor"] is None
-    assert len(httpx_mock.get_requests()) == 2
+    assert len(httpx2_mock.get_requests()) == 2
 
 
-def test_list_without_all_prints_one_page_and_its_cursor(httpx_mock):
-    httpx_mock.add_response(
+def test_list_without_all_prints_one_page_and_its_cursor(httpx2_mock):
+    httpx2_mock.add_response(
         url=f"{API}/regions?cursor=c1",
         json=_page("regions", [{"id": 7, "name": "North"}], "c2"),
         is_reusable=True,
@@ -95,8 +95,8 @@ def test_list_without_all_prints_one_page_and_its_cursor(httpx_mock):
     assert "--cursor c2" in text.stderr
 
 
-def test_samples_list_reads_the_well(httpx_mock):
-    httpx_mock.add_response(
+def test_samples_list_reads_the_well(httpx2_mock):
+    httpx2_mock.add_response(
         url=f"{API}/wells/6", json={**NAMELESS_WELL, "id": 6, "samples": [{"id": 8}]}
     )
 
@@ -117,14 +117,14 @@ def test_samples_list_reads_the_well(httpx_mock):
     ],
     ids=["regions", "wells", "samples", "projects", "fluid-models"],
 )
-def test_get_prints_the_resource(httpx_mock, resource, route, body):
-    httpx_mock.add_response(url=f"{API}{route}", json=body)
+def test_get_prints_the_resource(httpx2_mock, resource, route, body):
+    httpx2_mock.add_response(url=f"{API}{route}", json=body)
 
     result = runner.invoke(app, [resource, "get", "9"])
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(result.stdout)["id"] == 9
-    assert httpx_mock.get_requests()[0].headers["Authorization"] == f"Bearer {TOKEN}"
+    assert httpx2_mock.get_requests()[0].headers["Authorization"] == f"Bearer {TOKEN}"
 
 
 COMPOSITION = {
@@ -158,8 +158,8 @@ def _files(root):
     return sorted(str(path.relative_to(root)) for path in root.rglob("*") if path.is_file())
 
 
-def test_samples_export_writes_one_directory_per_sample_inside_out(httpx_mock, tmp_path):
-    httpx_mock.add_response(url=f"{API}/samples/7", json=SAMPLE)
+def test_samples_export_writes_one_directory_per_sample_inside_out(httpx2_mock, tmp_path):
+    httpx2_mock.add_response(url=f"{API}/samples/7", json=SAMPLE)
     work = tmp_path / "work"
     out = work / "export"
 
@@ -195,7 +195,7 @@ def test_samples_export_writes_one_directory_per_sample_inside_out(httpx_mock, t
     assert experiment["stages"][0]["pressure"] == 200.0
 
 
-def test_samples_export_refuses_a_non_empty_directory_unless_forced(httpx_mock, tmp_path):
+def test_samples_export_refuses_a_non_empty_directory_unless_forced(httpx2_mock, tmp_path):
     occupied = tmp_path / "7"
     occupied.mkdir()
     (occupied / "notes.txt").write_text("mine")
@@ -204,10 +204,10 @@ def test_samples_export_refuses_a_non_empty_directory_unless_forced(httpx_mock, 
 
     assert refused.exit_code == 2
     assert "--force" in refused.stderr
-    assert httpx_mock.get_requests() == []
+    assert httpx2_mock.get_requests() == []
     assert (occupied / "notes.txt").read_text() == "mine"
 
-    httpx_mock.add_response(url=f"{API}/samples/7", json=SAMPLE)
+    httpx2_mock.add_response(url=f"{API}/samples/7", json=SAMPLE)
     forced = runner.invoke(app, ["samples", "export", "7", "--out", str(tmp_path), "--force"])
 
     assert forced.exit_code == 0, forced.stderr
@@ -248,8 +248,8 @@ BLACK_OIL_TABLE = {
 }
 
 
-def test_black_oil_table_export_writes_every_row_as_csv_with_units(httpx_mock, tmp_path):
-    httpx_mock.add_response(url=f"{API}/black-oil-tables/5", json=BLACK_OIL_TABLE)
+def test_black_oil_table_export_writes_every_row_as_csv_with_units(httpx2_mock, tmp_path):
+    httpx2_mock.add_response(url=f"{API}/black-oil-tables/5", json=BLACK_OIL_TABLE)
     out = tmp_path / "table.csv"
 
     result = runner.invoke(app, ["bot", "export", "5", "--out", str(out), "--format", "csv"])
@@ -303,29 +303,29 @@ def test_black_oil_table_export_writes_every_row_as_csv_with_units(httpx_mock, t
         "empty-segment",
     ],
 )
-def test_api_stays_under_the_external_v2_prefix(httpx_mock, args, url):
+def test_api_stays_under_the_external_v2_prefix(httpx2_mock, args, url):
     if url is not None:
-        httpx_mock.add_response(url=url, json={"ok": True})
+        httpx2_mock.add_response(url=url, json={"ok": True})
 
     result = runner.invoke(app, ["api", *args])
 
     if url is None:
         assert result.exit_code == 2
         assert "Refusing the path" in result.stderr
-        assert httpx_mock.get_requests() == []
+        assert httpx2_mock.get_requests() == []
     else:
         assert result.exit_code == 0, result.stderr
         assert json.loads(result.stdout) == {"ok": True}
-        assert httpx_mock.get_requests()[0].headers["Authorization"] == f"Bearer {TOKEN}"
+        assert httpx2_mock.get_requests()[0].headers["Authorization"] == f"Bearer {TOKEN}"
 
 
-def test_api_request_options(httpx_mock, tmp_path):
+def test_api_request_options(httpx2_mock, tmp_path):
     body = tmp_path / "body.json"
     body.write_text('{"fluid_model_id": 1}')
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST", url=f"{API}/calculations/flash", json={"ok": 1}, is_reusable=True
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="PUT",
         url=f"{API}/regions/2?name=North",
         json={"id": 2},
@@ -339,7 +339,7 @@ def test_api_request_options(httpx_mock, tmp_path):
     )
 
     assert [inline.exit_code, from_file.exit_code, put.exit_code] == [0, 0, 0]
-    posts = httpx_mock.get_requests(method="POST")
+    posts = httpx2_mock.get_requests(method="POST")
     assert [json.loads(request.content) for request in posts] == [{"fluid_model_id": 1}] * 2
     assert "HTTP 200" in put.stderr and "x-ratelimit-remaining: 9" in put.stderr
     assert TOKEN not in put.stderr
@@ -366,22 +366,22 @@ def test_api_request_options(httpx_mock, tmp_path):
         "nothing",
     ],
 )
-def test_api_refuses_bad_arguments_before_any_request(httpx_mock, args):
+def test_api_refuses_bad_arguments_before_any_request(httpx2_mock, args):
     result = runner.invoke(app, args)
 
     assert result.exit_code == 2, result.stdout
-    assert httpx_mock.get_requests() == []
+    assert httpx2_mock.get_requests() == []
 
 
-def test_api_paginate_follows_the_cursor_into_one_document(httpx_mock, tmp_path):
-    httpx_mock.add_response(
+def test_api_paginate_follows_the_cursor_into_one_document(httpx2_mock, tmp_path):
+    httpx2_mock.add_response(
         url=f"{API}/regions/3/wells?limit=1",
         json={**_page("wells", [{"id": 1}], "c2"), "region_id": 3},
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=f"{API}/regions/3/wells?limit=1&cursor=c2", json=_page("wells", [{"id": 2}], "c3")
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=f"{API}/regions/3/wells?limit=1&cursor=c3", json=_page("wells", [{"id": 3}])
     )
     out = tmp_path / "wells.json"
@@ -398,8 +398,8 @@ def test_api_paginate_follows_the_cursor_into_one_document(httpx_mock, tmp_path)
     }
 
 
-def test_api_paginate_refuses_a_response_without_a_cursor(httpx_mock):
-    httpx_mock.add_response(url=f"{API}/samples/3", json={"id": 3, "experiments": []})
+def test_api_paginate_refuses_a_response_without_a_cursor(httpx2_mock):
+    httpx2_mock.add_response(url=f"{API}/samples/3", json={"id": 3, "experiments": []})
 
     result = runner.invoke(app, ["api", "/samples/3", "--paginate"])
 
@@ -452,8 +452,8 @@ OPENAPI = {
 }
 
 
-def test_api_lists_and_describes_routes_from_the_openapi_document(httpx_mock):
-    httpx_mock.add_response(url=f"{API}/docs/openapi.json", json=OPENAPI, is_reusable=True)
+def test_api_lists_and_describes_routes_from_the_openapi_document(httpx2_mock):
+    httpx2_mock.add_response(url=f"{API}/docs/openapi.json", json=OPENAPI, is_reusable=True)
 
     listed = runner.invoke(app, ["api", "--list", "--json"])
     described = runner.invoke(app, ["api", "--describe", "GET", "/external/v2/samples/12"])
@@ -488,7 +488,7 @@ FEED = [
 ]
 
 
-def test_calc_flash_from_an_input_file(httpx_mock, tmp_path):
+def test_calc_flash_from_an_input_file(httpx2_mock, tmp_path):
     request = {
         "fluid_model_id": 1,
         "pressure_unit": "bara",
@@ -498,16 +498,16 @@ def test_calc_flash_from_an_input_file(httpx_mock, tmp_path):
     path = tmp_path / "flash.json"
     path.write_text(json.dumps(request))
     out = tmp_path / "result.json"
-    httpx_mock.add_response(method="POST", url=f"{API}/calculations/flash", json=FLASH_RESPONSE)
+    httpx2_mock.add_response(method="POST", url=f"{API}/calculations/flash", json=FLASH_RESPONSE)
 
     result = runner.invoke(app, ["calc", "flash", "--input", str(path), "--out", str(out)])
 
     assert result.exit_code == 0, result.stderr
-    assert json.loads(httpx_mock.get_requests()[0].content) == request
+    assert json.loads(httpx2_mock.get_requests()[0].content) == request
     assert json.loads(out.read_text())["results"][0]["status"] == "error"
 
 
-def test_calc_flash_from_a_stored_sample_fills_the_feed(httpx_mock, tmp_path):
+def test_calc_flash_from_a_stored_sample_fills_the_feed(httpx2_mock, tmp_path):
     conditions = tmp_path / "conditions.json"
     conditions.write_text(
         json.dumps(
@@ -521,7 +521,7 @@ def test_calc_flash_from_a_stored_sample_fills_the_feed(httpx_mock, tmp_path):
             }
         )
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url=f"{API}/calculations/sample-to-eos-slate-conversion",
         json={
@@ -538,7 +538,7 @@ def test_calc_flash_from_a_stored_sample_fills_the_feed(httpx_mock, tmp_path):
             ]
         },
     )
-    httpx_mock.add_response(method="POST", url=f"{API}/calculations/flash", json=FLASH_RESPONSE)
+    httpx2_mock.add_response(method="POST", url=f"{API}/calculations/flash", json=FLASH_RESPONSE)
 
     result = runner.invoke(
         app,
@@ -546,7 +546,7 @@ def test_calc_flash_from_a_stored_sample_fills_the_feed(httpx_mock, tmp_path):
     )
 
     assert result.exit_code == 0, result.stderr
-    conversion, flash = (json.loads(request.content) for request in httpx_mock.get_requests())
+    conversion, flash = (json.loads(request.content) for request in httpx2_mock.get_requests())
     assert conversion == {"fluid_model_id": 1, "sample_ids": [7]}
     assert flash["fluid_model_id"] == 1
     assert [entry["feed_composition"] for entry in flash["inputs"]] == [FEED, FEED]
@@ -563,15 +563,15 @@ def test_calc_flash_from_a_stored_sample_fills_the_feed(httpx_mock, tmp_path):
     ],
     ids=["nothing", "sample-alone", "fluid-model-without-sample", "source-without-sample"],
 )
-def test_calc_request_options_are_exclusive(httpx_mock, args, message):
+def test_calc_request_options_are_exclusive(httpx2_mock, args, message):
     result = runner.invoke(app, ["calc", "phase-envelope", *args])
 
     assert result.exit_code == 2
     assert message in result.stderr
-    assert httpx_mock.get_requests() == []
+    assert httpx2_mock.get_requests() == []
 
 
-def test_calc_with_a_sample_refuses_a_feed_or_fluid_model_in_the_file(httpx_mock, tmp_path):
+def test_calc_with_a_sample_refuses_a_feed_or_fluid_model_in_the_file(httpx2_mock, tmp_path):
     path = tmp_path / "conditions.json"
     path.write_text(json.dumps({"fluid_model_id": 2, "inputs": [{}]}))
 
@@ -581,4 +581,4 @@ def test_calc_with_a_sample_refuses_a_feed_or_fluid_model_in_the_file(httpx_mock
 
     assert result.exit_code == 2
     assert "fluid_model_id" in result.stderr
-    assert httpx_mock.get_requests() == []
+    assert httpx2_mock.get_requests() == []

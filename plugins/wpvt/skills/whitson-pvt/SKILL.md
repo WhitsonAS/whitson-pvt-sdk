@@ -115,6 +115,7 @@ Everything the SDK raises derives from `SDKError`; import the classes from `whit
 - `NoResponseError`: the request got no response (connection error, timeout) after retries. No HTTP fields.
 - `ResponseError`: the API answered with an error status; always has `status_code: int`, plus `response_body` and `request_id`. Subclasses: `AuthError` (401/403), `NotFoundError` (404), `ValidationError` (400/422), `RateLimitError` (429, with `retry_after_seconds`) and `APIError` (any other status).
 - `CalculationError`: a calculation returned a failed result (`code`, `sample_id`, `input_index`, `error`).
+- `MissingDataError`: the input names data that does not exist, such as a sample without an adjusted composition in the fluid model (`get_sample_feed_composition(s)`).
 
 Catch `AuthError` only for a rejected token; a missing token is `ConfigurationError`.
 

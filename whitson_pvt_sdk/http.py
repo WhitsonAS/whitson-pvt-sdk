@@ -4,7 +4,7 @@ import time
 from collections.abc import Mapping
 from typing import Any, TypeAlias
 
-import httpx
+import httpx2
 
 from whitson_pvt_sdk._retry import retry_after, retry_delay
 from whitson_pvt_sdk.auth import CredentialAuth
@@ -42,7 +42,7 @@ class HTTPTransport:
     ) -> None:
         self._retry_config = retry_config
         self._file_timeout = file_timeout
-        self._http = httpx.Client(
+        self._http = httpx2.Client(
             auth=CredentialAuth(credential),
             base_url=f"{base_url.rstrip('/')}{API_PREFIX}",
             timeout=timeout,
@@ -56,16 +56,16 @@ class HTTPTransport:
         method: HTTPMethod,
         path: str,
         *,
-        timeout: httpx.Timeout | float,
+        timeout: httpx2.Timeout | float,
         params: Params = None,
         json: JSONBody = None,
         files: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         attempt = 1
         while True:
             logger.debug("Sending API request: method=%s path=%s attempt=%s", method, path, attempt)
-            outcome: httpx.Response | httpx.TransportError
+            outcome: httpx2.Response | httpx2.TransportError
             try:
                 outcome = self._http.request(
                     method,
@@ -76,7 +76,7 @@ class HTTPTransport:
                     data=data,
                     timeout=timeout,
                 )
-            except httpx.TransportError as exc:
+            except httpx2.TransportError as exc:
                 outcome = exc
             delay = retry_delay(self._retry_config, method, attempt, outcome)
             if delay is None:
@@ -86,19 +86,19 @@ class HTTPTransport:
                 method,
                 path,
                 attempt,
-                outcome.status_code if isinstance(outcome, httpx.Response) else outcome,
+                outcome.status_code if isinstance(outcome, httpx2.Response) else outcome,
                 delay,
             )
-            if isinstance(outcome, httpx.Response):
+            if isinstance(outcome, httpx2.Response):
                 outcome.close()
             time.sleep(delay)
             attempt += 1
 
         match outcome:
-            case httpx.Response():
+            case httpx2.Response():
                 _raise_for_status(outcome)
                 return outcome
-            case httpx.TransportError():
+            case httpx2.TransportError():
                 logger.warning(
                     "API request failed before response: method=%s path=%s error=%s",
                     method,
@@ -159,7 +159,7 @@ def external_path(path: str) -> str:
     return "/" + "/".join(segments)
 
 
-def _raise_for_status(response: httpx.Response) -> None:
+def _raise_for_status(response: httpx2.Response) -> None:
     if response.is_success:
         return
     status = response.status_code

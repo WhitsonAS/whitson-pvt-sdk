@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Literal
 from urllib.parse import parse_qs, urlsplit
 
-import httpx
+import httpx2
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic import ValidationError as PydanticValidationError
 
@@ -39,7 +39,7 @@ from whitson_pvt_sdk._trust import (
     login_decision,
 )
 from whitson_pvt_sdk.auth import TOKEN_ENV_VAR
-from whitson_pvt_sdk.credentials import StoredLogin, same_origin
+from whitson_pvt_sdk.credentials import StoredLogin, host_name, same_origin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
 __all__ = [
@@ -189,7 +189,7 @@ _Callback = _CodeReceived | _AuthorizationRefused | _StateMismatch
 
 
 def _browser_flow(
-    http: httpx.Client,
+    http: httpx2.Client,
     config: AuthConfig,
     provider: ProviderMetadata,
     open_browser: Callable[[str], bool] | None,
@@ -213,7 +213,7 @@ def _browser_flow(
         }
         if config.connection is not None:
             params["connection"] = config.connection
-        authorize_url = str(httpx.URL(provider.authorization_endpoint).copy_merge_params(params))
+        authorize_url = str(httpx2.URL(provider.authorization_endpoint).copy_merge_params(params))
         if open_browser is not None and open_browser(authorize_url):
             output(f"Opened a browser to log in. If it did not open, visit:\n{authorize_url}")
         else:
@@ -341,7 +341,7 @@ _SLOW_DOWN_SECONDS = 5
 
 
 def _device_flow(
-    http: httpx.Client,
+    http: httpx2.Client,
     config: AuthConfig,
     provider: ProviderMetadata,
     output: Callable[[str], None],
@@ -364,8 +364,8 @@ def _device_flow(
     for page in (authorization.verification_uri, authorization.verification_uri_complete):
         if page is not None and not same_origin(page, config.issuer):
             raise LoginError(
-                f"{endpoint} asks you to enter the code at {httpx.URL(page).host}, not at the "
-                f"login server {httpx.URL(config.issuer).host}; refusing to log in."
+                f"{endpoint} asks you to enter the code at {host_name(page)}, not at the "
+                f"login server {host_name(config.issuer)}; refusing to log in."
             )
     output(
         f"To log in, open {authorization.verification_uri} and enter the code "

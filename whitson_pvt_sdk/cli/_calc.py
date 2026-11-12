@@ -9,7 +9,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.cli._output import FileReport, JsonOption, emit, emit_data, reporting
-from whitson_pvt_sdk.errors import ConfigurationError, SDKError
+from whitson_pvt_sdk.errors import ConfigurationError
 from whitson_pvt_sdk.shared.models import CompositionSource
 from whitson_pvt_sdk.v2.models import (
     FlashCalculationRequestModel,
@@ -155,12 +155,9 @@ def _request(
                     "With --sample, leave feed_composition out of the inputs; it comes from "
                     "the sample."
                 )
-            try:
-                composition = calculations.get_sample_feed_composition(
-                    feed.fluid_model_id, feed.sample_id, feed.source
-                )
-            except ValueError as exc:
-                raise SDKError(str(exc)) from None
+            composition = calculations.get_sample_feed_composition(
+                feed.fluid_model_id, feed.sample_id, feed.source
+            )
             feed_composition = [entry.model_dump(mode="json") for entry in composition]
             return _validated(
                 model,

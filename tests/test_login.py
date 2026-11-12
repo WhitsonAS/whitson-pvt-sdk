@@ -34,8 +34,8 @@ TOKENS = {
 
 
 @pytest.fixture
-def authorization_server(base_url, httpx_mock):
-    httpx_mock.add_response(
+def authorization_server(base_url, httpx2_mock):
+    httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config",
         json={
             "issuer": ISSUER,
@@ -46,7 +46,7 @@ def authorization_server(base_url, httpx_mock):
             "device_login": True,
         },
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
@@ -80,8 +80,8 @@ def _visit_later(urls, statuses) -> threading.Thread:
 
 
 @pytest.mark.usefixtures("authorization_server")
-def test_browser_login_completes_through_the_loopback_callback(base_url, httpx_mock, store):
-    httpx_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
+def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_mock, store):
+    httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
     opened, messages, statuses, visits = [], [], [], []
 
     def open_browser(url: str) -> bool:
@@ -113,7 +113,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx_m
         "connection": "acme-sso",
     }
     assert authorize["redirect_uri"][0].startswith("http://127.0.0.1:")
-    exchange = _form(httpx_mock.get_requests(url=TOKEN_ENDPOINT)[0])
+    exchange = _form(httpx2_mock.get_requests(url=TOKEN_ENDPOINT)[0])
     verifier = exchange.pop("code_verifier")
     digest = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=")
     assert digest.decode() == authorize["code_challenge"][0]
@@ -166,15 +166,15 @@ def test_browser_callback_with_another_state_is_rejected(base_url, store):
         ("http://mcp.api.pvt.localhost:4000", "http://mcp.api.pvt.localhost:4000"),
     ],
 )
-def test_login_contacts_a_trusted_deployment(httpx_mock, url, deployment):
-    httpx_mock.add_response(status_code=404, json={"message": "Not found"})
+def test_login_contacts_a_trusted_deployment(httpx2_mock, url, deployment):
+    httpx2_mock.add_response(status_code=404, json={"message": "Not found"})
 
     with pytest.raises(
         ConfigurationError, match=re.escape(f"Command-line login is not enabled on {deployment}.")
     ):
         login(url, DeviceLogin(), output=print)
 
-    assert [str(r.url) for r in httpx_mock.get_requests()] == [
+    assert [str(r.url) for r in httpx2_mock.get_requests()] == [
         f"{deployment}/external/v2/auth/config"
     ]
 
@@ -194,13 +194,15 @@ def test_login_contacts_a_trusted_deployment(httpx_mock, url, deployment):
         ("https://dev.pvt.whits\u03bfn.com", True, "non-ASCII"),
         ("https://d\u0435v.pvt.whitson.com", True, "non-ASCII"),
         ("https://dev.pvt.xn--whitsn-m0e.com", True, "non-ASCII"),
+        ("https://xn--dv-dlc.pvt.whitson.com", False, "non-ASCII"),
+        ("https://dev\u3002pvt.whitson.com", False, "non-ASCII"),
     ],
 )
-def test_login_refuses_other_hosts_before_any_request(httpx_mock, url, trust_host, reason):
+def test_login_refuses_other_hosts_before_any_request(httpx2_mock, url, trust_host, reason):
     with pytest.raises(ConfigurationError, match=reason) as refusal:
         login(url, DeviceLogin(), output=print, confirm=_accept, trust_host=trust_host)
 
-    assert httpx_mock.get_requests() == []
+    assert httpx2_mock.get_requests() == []
     assert "secret" not in refusal.value.message
 
 
@@ -421,6 +423,17 @@ OWN = "own"
         pytest.param(
             UNLISTED,
             True,
+            "https://login.xn--exmple-cua.com/",
+            OWN,
+            None,
+            False,
+            _first_use("pvt.example.org", "login.xn--exmple-cua.com"),
+            "cancelled",
+            id="trust-host-punycode-issuer-shown-in-ascii",
+        ),
+        pytest.param(
+            UNLISTED,
+            True,
             OTHER_ISSUER,
             OWN,
             OLD_ISSUER,
@@ -432,7 +445,7 @@ OWN = "own"
     ],
 )
 def test_login_decides_by_deployment_issuer_and_audience(
-    httpx_mock, store, deployment, trust_host, issuer, audience, stored, answer, asked, error
+    httpx2_mock, store, deployment, trust_host, issuer, audience, stored, answer, asked, error
 ):
     if stored is not None:
         previous = make_login(deployment, refresh="old-refresh")
@@ -443,13 +456,13 @@ def test_login_decides_by_deployment_issuer_and_audience(
             transaction.put(previous)
             if stored == "invalid":
                 transaction.mark_invalid(deployment, "the refresh token was revoked")
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=f"{deployment}/external/v2/auth/config",
         json=_auth_config(issuer, audience=f"{deployment}/mcp" if audience == OWN else audience),
     )
     discovery = f"{issuer}.well-known/openid-configuration"
     if error == PROCEEDS:
-        httpx_mock.add_response(url=discovery, status_code=503)
+        httpx2_mock.add_response(url=discovery, status_code=503)
     questions, opened = [], []
 
     def confirm(question: Confirmation) -> bool:
@@ -471,7 +484,7 @@ def test_login_decides_by_deployment_issuer_and_audience(
 
     assert questions == ([] if asked is None else [asked])
     assert opened == []
-    assert [str(r.url) for r in httpx_mock.get_requests()] == [
+    assert [str(r.url) for r in httpx2_mock.get_requests()] == [
         f"{deployment}/external/v2/auth/config"
     ] + ([discovery] if error == PROCEEDS else [])
     entry = store.get(deployment)
@@ -495,15 +508,15 @@ def test_login_decides_by_deployment_issuer_and_audience(
         ("http://whitson.eu.auth0.com/", "issuer: Value error, must be an https URL"),
     ],
 )
-def test_a_deployment_signs_in_only_at_a_known_issuer_host(base_url, httpx_mock, issuer, error):
-    httpx_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=_auth_config(issuer))
+def test_a_deployment_signs_in_only_at_a_known_issuer_host(base_url, httpx2_mock, issuer, error):
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=_auth_config(issuer))
     if error == PROCEEDS:
-        httpx_mock.add_response(status_code=503)
+        httpx2_mock.add_response(status_code=503)
 
     with pytest.raises(SDKError, match=re.escape(error)):
         login(base_url, DeviceLogin(), output=print, confirm=_accept, trust_host=True)
 
-    requests = [r.url for r in httpx_mock.get_requests()]
+    requests = [r.url for r in httpx2_mock.get_requests()]
     assert [str(url) for url in requests[:1]] == [f"{base_url}/external/v2/auth/config"]
     assert [url.host for url in requests[1:]] == (
         ["whitson.eu.auth0.com"] if error == PROCEEDS else []
@@ -532,13 +545,13 @@ def test_a_deployment_signs_in_only_at_a_known_issuer_host(base_url, httpx_mock,
     ],
 )
 def test_a_deployment_may_only_ask_for_access_to_itself(
-    base_url, httpx_mock, store, audience, error, trust_host
+    base_url, httpx2_mock, store, audience, error, trust_host
 ):
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config", json=_auth_config(audience=audience)
     )
     if error == PROCEEDS:
-        httpx_mock.add_response(url=DISCOVERY, status_code=503)
+        httpx2_mock.add_response(url=DISCOVERY, status_code=503)
     opened: list[str] = []
 
     def open_browser(url: str) -> bool:
@@ -554,7 +567,7 @@ def test_a_deployment_may_only_ask_for_access_to_itself(
             trust_host=trust_host,
         )
 
-    assert [str(r.url) for r in httpx_mock.get_requests()] == [
+    assert [str(r.url) for r in httpx2_mock.get_requests()] == [
         f"{base_url}/external/v2/auth/config"
     ] + ([DISCOVERY] if error == PROCEEDS else [])
     assert opened == []
@@ -586,11 +599,11 @@ def test_a_deployment_may_only_ask_for_access_to_itself(
     ids=["issuer", "authorization", "token", "device", "revocation", "authorization-elsewhere"],
 )
 def test_login_refuses_insecure_login_servers(
-    base_url, httpx_mock, store, issuer, provider, message
+    base_url, httpx2_mock, store, issuer, provider, message
 ):
-    httpx_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=_auth_config(issuer))
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=_auth_config(issuer))
     if issuer == ISSUER:
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url=DISCOVERY,
             json={
                 "issuer": ISSUER,
@@ -645,8 +658,8 @@ DEVICE_DISABLED = "Device login is not enabled"
         ),
     ],
 )
-def test_device_login_needs_the_deployment_to_enable_it(httpx_mock, deployment, config, error):
-    httpx_mock.add_response(url=f"{deployment}/external/v2/auth/config", json=config)
+def test_device_login_needs_the_deployment_to_enable_it(httpx2_mock, deployment, config, error):
+    httpx2_mock.add_response(url=f"{deployment}/external/v2/auth/config", json=config)
     questions: list[Confirmation] = []
 
     def confirm(question: Confirmation) -> bool:
@@ -657,7 +670,7 @@ def test_device_login_needs_the_deployment_to_enable_it(httpx_mock, deployment, 
         login(deployment, DeviceLogin(), output=print, confirm=confirm)
 
     assert questions == []
-    assert len(httpx_mock.get_requests()) == 1
+    assert len(httpx2_mock.get_requests()) == 1
 
 
 class FakeClock:
@@ -692,12 +705,12 @@ GRANTED = {"json": TOKENS}
 )
 @pytest.mark.usefixtures("authorization_server")
 def test_device_login_polls_at_the_server_interval(
-    base_url, httpx_mock, monkeypatch, store, expires_in, polls, sleeps, error
+    base_url, httpx2_mock, monkeypatch, store, expires_in, polls, sleeps, error
 ):
     clock = FakeClock()
     monkeypatch.setattr("whitson_pvt_sdk.login.time.monotonic", clock.monotonic)
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", clock.sleep)
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url=DEVICE_ENDPOINT,
         json={
@@ -709,7 +722,7 @@ def test_device_login_polls_at_the_server_interval(
         },
     )
     for poll in polls:
-        httpx_mock.add_response(method="POST", url=TOKEN_ENDPOINT, **poll)
+        httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, **poll)
     messages = []
 
     if error is None:
@@ -724,7 +737,7 @@ def test_device_login_polls_at_the_server_interval(
     assert clock.sleeps == sleeps
     assert ACTIVATE in messages[0]
     assert "ABCD-EFGH" in messages[0]
-    assert {request.content for request in httpx_mock.get_requests(url=TOKEN_ENDPOINT)} == {
+    assert {request.content for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)} == {
         b"grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code"
         b"&device_code=secret-device-code&client_id=cli-client"
     }
@@ -745,9 +758,9 @@ def test_device_login_polls_at_the_server_interval(
 )
 @pytest.mark.usefixtures("authorization_server")
 def test_device_login_refuses_a_code_page_off_the_login_server(
-    base_url, httpx_mock, store, pages, message
+    base_url, httpx2_mock, store, pages, message
 ):
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url=DEVICE_ENDPOINT,
         json={
@@ -764,5 +777,5 @@ def test_device_login_refuses_a_code_page_off_the_login_server(
         login(base_url, DeviceLogin(), output=messages.append)
 
     assert messages == []
-    assert httpx_mock.get_requests(url=TOKEN_ENDPOINT) == []
+    assert httpx2_mock.get_requests(url=TOKEN_ENDPOINT) == []
     assert store.get(base_url) is None

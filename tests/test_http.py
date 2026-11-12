@@ -1,6 +1,6 @@
 import logging
 
-import httpx
+import httpx2
 import pytest
 
 from whitson_pvt_sdk.errors import (
@@ -15,8 +15,8 @@ from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.shared.models import RetryConfig
 
 
-def _requests_to(httpx_mock, url: str):
-    return [request for request in httpx_mock.get_requests() if str(request.url) == url]
+def _requests_to(httpx2_mock, url: str):
+    return [request for request in httpx2_mock.get_requests() if str(request.url) == url]
 
 
 @pytest.fixture
@@ -26,16 +26,16 @@ def recorded_sleeps(monkeypatch):
     return sleeps
 
 
-def test_strips_trailing_slash_from_base_url(credential, httpx_mock):
-    httpx_mock.add_response(url="https://dev.pvt.whitson.com/external/v2/test", json={})
+def test_strips_trailing_slash_from_base_url(credential, httpx2_mock):
+    httpx2_mock.add_response(url="https://dev.pvt.whitson.com/external/v2/test", json={})
     t = HTTPTransport(credential, "https://dev.pvt.whitson.com/")
     t.get("/test")
-    req = httpx_mock.get_requests()[-1]
+    req = httpx2_mock.get_requests()[-1]
     assert str(req.url) == "https://dev.pvt.whitson.com/external/v2/test"
 
 
-def test_get_returns_parsed_json(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_get_returns_parsed_json(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions",
         json={"regions": []},
     )
@@ -43,41 +43,41 @@ def test_get_returns_parsed_json(transport, httpx_mock):
     assert result == {"regions": []}
 
 
-def test_get_passes_query_params(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_get_passes_query_params(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions?cursor=abc",
         json={},
     )
     transport.get("/regions", params={"cursor": "abc"})
-    req = httpx_mock.get_requests()[-1]
+    req = httpx2_mock.get_requests()[-1]
     assert req.url.query == b"cursor=abc"
 
 
-def test_post_sends_json_body(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_post_sends_json_body(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST", url="https://dev.pvt.whitson.com/external/v2/regions", json={"id": 1}
     )
     result = transport.post("/regions", body={"name": "test"})
     assert result == {"id": 1}
-    body = httpx_mock.get_requests()[-1].read().decode()
+    body = httpx2_mock.get_requests()[-1].read().decode()
     assert '"name"' in body
 
 
-def test_put_sends_json_body(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_put_sends_json_body(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="PUT", url="https://dev.pvt.whitson.com/external/v2/regions/1", json={"id": 1}
     )
     result = transport.put("/regions/1", body={"name": "updated"})
     assert result == {"id": 1}
 
 
-def test_patch_sends_json_body(transport, httpx_mock):
-    httpx_mock.add_response(method="PATCH", json={"status": "accepted"})
+def test_patch_sends_json_body(transport, httpx2_mock):
+    httpx2_mock.add_response(method="PATCH", json={"status": "accepted"})
     assert transport.patch("/resolution", body={"status": "accepted"}) == {"status": "accepted"}
 
 
-def test_delete_accepts_empty_204(transport, httpx_mock):
-    httpx_mock.add_response(method="DELETE", status_code=204)
+def test_delete_accepts_empty_204(transport, httpx2_mock):
+    httpx2_mock.add_response(method="DELETE", status_code=204)
     assert transport.delete("/import-sessions/7") is None
 
 
@@ -86,17 +86,17 @@ def test_delete_accepts_empty_204(transport, httpx_mock):
     "status,error", [(403, AuthError), (404, NotFoundError), (409, APIError), (500, APIError)]
 )
 def test_new_write_methods_propagate_errors_without_retry(
-    transport, httpx_mock, method, status, error
+    transport, httpx2_mock, method, status, error
 ):
-    httpx_mock.add_response(method=method.upper(), status_code=status, json={"message": "failed"})
+    httpx2_mock.add_response(method=method.upper(), status_code=status, json={"message": "failed"})
     with pytest.raises(error) as exc:
         getattr(transport, method)("/test")
     assert exc.value.status_code == status
-    assert len([req for req in httpx_mock.get_requests() if req.method == method.upper()]) == 1
+    assert len([req for req in httpx2_mock.get_requests() if req.method == method.upper()]) == 1
 
 
-def test_get_bytes_returns_raw_bytes(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_get_bytes_returns_raw_bytes(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/reports/1/export",
         content=b"binary-data",
     )
@@ -104,8 +104,8 @@ def test_get_bytes_returns_raw_bytes(transport, httpx_mock):
     assert result == b"binary-data"
 
 
-def test_post_multipart_sends_files_and_data(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_post_multipart_sends_files_and_data(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/reports/import",
         json={"ok": True},
@@ -118,8 +118,8 @@ def test_post_multipart_sends_files_and_data(transport, httpx_mock):
     assert result == {"ok": True}
 
 
-def test_401_raises_auth_error(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_401_raises_auth_error(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=401,
         headers={"x-request-id": "req-auth"},
@@ -132,8 +132,8 @@ def test_401_raises_auth_error(transport, httpx_mock):
     assert exc.value.response_body == {"message": "Unauthorized"}
 
 
-def test_403_raises_auth_error(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_403_raises_auth_error(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=403,
         json={"message": "Forbidden"},
@@ -142,8 +142,8 @@ def test_403_raises_auth_error(transport, httpx_mock):
         transport.get("/test")
 
 
-def test_404_raises_not_found_error(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_404_raises_not_found_error(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=404,
         headers={"x-request-id": "req-not-found"},
@@ -156,8 +156,8 @@ def test_404_raises_not_found_error(transport, httpx_mock):
     assert exc.value.response_body == {"message": "Not found"}
 
 
-def test_400_raises_validation_error(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_400_raises_validation_error(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=400,
         headers={"x-request-id": "req-validation"},
@@ -170,8 +170,8 @@ def test_400_raises_validation_error(transport, httpx_mock):
     assert exc.value.response_body == {"message": "Bad request"}
 
 
-def test_422_raises_validation_error(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_422_raises_validation_error(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=422,
         json={"message": "Validation failed"},
@@ -180,13 +180,13 @@ def test_422_raises_validation_error(transport, httpx_mock):
         transport.get("/test")
 
 
-def test_422_formats_validation_error_details(transport, httpx_mock):
+def test_422_formats_validation_error_details(transport, httpx2_mock):
     body = {
         "errors": [
             {"field": "sampling_date", "message": "Not a valid date."},
         ]
     }
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=422,
         json=body,
@@ -202,7 +202,7 @@ def test_422_formats_validation_error_details(transport, httpx_mock):
     assert exc.value.response_body == body
 
 
-def test_422_formats_validation_error_detail_values(transport, httpx_mock, caplog):
+def test_422_formats_validation_error_detail_values(transport, httpx2_mock, caplog):
     body = {
         "errors": [
             {
@@ -212,7 +212,7 @@ def test_422_formats_validation_error_detail_values(transport, httpx_mock, caplo
             },
         ]
     }
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=422,
         json=body,
@@ -227,8 +227,8 @@ def test_422_formats_validation_error_detail_values(transport, httpx_mock, caplo
     assert expected in caplog.text
 
 
-def test_422_groups_multiple_validation_error_details(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_422_groups_multiple_validation_error_details(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=422,
         json={
@@ -253,9 +253,9 @@ def test_422_groups_multiple_validation_error_details(transport, httpx_mock):
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_500_raises_api_error_with_status_code(transport, httpx_mock):
+def test_500_raises_api_error_with_status_code(transport, httpx2_mock):
     for _ in range(3):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url="https://dev.pvt.whitson.com/external/v2/test",
             status_code=500,
             headers={"x-request-id": "req-api"},
@@ -269,56 +269,56 @@ def test_500_raises_api_error_with_status_code(transport, httpx_mock):
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_get_retries_500_then_succeeds(transport, httpx_mock):
+def test_get_retries_500_then_succeeds(transport, httpx2_mock):
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(url=url, status_code=500, json={"message": "Try again"})
-    httpx_mock.add_response(url=url, json={"ok": True})
+    httpx2_mock.add_response(url=url, status_code=500, json={"message": "Try again"})
+    httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
-    assert len(_requests_to(httpx_mock, url)) == 2
+    assert len(_requests_to(httpx2_mock, url)) == 2
 
 
-def test_get_retries_429_then_succeeds(transport, httpx_mock, recorded_sleeps):
+def test_get_retries_429_then_succeeds(transport, httpx2_mock, recorded_sleeps):
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=url,
         status_code=429,
         headers={"retry-after": "0"},
         json={"message": "Too many requests"},
     )
-    httpx_mock.add_response(url=url, json={"ok": True})
+    httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
-    assert len(_requests_to(httpx_mock, url)) == 2
+    assert len(_requests_to(httpx2_mock, url)) == 2
     assert recorded_sleeps == [0]
 
 
-def test_post_retries_429_then_succeeds(transport, httpx_mock, recorded_sleeps):
+def test_post_retries_429_then_succeeds(transport, httpx2_mock, recorded_sleeps):
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url=url,
         status_code=429,
         headers={"retry-after": "0"},
         json={"message": "Too many requests"},
     )
-    httpx_mock.add_response(method="POST", url=url, json={"ok": True})
+    httpx2_mock.add_response(method="POST", url=url, json={"ok": True})
 
     assert transport.post("/test", body={"name": "test"}) == {"ok": True}
-    assert len(_requests_to(httpx_mock, url)) == 2
+    assert len(_requests_to(httpx2_mock, url)) == 2
     assert recorded_sleeps == [0]
 
 
-def test_retry_logs_debug_message(transport, httpx_mock, recorded_sleeps, caplog):
+def test_retry_logs_debug_message(transport, httpx2_mock, recorded_sleeps, caplog):
     caplog.set_level(logging.DEBUG, logger="whitson_pvt_sdk")
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=url,
         status_code=429,
         headers={"retry-after": "0"},
         json={"message": "Too many requests"},
     )
-    httpx_mock.add_response(url=url, json={"ok": True})
+    httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
     assert recorded_sleeps == [0]
@@ -327,90 +327,90 @@ def test_retry_logs_debug_message(transport, httpx_mock, recorded_sleeps, caplog
     assert "/test" in caplog.text
 
 
-def test_retry_uses_retry_after_ms(transport, httpx_mock, recorded_sleeps):
+def test_retry_uses_retry_after_ms(transport, httpx2_mock, recorded_sleeps):
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=url,
         status_code=429,
         headers={"retry-after-ms": "1500"},
         json={"message": "Too many requests"},
     )
-    httpx_mock.add_response(url=url, json={"ok": True})
+    httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
     assert recorded_sleeps == [1.5]
 
 
-def test_retry_uses_http_date_retry_after(transport, httpx_mock, monkeypatch, recorded_sleeps):
+def test_retry_uses_http_date_retry_after(transport, httpx2_mock, monkeypatch, recorded_sleeps):
     monkeypatch.setattr("whitson_pvt_sdk._retry.time.time", lambda: 1_700_000_000)
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=url,
         status_code=429,
         headers={"retry-after": "Tue, 14 Nov 2023 22:13:25 GMT"},
         json={"message": "Too many requests"},
     )
-    httpx_mock.add_response(url=url, json={"ok": True})
+    httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
     assert recorded_sleeps == [5]
 
 
-def test_retry_uses_rate_limit_reset(transport, httpx_mock, monkeypatch, recorded_sleeps):
+def test_retry_uses_rate_limit_reset(transport, httpx2_mock, monkeypatch, recorded_sleeps):
     monkeypatch.setattr("whitson_pvt_sdk._retry.time.time", lambda: 1_700_000_000)
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url=url,
         status_code=429,
         headers={"x-ratelimit-reset": "1700000007"},
         json={"message": "Too many requests"},
     )
-    httpx_mock.add_response(url=url, json={"ok": True})
+    httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
     assert recorded_sleeps == [7]
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_get_retries_timeout_then_succeeds(transport, httpx_mock):
+def test_get_retries_timeout_then_succeeds(transport, httpx2_mock):
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_exception(httpx.TimeoutException("Timed out"), url=url)
-    httpx_mock.add_response(url=url, json={"ok": True})
+    httpx2_mock.add_exception(httpx2.TimeoutException("Timed out"), url=url)
+    httpx2_mock.add_response(url=url, json={"ok": True})
 
     assert transport.get("/test") == {"ok": True}
-    assert len(_requests_to(httpx_mock, url)) == 2
+    assert len(_requests_to(httpx2_mock, url)) == 2
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_get_final_timeout_raises_no_response_error(transport, httpx_mock):
+def test_get_final_timeout_raises_no_response_error(transport, httpx2_mock):
     url = "https://dev.pvt.whitson.com/external/v2/test"
     for _ in range(3):
-        httpx_mock.add_exception(httpx.ConnectTimeout("Timed out"), url=url)
+        httpx2_mock.add_exception(httpx2.ConnectTimeout("Timed out"), url=url)
 
     with pytest.raises(NoResponseError, match="Timed out"):
         transport.get("/test")
 
-    assert len(_requests_to(httpx_mock, url)) == 3
+    assert len(_requests_to(httpx2_mock, url)) == 3
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_get_final_retryable_status_raises_api_error(transport, httpx_mock):
+def test_get_final_retryable_status_raises_api_error(transport, httpx2_mock):
     url = "https://dev.pvt.whitson.com/external/v2/test"
     for _ in range(3):
-        httpx_mock.add_response(url=url, status_code=503, json={"message": "Unavailable"})
+        httpx2_mock.add_response(url=url, status_code=503, json={"message": "Unavailable"})
 
     with pytest.raises(APIError, match="Unavailable") as exc:
         transport.get("/test")
 
     assert exc.value.status_code == 503
-    assert len(_requests_to(httpx_mock, url)) == 3
+    assert len(_requests_to(httpx2_mock, url)) == 3
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_final_429_raises_rate_limit_error(transport, httpx_mock):
+def test_final_429_raises_rate_limit_error(transport, httpx2_mock):
     url = "https://dev.pvt.whitson.com/external/v2/test"
     for _ in range(3):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url=url,
             status_code=429,
             headers={"retry-after": "2"},
@@ -422,13 +422,13 @@ def test_final_429_raises_rate_limit_error(transport, httpx_mock):
 
     assert exc.value.status_code == 429
     assert exc.value.retry_after_seconds == 2
-    assert len(_requests_to(httpx_mock, url)) == 3
+    assert len(_requests_to(httpx2_mock, url)) == 3
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_post_does_not_retry_500_by_default(transport, httpx_mock):
+def test_post_does_not_retry_500_by_default(transport, httpx2_mock):
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST", url=url, status_code=500, json={"message": "Internal error"}
     )
 
@@ -436,44 +436,44 @@ def test_post_does_not_retry_500_by_default(transport, httpx_mock):
         transport.post("/test", body={"name": "test"})
 
     assert exc.value.status_code == 500
-    assert len(_requests_to(httpx_mock, url)) == 1
+    assert len(_requests_to(httpx2_mock, url)) == 1
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_get_bytes_retries_502_then_succeeds(transport, httpx_mock):
+def test_get_bytes_retries_502_then_succeeds(transport, httpx2_mock):
     url = "https://dev.pvt.whitson.com/external/v2/reports/1/export"
-    httpx_mock.add_response(url=url, status_code=502, text="Bad gateway")
-    httpx_mock.add_response(url=url, content=b"binary-data")
+    httpx2_mock.add_response(url=url, status_code=502, text="Bad gateway")
+    httpx2_mock.add_response(url=url, content=b"binary-data")
 
     assert transport.get_bytes("/reports/1/export") == b"binary-data"
-    assert len(_requests_to(httpx_mock, url)) == 2
+    assert len(_requests_to(httpx2_mock, url)) == 2
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_retry_config_max_attempts_one_disables_retries(credential, base_url, httpx_mock):
+def test_retry_config_max_attempts_one_disables_retries(credential, base_url, httpx2_mock):
     transport = HTTPTransport(credential, base_url, retry_config=RetryConfig(max_attempts=1))
     url = "https://dev.pvt.whitson.com/external/v2/test"
-    httpx_mock.add_response(url=url, status_code=503, json={"message": "Unavailable"})
+    httpx2_mock.add_response(url=url, status_code=503, json={"message": "Unavailable"})
 
     with pytest.raises(APIError, match="Unavailable"):
         transport.get("/test")
 
-    assert len(_requests_to(httpx_mock, url)) == 1
+    assert len(_requests_to(httpx2_mock, url)) == 1
 
 
-def test_file_timeout_configures_download_timeout(credential, base_url, httpx_mock):
+def test_file_timeout_configures_download_timeout(credential, base_url, httpx2_mock):
     transport = HTTPTransport(credential, base_url, file_timeout=19.5)
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/reports/1/export",
         content=b"binary-data",
     )
 
     assert transport.get_bytes("/reports/1/export") == b"binary-data"
-    assert httpx_mock.get_requests()[-1].extensions["timeout"]["read"] == 19.5
+    assert httpx2_mock.get_requests()[-1].extensions["timeout"]["read"] == 19.5
 
 
-def test_uses_response_text_when_no_message_field(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_uses_response_text_when_no_message_field(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/test",
         status_code=400,
         text="plain text error",
@@ -483,9 +483,9 @@ def test_uses_response_text_when_no_message_field(transport, httpx_mock):
 
 
 @pytest.mark.usefixtures("no_retry_sleep")
-def test_falls_back_to_http_code_when_body_empty(transport, httpx_mock):
+def test_falls_back_to_http_code_when_body_empty(transport, httpx2_mock):
     for _ in range(3):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url="https://dev.pvt.whitson.com/external/v2/test",
             status_code=502,
             content=b"",

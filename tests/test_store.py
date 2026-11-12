@@ -45,21 +45,21 @@ def test_credentials_file_readable_by_others_is_refused(base_url, store, store_l
         WhitsonPVTClient(base_url=base_url)
 
 
-def test_keyring_holds_the_tokens_when_it_is_usable(base_url, httpx_mock, store, store_login):
+def test_keyring_holds_the_tokens_when_it_is_usable(base_url, httpx2_mock, store, store_login):
     backend = MemoryKeyring()
     keyring.set_keyring(backend)
     store_login(base_url, access="keyring-access", refresh="keyring-refresh")
-    httpx_mock.add_response(url=f"{base_url}/external/v2/regions", json=EMPTY_PAGE)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/regions", json=EMPTY_PAGE)
 
     WhitsonPVTClient(base_url=base_url).regions.list()
 
-    assert httpx_mock.get_requests()[0].headers["Authorization"] == "Bearer keyring-access"
+    assert httpx2_mock.get_requests()[0].headers["Authorization"] == "Bearer keyring-access"
     content = store.path.read_text()
     assert "keyring-access" not in content
     assert "keyring-refresh" not in content
     assert sorted(backend.passwords.values()) == ["keyring-access", "keyring-refresh"]
 
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://whitson.eu.auth0.com/.well-known/openid-configuration", status_code=503
     )
     logout(base_url)

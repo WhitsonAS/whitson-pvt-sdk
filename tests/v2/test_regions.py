@@ -10,8 +10,8 @@ def make_region_json(name="Test Region", **kwargs):
     return {"id": kwargs.pop("id", 1), "name": name, **kwargs}
 
 
-def test_list_regions_returns_paginated_model(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_list_regions_returns_paginated_model(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions",
         json={
             "regions": [make_region_json(name="R1")],
@@ -25,8 +25,8 @@ def test_list_regions_returns_paginated_model(transport, httpx_mock):
     assert result.pagination.prev_cursor is None
 
 
-def test_list_regions_passes_cursor(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_list_regions_passes_cursor(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/regions?cursor=nxt&limit=25",
         json={
             "regions": [],
@@ -37,8 +37,8 @@ def test_list_regions_passes_cursor(transport, httpx_mock):
     assert result.pagination.prev_cursor == "prv"
 
 
-def test_create_region_v2_excludes_unset(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_create_region_v2_excludes_unset(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/regions",
         json=make_region_json(name="New"),
@@ -48,13 +48,13 @@ def test_create_region_v2_excludes_unset(transport, httpx_mock):
     )
     assert result.name == "New"
 
-    body = httpx_mock.get_requests()[-1].read().decode()
+    body = httpx2_mock.get_requests()[-1].read().decode()
     assert '"name"' in body
     assert '"id"' not in body
 
 
-def test_update_region_v2_excludes_unset(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_update_region_v2_excludes_unset(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="PUT",
         url="https://dev.pvt.whitson.com/external/v2/regions/1",
         json=make_region_json(id=1, name="Updated"),

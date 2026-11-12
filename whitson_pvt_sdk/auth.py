@@ -2,7 +2,7 @@ import os
 from collections.abc import Generator, MutableMapping
 from typing import Literal
 
-import httpx
+import httpx2
 from pydantic import BaseModel, ConfigDict, SecretStr, TypeAdapter, ValidationError
 
 from whitson_pvt_sdk._refresh import (
@@ -120,7 +120,7 @@ class BearerSource:
         self._credential: Credential = credential
         self._store = CredentialStore.from_environment()
 
-    def current(self, url: str | httpx.URL) -> SecretStr:
+    def current(self, url: str | httpx2.URL) -> SecretStr:
         match self._credential:
             case ApiToken() as api_token:
                 return api_token.token
@@ -147,13 +147,15 @@ class BearerSource:
                 raise _login_invalid(base_url, reason)
 
 
-class CredentialAuth(httpx.Auth):
+class CredentialAuth(httpx2.Auth):
     requires_request_body = True
 
     def __init__(self, credential: Credential) -> None:
         self._bearer = BearerSource(credential)
 
-    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+    def auth_flow(
+        self, request: httpx2.Request
+    ) -> Generator[httpx2.Request, httpx2.Response, None]:
         set_bearer(request.headers, self._bearer.current(request.url))
         response = yield request
         if response.status_code == 401:

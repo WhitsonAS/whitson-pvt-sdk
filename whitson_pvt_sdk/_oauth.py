@@ -1,12 +1,12 @@
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
-import httpx
+import httpx2
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from whitson_pvt_sdk._trust import SecureUrl
-from whitson_pvt_sdk.credentials import StoredLogin, same_origin
+from whitson_pvt_sdk.credentials import StoredLogin, host_name, same_origin
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, NoResponseError
 
 HTTP_TIMEOUT_SECONDS = 30.0
@@ -83,11 +83,11 @@ class TokenRefused(BaseModel):
 TokenResult = TokenGranted | TokenRefused
 
 
-def oauth_client() -> httpx.Client:
-    return httpx.Client(timeout=HTTP_TIMEOUT_SECONDS)
+def oauth_client() -> httpx2.Client:
+    return httpx2.Client(timeout=HTTP_TIMEOUT_SECONDS)
 
 
-def fetch_auth_config(http: httpx.Client, base_url: str) -> AuthConfig:
+def fetch_auth_config(http: httpx2.Client, base_url: str) -> AuthConfig:
     url = f"{base_url}/external/v2/auth/config"
     response = _send(http, "GET", url)
     if response.status_code == 404:
@@ -95,31 +95,31 @@ def fetch_auth_config(http: httpx.Client, base_url: str) -> AuthConfig:
     return _parse(AuthConfig, response, url)
 
 
-def discover(http: httpx.Client, issuer: str) -> ProviderMetadata:
+def discover(http: httpx2.Client, issuer: str) -> ProviderMetadata:
     url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
     metadata = _parse(ProviderMetadata, _send(http, "GET", url), url)
     if metadata.issuer.rstrip("/") != issuer.rstrip("/"):
         raise LoginError(f"{url} describes the issuer {metadata.issuer}, not {issuer}.")
     if not same_origin(metadata.authorization_endpoint, issuer):
         raise LoginError(
-            f"{url} sends the browser to {httpx.URL(metadata.authorization_endpoint).host}, "
-            f"not to the login server {httpx.URL(issuer).host}; refusing to log in."
+            f"{url} sends the browser to {host_name(metadata.authorization_endpoint)}, "
+            f"not to the login server {host_name(issuer)}; refusing to log in."
         )
     return metadata
 
 
-def post_form(http: httpx.Client, url: str, form: dict[str, str]) -> httpx.Response:
+def post_form(http: httpx2.Client, url: str, form: dict[str, str]) -> httpx2.Response:
     return _send(http, "POST", url, data=form)
 
 
-def request_token(http: httpx.Client, token_endpoint: str, form: dict[str, str]) -> TokenResult:
+def request_token(http: httpx2.Client, token_endpoint: str, form: dict[str, str]) -> TokenResult:
     response = post_form(http, token_endpoint, form)
     if response.status_code in (400, 401, 403):
         return TokenRefused(error=parse_oauth_error(response, token_endpoint))
     return TokenGranted(token=_parse(TokenResponse, response, token_endpoint))
 
 
-def parse_oauth_error(response: httpx.Response, url: str) -> OAuthError:
+def parse_oauth_error(response: httpx2.Response, url: str) -> OAuthError:
     try:
         return OAuthError.model_validate_json(response.content)
     except PydanticValidationError:
@@ -139,7 +139,7 @@ def refreshed_login(login: StoredLogin, token: TokenResponse) -> StoredLogin:
     )
 
 
-def revoke_refresh_token(http: httpx.Client, endpoint: str, login: StoredLogin) -> bool:
+def revoke_refresh_token(http: httpx2.Client, endpoint: str, login: StoredLogin) -> bool:
     response = post_form(
         http,
         endpoint,
@@ -153,15 +153,15 @@ def revoke_refresh_token(http: httpx.Client, endpoint: str, login: StoredLogin) 
 
 
 def _send(
-    http: httpx.Client, method: str, url: str, *, data: dict[str, str] | None = None
-) -> httpx.Response:
+    http: httpx2.Client, method: str, url: str, *, data: dict[str, str] | None = None
+) -> httpx2.Response:
     try:
         return http.request(method, url, data=data, headers={"Accept": "application/json"})
-    except httpx.TransportError as exc:
-        raise NoResponseError(f"Could not reach {httpx.URL(url).host}: {exc}") from exc
+    except httpx2.TransportError as exc:
+        raise NoResponseError(f"Could not reach {host_name(url)}: {exc}") from exc
 
 
-def _parse(model: type[_Model], response: httpx.Response, url: str) -> _Model:
+def _parse(model: type[_Model], response: httpx2.Response, url: str) -> _Model:
     if not response.is_success:
         raise APIError(f"{url} answered HTTP {response.status_code}", response.status_code)
     try:

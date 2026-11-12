@@ -1,9 +1,9 @@
 from typing import Annotated
 
-import httpx
+import httpx2
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from whitson_pvt_sdk.credentials import normalise_url, origin, same_origin
+from whitson_pvt_sdk.credentials import host_name, normalise_url, origin, same_origin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError
 
 
@@ -37,10 +37,10 @@ class KnownIssuers(BaseModel):
 
     def includes(self, issuer: str) -> bool:
         try:
-            url = httpx.URL(normalise_url(issuer))
+            url = httpx2.URL(normalise_url(issuer))
         except ValueError:
             return False
-        return url.scheme == "https" and url.port is None and url.host in self.hosts
+        return url.scheme == "https" and url.port is None and host_name(url) in self.hosts
 
 
 # A new login domain needs an SDK release before deployments switch to it.
@@ -82,8 +82,8 @@ def host_trust(base_url: str, *, trust_host: bool) -> TrustedHost:
             "https://example.pvt.whitson.com: it needs http(s) and a host name, and no user "
             "name, password, query or fragment."
         ) from None
-    parsed = httpx.URL(url)
-    host = parsed.host
+    parsed = httpx2.URL(url)
+    host = host_name(parsed)
     if not base_url.isascii() or any(label.startswith("xn--") for label in host.split(".")):
         raise ConfigurationError(
             f"{base_url.strip()!r} has a non-ASCII (internationalised) host name; "
@@ -163,7 +163,7 @@ def login_decision(
     own_audience = _is_own_audience(host.url, audience)
     match host:
         case TrustedDeployment(url=url):
-            deployment_host = httpx.URL(url).host
+            deployment_host = host_name(url)
             if not pinned:
                 raise LoginError(
                     f"{deployment_host} named an unexpected login server, {origin(issuer)}, so "
@@ -179,19 +179,19 @@ def login_decision(
         case TrustedLoopback() if pinned and own_audience:
             return Proceed()
         case TrustedLoopback(url=url) | TrustedByOverride(url=url):
-            deployment_host = httpx.URL(url).host
+            deployment_host = host_name(url)
             foreign_audience = None if own_audience else audience
             if previous_issuer is None:
                 return FirstUse(
                     deployment_host=deployment_host,
-                    issuer_host=httpx.URL(issuer).host,
+                    issuer_host=host_name(issuer),
                     foreign_audience=foreign_audience,
                 )
             if previous_issuer.rstrip("/") != issuer.rstrip("/"):
                 return IssuerChanged(
                     deployment_host=deployment_host,
-                    issuer_host=httpx.URL(issuer).host,
-                    previous_issuer_host=httpx.URL(previous_issuer).host,
+                    issuer_host=host_name(issuer),
+                    previous_issuer_host=host_name(previous_issuer),
                     foreign_audience=foreign_audience,
                 )
             return Proceed()
@@ -201,7 +201,7 @@ def _is_own_audience(url: str, audience: str) -> bool:
     # Every deployment's user-token audience is its own MCP resource URL, https://<host>/mcp.
     try:
         audience_origin = normalise_url(audience)
-        path = httpx.URL(audience.strip()).raw_path
+        path = httpx2.URL(audience.strip()).raw_path
     except ValueError:
         return False
     return same_origin(audience_origin, url) and path == b"/mcp"
@@ -209,12 +209,12 @@ def _is_own_audience(url: str, audience: str) -> bool:
 
 def _secure_url(value: str) -> str:
     try:
-        url = httpx.URL(value)
-    except httpx.InvalidURL:
+        url = httpx2.URL(value)
+    except httpx2.InvalidURL:
         raise ValueError("must be a URL") from None
     if url.scheme == "https" and url.host:
         return value
-    if url.scheme == "http" and ALLOWLIST.is_loopback(url.host):
+    if url.scheme == "http" and ALLOWLIST.is_loopback(host_name(url)):
         return value
     raise ValueError("must be an https URL (http only on this machine)")
 

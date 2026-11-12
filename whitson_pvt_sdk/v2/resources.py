@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, TypeAlias
 from pydantic import TypeAdapter
 
 from whitson_pvt_sdk._generated.v2 import resources as generated_resources
-from whitson_pvt_sdk.errors import CalculationError
+from whitson_pvt_sdk.errors import CalculationError, MissingDataError
 from whitson_pvt_sdk.shared.models import CompositionSource, Identity
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
@@ -169,7 +169,7 @@ class Calculations(generated_resources.Calculations):
             sample_id for sample_id in sample_ids if sample_id not in compositions_by_sample_id
         ]
         if missing_sample_ids:
-            raise ValueError(
+            raise MissingDataError(
                 "Missing adjusted compositions for sample ids: "
                 + ", ".join(str(sample_id) for sample_id in missing_sample_ids)
             )

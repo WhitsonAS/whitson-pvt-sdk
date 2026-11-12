@@ -47,7 +47,7 @@ SURFACE_PROCESS = {
 ERROR_ROW = {"status": "error", "error": {"code": "calculation_failed", "message": "bad row"}}
 
 
-def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(client, httpx_mock):
+def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(client, httpx2_mock):
     payload = {
         "fluid_model_id": 1,
         "pressure_unit": "bara",
@@ -64,7 +64,7 @@ def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(client, ht
             {"pressure": 120.0, "oil_volume": 1.0, "gas_volume": 2.0},
         ],
     }
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/calculations/volumetric-to-composition-conversion",
         json={
@@ -89,7 +89,7 @@ def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(client, ht
     result = client.calculations.calculate_volumetric_to_composition_conversion(
         VolumetricToCompositionConversionCalculationRequestModel.model_validate(payload)
     )
-    assert json.loads(httpx_mock.get_requests()[-1].content) == payload
+    assert json.loads(httpx2_mock.get_requests()[-1].content) == payload
     assert result.fluid_properties.gas_phase_gas_oil_ratio is None
     success, error = result.results
     assert not isinstance(success, CalculationErrorResultModel)
@@ -98,8 +98,8 @@ def test_volumetric_conversion_serializes_input_and_parses_mixed_rows(client, ht
     assert error.error.message == "bad row"
 
 
-def test_gor_helper_uses_input_surface_process_without_database_ids(client, httpx_mock):
-    httpx_mock.add_response(
+def test_gor_helper_uses_input_surface_process_without_database_ids(client, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/calculations/gor-recombination",
         json={
@@ -131,11 +131,11 @@ def test_gor_helper_uses_input_surface_process_without_database_ids(client, http
         ),
     )
     assert result == feed
-    assert json.loads(httpx_mock.get_requests()[-1].content)["surface_process"] == SURFACE_PROCESS
+    assert json.loads(httpx2_mock.get_requests()[-1].content)["surface_process"] == SURFACE_PROCESS
 
 
 @pytest.mark.parametrize("calculation", ["flash", "saturation-pressure"])
-def test_extended_phase_properties_and_nullable_values(client, httpx_mock, calculation):
+def test_extended_phase_properties_and_nullable_values(client, httpx2_mock, calculation):
     phase = {
         "density": 10.0,
         "molecular_weight": 16.0,
@@ -174,7 +174,7 @@ def test_extended_phase_properties_and_nullable_values(client, httpx_mock, calcu
         row["pressure"] = 100.0
     else:
         row.update(saturation_pressure=100.0, saturation_point_type="bubblepoint")
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url=f"https://dev.pvt.whitson.com/external/v2/calculations/{calculation}",
         json={

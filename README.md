@@ -89,6 +89,20 @@ a fall-through. A stored login that the authorization server no longer accepts r
   `path` for `output.json`.
 - The unused multi-domain copy models (`DomainAuthConfig`, `MultiDomainCopyConfig`
   and related) are removed from `whitson_pvt_sdk.shared.models`.
+- `calculations.get_sample_feed_composition(s)` raise `MissingDataError` instead of
+  `ValueError` when the fluid model has no adjusted composition for a requested sample.
+- The HTTP library is now [httpx2](https://github.com/pydantic/httpx2), Pydantic's fork of
+  httpx, instead of httpx. The SDK's public interface takes and returns no httpx types, but
+  code that reached into its internals (`HTTPTransport._http`, `whitson_pvt_sdk.auth.CredentialAuth`),
+  caught `httpx` exceptions chained under an SDK error (`__cause__`), or configured the `httpx`
+  logger must use `httpx2` instead. Requests identify as `python-httpx2/<version>`.
+- TLS certificates are verified against the operating system's trust store instead of the
+  `certifi` bundle: on Windows and macOS through `truststore`, on Linux from OpenSSL's
+  system CA file or directory. A CA installed in the system store, such as a corporate
+  TLS-inspection CA, is now trusted without extra configuration, and an update of `certifi`
+  no longer changes what is trusted. A Linux container without a CA bundle (no
+  `ca-certificates` package) now fails verification where `certifi` used to cover it. Setting
+  `SSL_CERT_FILE` or `SSL_CERT_DIR` still selects a bundle and takes precedence, as before.
 
 1.x keeps working with client credentials until the server retires them. Pin
 `whitson-pvt-sdk<2` if you cannot switch to a token yet.
@@ -150,6 +164,7 @@ Everything the SDK raises derives from `SDKError` in `whitson_pvt_sdk.errors`:
 | `RateLimitError` | HTTP 429 after retries | also `retry_after_seconds` |
 | `APIError` | any other error status | as `ResponseError` |
 | `CalculationError` | a calculation returns a failed result | `code`, `sample_id`, `input_index`, `error` |
+| `MissingDataError` | the input names data that does not exist, such as a sample without an adjusted composition in the fluid model | `message` |
 
 ```python
 from whitson_pvt_sdk.errors import AuthError, NoResponseError, ResponseError
@@ -240,7 +255,7 @@ More runnable examples are available in [examples](https://github.com/WhitsonAS/
 ## Command line
 
 The `wpvt` command comes in two optional extras; the library itself keeps its two runtime
-dependencies (httpx and pydantic).
+dependencies (httpx2 and pydantic).
 
 | Extra | Adds | For |
 | --- | --- | --- |
@@ -701,7 +716,7 @@ uses the API's local bypass token on its loopback port; start the API with
 whitson_pvt_sdk/
 ├── __init__.py              # WhitsonPVTClient
 ├── credentials.py           # ApiToken and StoredLogin, the two credential kinds
-├── auth.py                  # URL and credential resolution; the httpx.Auth that sends them
+├── auth.py                  # URL and credential resolution; the httpx2.Auth that sends them
 ├── login.py                 # login (browser with PKCE, or device) and logout
 ├── _store.py                # the credential store: credentials.json, keyring, lock
 ├── _refresh.py              # renewal of a stored login under the store lock
@@ -709,7 +724,7 @@ whitson_pvt_sdk/
 ├── _trust.py                # which deployments a login may start for and where it signs in
 ├── cli/                     # the wpvt command (Typer; the cli extra): auth, data commands,
 │                            #   export, calc, api, mcp
-├── http.py                  # HTTPTransport (httpx, retries, error mapping)
+├── http.py                  # HTTPTransport (httpx2, retries, error mapping)
 ├── errors.py                # SDKError, ConfigurationError, ResponseError, ...
 ├── shared/models.py         # hand-maintained shared models
 ├── shared/pagination.py     # Paginator utility

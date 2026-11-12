@@ -3,8 +3,8 @@ from whitson_pvt_sdk.v2.models import ReportArchiveCommitResultModel
 from whitson_pvt_sdk.v2.resources import Reports
 
 
-def test_export_report_v2(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_export_report_v2(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url="https://dev.pvt.whitson.com/external/v2/reports/1/export",
         content=b"data",
     )
@@ -13,8 +13,8 @@ def test_export_report_v2(transport, httpx_mock):
     assert filename == "report_1_export.zip"
 
 
-def test_preflight_import_v2_sends_meta_data_json(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_preflight_import_v2_sends_meta_data_json(transport, httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/reports/import/preflight",
         json={
@@ -29,15 +29,15 @@ def test_preflight_import_v2_sends_meta_data_json(transport, httpx_mock):
         b"archive",
         ImportArchiveOptions(region_id=42, acknowledge_suggestions=True),
     )
-    body = httpx_mock.get_requests()[-1].read().decode()
+    body = httpx2_mock.get_requests()[-1].read().decode()
     assert "archive.zip" in body
     assert "meta_data" in body
     assert '"region_id":42' in body
     assert '"acknowledge_suggestions":true' in body
 
 
-def test_export_osdu_passes_options_and_explicit_false(transport, httpx_mock):
-    httpx_mock.add_response(
+def test_export_osdu_passes_options_and_explicit_false(transport, httpx2_mock):
+    httpx2_mock.add_response(
         url=(
             "https://dev.pvt.whitson.com/external/v2/reports/1/export"
             "?format=osdu&include_whitson_native_payload=true&include_structured_experiments=false"
@@ -50,9 +50,9 @@ def test_export_osdu_passes_options_and_explicit_false(transport, httpx_mock):
     assert data == b"osdu-archive"
 
 
-def test_archive_import_returns_archive_result_not_session_result(transport, httpx_mock):
+def test_archive_import_returns_archive_result_not_session_result(transport, httpx2_mock):
     payload = {"created": {"samples": 1}, "id_map": {}, "reused": {}, "skipped": {}}
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://dev.pvt.whitson.com/external/v2/reports/import",
         status_code=201,
