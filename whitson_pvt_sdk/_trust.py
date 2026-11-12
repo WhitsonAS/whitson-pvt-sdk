@@ -3,8 +3,8 @@ from typing import Annotated
 import httpx
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from whitson_pvt_sdk._store import CredentialStore
-from whitson_pvt_sdk.credentials import normalise_url, same_origin
+from whitson_pvt_sdk.credentials import normalise_url, origin, same_origin
+from whitson_pvt_sdk.errors import ConfigurationError, LoginError
 
 
 class HostAllowlist(BaseModel):
@@ -70,42 +70,35 @@ class TrustedByOverride(BaseModel):
     url: str
 
 
-class Refused(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    reason: str
-
-
 TrustedHost = TrustedDeployment | TrustedLoopback | TrustedByOverride
-HostTrust = TrustedHost | Refused
 
 
-def host_trust(base_url: str, *, trust_host: bool) -> HostTrust:
+def host_trust(base_url: str, *, trust_host: bool) -> TrustedHost:
     try:
         url = normalise_url(base_url)
     except ValueError:
-        return Refused(
-            reason="The login URL is not a deployment URL such as "
+        raise ConfigurationError(
+            "The login URL is not a deployment URL such as "
             "https://example.pvt.whitson.com: it needs http(s) and a host name, and no user "
             "name, password, query or fragment."
-        )
+        ) from None
     parsed = httpx.URL(url)
     host = parsed.host
     if not base_url.isascii() or any(label.startswith("xn--") for label in host.split(".")):
-        return Refused(
-            reason=f"{base_url.strip()!r} has a non-ASCII (internationalised) host name; "
+        raise ConfigurationError(
+            f"{base_url.strip()!r} has a non-ASCII (internationalised) host name; "
             "logins are only started for plain ASCII host names."
         )
     if ALLOWLIST.is_loopback(host):
         return TrustedLoopback(url=url)
     if parsed.scheme != "https":
-        return Refused(reason=f"Refusing to log in over plain HTTP to {url}; use https://.")
+        raise ConfigurationError(f"Refusing to log in over plain HTTP to {url}; use https://.")
     if ALLOWLIST.is_deployment(host):
         return TrustedDeployment(url=url)
     if trust_host:
         return TrustedByOverride(url=url)
-    return Refused(
-        reason=f"{host} is not a known whitson PVT deployment. Logins are only started for "
+    raise ConfigurationError(
+        f"{host} is not a known whitson PVT deployment. Logins are only started for "
         "HTTPS hosts under pvt.whitson.com and for this machine (localhost), so that a link "
         "to another host cannot send you to a login page it controls. If you trust "
         f"{host} and meant to log in to it, run the login again with --trust-host "
@@ -160,86 +153,58 @@ class IssuerChanged(BaseModel):
         )
 
 
-class UnexpectedIssuer(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    deployment_host: str
-    issuer: str
-
-    def describe(self) -> str:
-        return (
-            f"{self.deployment_host} named an unexpected login server, {self.issuer}, so the "
-            "login was stopped before contacting it. Please report this to whitson."
-        )
-
-
-class UnexpectedAudience(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    deployment_host: str
-    audience: str
-
-    def describe(self) -> str:
-        return (
-            f"{self.deployment_host} asked for access to a different service, {self.audience!r}, "
-            f"instead of {self.deployment_host} itself, so the login was stopped before "
-            "contacting the login server. Please report this to whitson."
-        )
-
-
 Confirmation = FirstUse | IssuerChanged
-LoginDecision = Proceed | FirstUse | IssuerChanged | UnexpectedIssuer | UnexpectedAudience
 
 
-def login_decision(host: TrustedHost, issuer: str, audience: str) -> LoginDecision:
+def login_decision(
+    host: TrustedHost, issuer: str, audience: str, previous_issuer: str | None
+) -> Proceed | Confirmation:
     pinned = KNOWN_ISSUERS.includes(issuer)
     own_audience = _is_own_audience(host.url, audience)
     match host:
         case TrustedDeployment(url=url):
+            deployment_host = httpx.URL(url).host
             if not pinned:
-                return UnexpectedIssuer(deployment_host=httpx.URL(url).host, issuer=_origin(issuer))
+                raise LoginError(
+                    f"{deployment_host} named an unexpected login server, {origin(issuer)}, so "
+                    "the login was stopped before contacting it. Please report this to whitson."
+                )
             if not own_audience:
-                return UnexpectedAudience(deployment_host=httpx.URL(url).host, audience=audience)
+                raise LoginError(
+                    f"{deployment_host} asked for access to a different service, {audience!r}, "
+                    f"instead of {deployment_host} itself, so the login was stopped before "
+                    "contacting the login server. Please report this to whitson."
+                )
             return Proceed()
         case TrustedLoopback() if pinned and own_audience:
             return Proceed()
         case TrustedLoopback(url=url) | TrustedByOverride(url=url):
-            return _familiarity(url, issuer, None if own_audience else audience)
+            deployment_host = httpx.URL(url).host
+            foreign_audience = None if own_audience else audience
+            if previous_issuer is None:
+                return FirstUse(
+                    deployment_host=deployment_host,
+                    issuer_host=httpx.URL(issuer).host,
+                    foreign_audience=foreign_audience,
+                )
+            if previous_issuer.rstrip("/") != issuer.rstrip("/"):
+                return IssuerChanged(
+                    deployment_host=deployment_host,
+                    issuer_host=httpx.URL(issuer).host,
+                    previous_issuer_host=httpx.URL(previous_issuer).host,
+                    foreign_audience=foreign_audience,
+                )
+            return Proceed()
 
 
 def _is_own_audience(url: str, audience: str) -> bool:
     # Every deployment's user-token audience is its own MCP resource URL, https://<host>/mcp.
     try:
-        origin = normalise_url(audience)
+        audience_origin = normalise_url(audience)
         path = httpx.URL(audience.strip()).raw_path
     except ValueError:
         return False
-    return same_origin(origin, url) and path == b"/mcp"
-
-
-def _familiarity(url: str, issuer: str, foreign_audience: str | None) -> LoginDecision:
-    deployment_host = httpx.URL(url).host
-    issuer_host = httpx.URL(issuer).host
-    previous = CredentialStore.from_environment().issuer(url)
-    if previous is None:
-        return FirstUse(
-            deployment_host=deployment_host,
-            issuer_host=issuer_host,
-            foreign_audience=foreign_audience,
-        )
-    if previous.rstrip("/") != issuer.rstrip("/"):
-        return IssuerChanged(
-            deployment_host=deployment_host,
-            issuer_host=issuer_host,
-            previous_issuer_host=httpx.URL(previous).host,
-            foreign_audience=foreign_audience,
-        )
-    return Proceed()
-
-
-def _origin(value: str) -> str:
-    url = httpx.URL(value)
-    return f"{url.scheme}://{url.netloc.decode()}"
+    return same_origin(audience_origin, url) and path == b"/mcp"
 
 
 def _secure_url(value: str) -> str:

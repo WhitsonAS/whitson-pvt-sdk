@@ -15,6 +15,8 @@ from whitson_pvt_sdk.http import HTTPTransport
 ISSUER = "https://whitson.eu.auth0.com/"
 TOKEN_ENDPOINT = "https://whitson.eu.auth0.com/oauth/token"
 
+EMPTY_PAGE = {"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}}
+
 StoreLogin = Callable[..., StoredLogin]
 
 
@@ -28,6 +30,11 @@ def _isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> It
     keyring.set_keyring(fail.Keyring())
     yield
     keyring.set_keyring(previous)
+
+
+@pytest.fixture
+def no_retry_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("whitson_pvt_sdk.http.time.sleep", lambda _: None)
 
 
 @pytest.fixture

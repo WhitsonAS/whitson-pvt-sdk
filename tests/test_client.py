@@ -1,5 +1,6 @@
 import pytest
 
+from tests.conftest import EMPTY_PAGE
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.errors import APIError, ConfigurationError
 from whitson_pvt_sdk.shared.models import RetryConfig
@@ -31,7 +32,6 @@ TOKEN = "whitson_pvt_abcdefghijkl_" + "a" * 43 + "_abcdef"
 ENV_TOKEN = "whitson_pvt_from_env"
 STORED_TOKEN = "stored-access-token"
 OTHER_URL = "https://other.pvt.whitson.com"
-EMPTY_PAGE = {"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}}
 
 
 @pytest.mark.parametrize(

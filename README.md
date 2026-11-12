@@ -449,12 +449,12 @@ valid there, and the deployment you logged in to could use them against it.
 Asking first means: the first login to such a deployment from this machine, and a login after its
 login server changed, shows the deployment host and the login server host, and the audience
 when it is not the deployment itself, and asks to continue (default no). Later logins to the
-same deployment with the same login server ask nothing. Without a terminal, the login is refused unless you pass `--yes`, which only
-answers this question. In Python, pass `confirm=`, a function that receives `FirstUse` or
-`IssuerChanged` (each with `deployment_host`, `issuer_host`, `foreign_audience` and
-`describe()`) and returns whether
-to continue; without it, such a login raises `ConfigurationError`. A login that needs no
-question needs no `confirm=`.
+same deployment with the same login server ask nothing. Without a terminal, the login is refused
+unless you pass `--yes`, which only answers this question. In Python, pass `confirm=`, a function
+that receives a `FirstUse` or `IssuerChanged` from `whitson_pvt_sdk.login` (each with
+`deployment_host`, `issuer_host`, `foreign_audience` and `describe()`) and returns whether to
+continue; without it, such a login raises `ConfigurationError`. A login that needs no question
+needs no `confirm=`.
 
 The issuer, and the authorization, token, device and revocation endpoints it publishes, must be
 HTTPS (http only on this machine). The browser, and the page where a device code is entered, are
@@ -706,6 +706,7 @@ whitson_pvt_sdk/
 ├── _store.py                # the credential store: credentials.json, keyring, lock
 ├── _refresh.py              # renewal of a stored login under the store lock
 ├── _oauth.py                # OAuth/OIDC wire protocol: /auth/config, discovery, token requests
+├── _trust.py                # which deployments a login may start for and where it signs in
 ├── cli/                     # the wpvt command (Typer; the cli extra): auth, data commands,
 │                            #   export, calc, api, mcp
 ├── http.py                  # HTTPTransport (httpx, retries, error mapping)

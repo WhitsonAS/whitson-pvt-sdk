@@ -44,7 +44,7 @@ class HTTPTransport:
         self._file_timeout = file_timeout
         self._http = httpx.Client(
             auth=CredentialAuth(credential),
-            base_url=f"{base_url.rstrip('/')}/external/v2",
+            base_url=f"{base_url.rstrip('/')}{API_PREFIX}",
             timeout=timeout,
         )
 

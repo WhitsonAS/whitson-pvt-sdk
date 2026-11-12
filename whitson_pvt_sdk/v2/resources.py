@@ -223,6 +223,7 @@ __all__ = (
     "FluidModels",
     "ImportRecords",
     "ImportSessions",
+    "Me",
     "Projects",
     "Regions",
     "Reports",

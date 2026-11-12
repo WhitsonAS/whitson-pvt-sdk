@@ -25,11 +25,15 @@ def normalise_url(value: str) -> str:
     host = url.host.rstrip(".")
     if "" in host.split("."):
         raise ValueError(f"{value!r} has an empty host name label")
-    url = url.copy_with(host=host)
-    return f"{url.scheme}://{url.netloc.decode()}{url.path.rstrip('/')}"
+    return origin(url.copy_with(host=host)) + url.path.rstrip("/")
 
 
 DeploymentUrl = Annotated[str, AfterValidator(normalise_url)]
+
+
+def origin(url: str | httpx.URL) -> str:
+    parsed = httpx.URL(url)
+    return f"{parsed.scheme}://{parsed.netloc.decode()}"
 
 
 def same_origin(a: str | httpx.URL, b: str | httpx.URL) -> bool:

@@ -20,7 +20,6 @@ from whitson_pvt_sdk._oauth import (
     TokenGranted,
     TokenRefused,
     TokenResponse,
-    TokenResult,
     discover,
     fetch_auth_config,
     oauth_client,
@@ -35,19 +34,26 @@ from whitson_pvt_sdk._trust import (
     FirstUse,
     IssuerChanged,
     Proceed,
-    Refused,
     SecureUrl,
-    TrustedByOverride,
-    TrustedDeployment,
-    TrustedLoopback,
-    UnexpectedAudience,
-    UnexpectedIssuer,
     host_trust,
     login_decision,
 )
 from whitson_pvt_sdk.auth import TOKEN_ENV_VAR
 from whitson_pvt_sdk.credentials import StoredLogin, same_origin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
+
+__all__ = [
+    "BrowserLogin",
+    "Confirmation",
+    "DeviceLogin",
+    "FirstUse",
+    "IssuerChanged",
+    "LoggedOut",
+    "LoginMethod",
+    "login",
+    "logout",
+    "logout_all",
+]
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 
@@ -81,21 +87,22 @@ def login(
     confirm: Callable[[Confirmation], bool] | None = None,
     trust_host: bool = False,
 ) -> StoredLogin:
-    match host_trust(base_url, trust_host=trust_host):
-        case TrustedDeployment() | TrustedLoopback() | TrustedByOverride() as trusted:
-            url = trusted.url
-        case Refused(reason=reason):
-            raise ConfigurationError(reason)
+    trusted = host_trust(base_url, trust_host=trust_host)
+    url = trusted.url
     with oauth_client() as http:
         config = fetch_auth_config(http, url)
-        match login_decision(trusted, config.issuer, config.audience):
-            case UnexpectedIssuer() | UnexpectedAudience() as unexpected:
-                raise LoginError(unexpected.describe())
-            case _ if isinstance(method, DeviceLogin) and not config.device_login:
-                raise ConfigurationError(
-                    f"Device login is not enabled on {url}. Log in with a browser from a machine "
-                    f"that has one, or use an API token in {TOKEN_ENV_VAR}."
-                )
+        decision = login_decision(
+            trusted,
+            config.issuer,
+            config.audience,
+            CredentialStore.from_environment().issuer(url),
+        )
+        if isinstance(method, DeviceLogin) and not config.device_login:
+            raise ConfigurationError(
+                f"Device login is not enabled on {url}. Log in with a browser from a machine "
+                f"that has one, or use an API token in {TOKEN_ENV_VAR}."
+            )
+        match decision:
             case Proceed():
                 pass
             case FirstUse() | IssuerChanged() as confirmation:
@@ -330,36 +337,6 @@ class _DeviceAuthorization(BaseModel):
     interval: int = Field(default=5, gt=0)
 
 
-class _Granted(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    token: TokenResponse
-
-
-class _Pending(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-
-class _SlowDown(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-
-class _Denied(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-
-class _Expired(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-
-class _Failed(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    error: OAuthError
-
-
-_DevicePoll = _Granted | _Pending | _SlowDown | _Denied | _Expired | _Failed
-
 _SLOW_DOWN_SECONDS = 5
 
 
@@ -408,38 +385,23 @@ def _device_flow(
     }
     while True:
         time.sleep(interval)
-        poll = _device_poll(request_token(http, provider.token_endpoint, form))
-        match poll:
-            case _Granted(token=token):
+        match request_token(http, provider.token_endpoint, form):
+            case TokenGranted(token=token):
                 return token
-            case _Pending() | _SlowDown() if time.monotonic() >= deadline:
+            case TokenRefused(error=OAuthError(error="authorization_pending" | "slow_down")) if (
+                time.monotonic() >= deadline
+            ):
                 raise _device_expired()
-            case _Pending():
+            case TokenRefused(error=OAuthError(error="authorization_pending")):
                 continue
-            case _SlowDown():
+            case TokenRefused(error=OAuthError(error="slow_down")):
                 interval += _SLOW_DOWN_SECONDS
-            case _Denied():
+            case TokenRefused(error=OAuthError(error="access_denied")):
                 raise LoginError("The login was denied in the browser.")
-            case _Expired():
+            case TokenRefused(error=OAuthError(error="expired_token")):
                 raise _device_expired()
-            case _Failed(error=error):
+            case TokenRefused(error=error):
                 raise LoginError(f"The device login failed: {error.describe()}.")
-
-
-def _device_poll(result: TokenResult) -> _DevicePoll:
-    match result:
-        case TokenGranted(token=token):
-            return _Granted(token=token)
-        case TokenRefused(error=OAuthError(error="authorization_pending")):
-            return _Pending()
-        case TokenRefused(error=OAuthError(error="slow_down")):
-            return _SlowDown()
-        case TokenRefused(error=OAuthError(error="access_denied")):
-            return _Denied()
-        case TokenRefused(error=OAuthError(error="expired_token")):
-            return _Expired()
-        case TokenRefused(error=error):
-            return _Failed(error=error)
 
 
 def _device_expired() -> LoginError:
@@ -447,9 +409,9 @@ def _device_expired() -> LoginError:
 
 
 def _revoke(removed: RemovedLogin) -> LoggedOut:
-    if removed.entry is None:
+    stored = removed.login
+    if stored is None:
         return LoggedOut(url=removed.base_url, revocation="skipped")
-    stored = removed.entry.login
     try:
         with oauth_client() as http:
             endpoint = discover(http, stored.issuer).revocation_endpoint

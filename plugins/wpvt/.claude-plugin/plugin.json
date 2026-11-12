@@ -8,5 +8,6 @@
   "homepage": "https://github.com/WhitsonAS/whitson-pvt-sdk/tree/main/plugins",
   "repository": "https://github.com/WhitsonAS/whitson-pvt-sdk",
   "license": "Apache-2.0",
-  "keywords": ["whitson", "pvt", "mcp", "reservoir", "fluids"]
+  "keywords": ["whitson", "pvt", "mcp", "reservoir", "fluids"],
+  "icon": "./assets/icon.png"
 }

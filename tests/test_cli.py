@@ -80,11 +80,6 @@ def test_status_reports_the_credential_and_identity(
     _no_secrets(text)
 
 
-@pytest.fixture
-def no_retry_sleep(monkeypatch):
-    monkeypatch.setattr("whitson_pvt_sdk.http.time.sleep", lambda _: None)
-
-
 @pytest.mark.parametrize(
     ("setup", "exit_code", "kind", "message"),
     [

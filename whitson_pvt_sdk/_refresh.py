@@ -13,13 +13,7 @@ from whitson_pvt_sdk.credentials import StoredLogin
 from whitson_pvt_sdk.errors import LoginError
 
 
-class StillValid(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    login: StoredLogin
-
-
-class Refreshed(BaseModel):
+class Usable(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     login: StoredLogin
@@ -32,16 +26,16 @@ class NoLongerValid(BaseModel):
     reason: str
 
 
-RefreshOutcome = StillValid | Refreshed | NoLongerValid
+RefreshOutcome = Usable | NoLongerValid
 
 
 def usable_login(login: StoredLogin, store: CredentialStore) -> RefreshOutcome:
     if not login.expiring():
-        return StillValid(login=login)
+        return Usable(login=login)
     return replace_access_token(login, store)
 
 
-def replace_access_token(login: StoredLogin, store: CredentialStore) -> Refreshed | NoLongerValid:
+def replace_access_token(login: StoredLogin, store: CredentialStore) -> RefreshOutcome:
     with store.transaction() as transaction:
         match transaction.get(login.base_url):
             case None:
@@ -51,7 +45,7 @@ def replace_access_token(login: StoredLogin, store: CredentialStore) -> Refreshe
             case ActiveLogin(login=stored) if (
                 stored.access_token != login.access_token and not stored.expiring()
             ):
-                return Refreshed(login=stored)
+                return Usable(login=stored)
             case ActiveLogin(login=stored):
                 with oauth_client() as http:
                     result = request_token(
@@ -67,7 +61,7 @@ def replace_access_token(login: StoredLogin, store: CredentialStore) -> Refreshe
                     case TokenGranted(token=token):
                         renewed = refreshed_login(stored, token)
                         transaction.put(renewed)
-                        return Refreshed(login=renewed)
+                        return Usable(login=renewed)
                     case TokenRefused(error=OAuthError(error="invalid_grant") as error):
                         reason = (
                             f"the authorization server refused to renew it ({error.describe()})"

@@ -21,6 +21,10 @@ JsonOption = Annotated[bool, typer.Option("--json", help="Print one JSON documen
 ErrorKind = Literal["configuration", "authentication", "network", "server", "error"]
 
 
+class FileReport(BaseModel):
+    path: str
+
+
 class ErrorReport(BaseModel):
     error: ErrorKind
     message: str

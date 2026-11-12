@@ -14,6 +14,8 @@ HTTP_TIMEOUT_SECONDS = 30.0
 _Model = TypeVar("_Model", bound=BaseModel)
 
 
+# Hand-written until GET /external/v2/auth/config is in the OpenAPI document; then replace
+# it with the generated model.
 class AuthConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -86,10 +88,11 @@ def oauth_client() -> httpx.Client:
 
 
 def fetch_auth_config(http: httpx.Client, base_url: str) -> AuthConfig:
-    response = _send(http, "GET", f"{base_url}/external/v2/auth/config")
+    url = f"{base_url}/external/v2/auth/config"
+    response = _send(http, "GET", url)
     if response.status_code == 404:
         raise ConfigurationError(f"Command-line login is not enabled on {base_url}.")
-    return _parse(AuthConfig, response, f"{base_url}/external/v2/auth/config")
+    return _parse(AuthConfig, response, url)
 
 
 def discover(http: httpx.Client, issuer: str) -> ProviderMetadata:

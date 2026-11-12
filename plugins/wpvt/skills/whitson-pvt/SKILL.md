@@ -110,7 +110,8 @@ all retries are exhausted on HTTP `429`, the SDK raises `RateLimitError` with
 
 Everything the SDK raises derives from `SDKError`; import the classes from `whitson_pvt_sdk.errors`.
 
-- `ConfigurationError`: no usable token when the client is created. No HTTP fields.
+- `ConfigurationError`: no usable deployment URL or token when the client is created. No HTTP fields.
+- `LoginError`: the stored login is no longer valid; ask the user to run `wpvt auth login`.
 - `NoResponseError`: the request got no response (connection error, timeout) after retries. No HTTP fields.
 - `ResponseError`: the API answered with an error status; always has `status_code: int`, plus `response_body` and `request_id`. Subclasses: `AuthError` (401/403), `NotFoundError` (404), `ValidationError` (400/422), `RateLimitError` (429, with `retry_after_seconds`) and `APIError` (any other status).
 - `CalculationError`: a calculation returned a failed result (`code`, `sample_id`, `input_index`, `error`).

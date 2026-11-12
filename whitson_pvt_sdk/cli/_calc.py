@@ -1,15 +1,14 @@
-import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Generic, TypeVar
 
 import typer
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.cli._output import JsonOption, emit, emit_data, reporting
+from whitson_pvt_sdk.cli._output import FileReport, JsonOption, emit, emit_data, reporting
 from whitson_pvt_sdk.errors import ConfigurationError, SDKError
 from whitson_pvt_sdk.shared.models import CompositionSource
 from whitson_pvt_sdk.v2.models import (
@@ -41,6 +40,13 @@ class RequestFile(BaseModel):
     path: str
 
 
+class _SampleConditions(BaseModel):
+    inputs: list[dict[str, JsonValue]] = [{}]
+
+
+_json_object: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+
+
 class SampleFeed(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -48,10 +54,6 @@ class SampleFeed(BaseModel):
     fluid_model_id: int
     source: CompositionSource
     conditions: str | None
-
-
-class OutputReport(BaseModel):
-    path: str
 
 
 InputOption = Annotated[
@@ -102,7 +104,7 @@ def _register(calculation: Calculation[Request]) -> None:
                 emit_data(response)
             else:
                 out.write_text(response.model_dump_json(indent=2) + "\n")
-                emit(OutputReport(path=str(out)), f"Wrote {out}", json_output=json_output)
+                emit(FileReport(path=str(out)), f"Wrote {out}", json_output=json_output)
 
     calc_app.command(calculation.name, help=calculation.help)(command)
 
@@ -139,22 +141,16 @@ def _request(
             return _validated(model, _read_object(path))
         case SampleFeed(conditions=conditions) as feed:
             document = {} if conditions is None else _read_object(conditions)
-            inputs = document.get("inputs", [{}])
-            items = (
-                [item for item in inputs if isinstance(item, dict)]
-                if isinstance(inputs, list)
-                else []
-            )
-            if (
-                "fluid_model_id" in document
-                or not isinstance(inputs, list)
-                or len(items) != len(inputs)
-            ):
+            try:
+                rest = _SampleConditions.model_validate(document)
+            except PydanticValidationError:
+                rest = None
+            if rest is None or "fluid_model_id" in document:
                 raise ConfigurationError(
                     "With --sample, the request file must not set fluid_model_id (it comes "
                     "from --fluid-model) and its inputs must be a list of objects."
                 )
-            if any("feed_composition" in item for item in items):
+            if any("feed_composition" in item for item in rest.inputs):
                 raise ConfigurationError(
                     "With --sample, leave feed_composition out of the inputs; it comes from "
                     "the sample."
@@ -171,26 +167,25 @@ def _request(
                 {
                     **document,
                     "fluid_model_id": feed.fluid_model_id,
-                    "inputs": [{**item, "feed_composition": feed_composition} for item in items],
+                    "inputs": [
+                        {**item, "feed_composition": feed_composition} for item in rest.inputs
+                    ],
                 },
             )
 
 
-def _read_object(path: str) -> dict[str, object]:
+def _read_object(path: str) -> dict[str, JsonValue]:
     try:
         text = sys.stdin.read() if path == "-" else Path(path).read_text()
     except OSError as exc:
         raise ConfigurationError(f"Cannot read {path}: {exc.strerror}.") from None
     try:
-        document = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ConfigurationError(f"{path} is not JSON: {exc}.") from None
-    if not isinstance(document, dict):
-        raise ConfigurationError(f"{path} must hold a JSON object.")
-    return document
+        return _json_object.validate_json(text)
+    except PydanticValidationError:
+        raise ConfigurationError(f"{path} must hold a JSON object.") from None
 
 
-def _validated(model: type[Request], document: dict[str, object]) -> Request:
+def _validated(model: type[Request], document: dict[str, JsonValue]) -> Request:
     try:
         return model.model_validate(document)
     except PydanticValidationError as exc:

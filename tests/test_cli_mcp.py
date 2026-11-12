@@ -40,6 +40,7 @@ class Backend:
         }
         self.paths: list[str] = []
         self.refreshed_with: list[str] = []
+        self.forbidden = False
         self.url = ""
 
 
@@ -75,6 +76,9 @@ def _backend_app(backend: Backend):
     async def recording(scope, receive, send):
         if scope["type"] == "http":
             backend.paths.append(scope["path"])
+            if backend.forbidden and scope["path"] == "/mcp":
+                await JSONResponse({"error": "insufficient_scope"}, 403)(scope, receive, send)
+                return
         await inner(scope, receive, send)
 
     return recording
@@ -260,6 +264,17 @@ def test_mcp_with_an_api_token_says_personal_tokens_are_not_available(backend, m
     assert f"wpvt auth login --url {backend.url}" in result.stderr
     assert result.stdout == ""
     assert "whitson_pvt_secret" not in result.stderr
+
+
+def test_mcp_reports_a_login_without_access_to_mcp_as_authentication(backend, store):
+    _save_login(store, backend.url, expired=False)
+    backend.forbidden = True
+
+    result = runner.invoke(app, ["mcp", "--url", backend.url])
+
+    assert result.exit_code == 3
+    assert f"{backend.url}/mcp refused access with this credential (HTTP 403)" in result.stderr
+    assert result.stdout == ""
 
 
 def test_mcp_without_a_login_exits_before_serving(backend):

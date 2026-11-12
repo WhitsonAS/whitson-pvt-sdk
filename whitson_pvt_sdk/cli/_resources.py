@@ -249,9 +249,7 @@ def _paged(
     every: bool,
 ) -> Listing:
     if every:
-        items = Paginator.iterate(
-            lambda cursor, limit: page(cursor, limit), items_field, cursor=cursor, limit=limit
-        )
+        items = Paginator.iterate(page, items_field, cursor=cursor, limit=limit)
         return Listing(items=list(items), next_cursor=None)
     first = page(cursor, limit)
     return Listing(items=getattr(first, items_field), next_cursor=first.pagination.next_cursor)

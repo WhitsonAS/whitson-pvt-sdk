@@ -51,7 +51,7 @@ class RemovedLogin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     base_url: str
-    entry: StoreEntry | None
+    login: StoredLogin | None
 
 
 _Secret = Annotated[
@@ -128,9 +128,8 @@ class StoreTransaction:
         return list(self._document.profiles)
 
     def put(self, login: StoredLogin) -> None:
-        secrets_location = _KeyringSecrets() if _keyring() is not None else _file_secrets(login)
         self._document.profiles[login.base_url] = _Profile(
-            **login.model_dump(include=_FACT_FIELDS), secrets=secrets_location
+            **login.model_dump(include=_FACT_FIELDS), secrets=_file_secrets(login)
         )
         self._written[login.base_url] = login
 
@@ -157,7 +156,7 @@ class StoreTransaction:
         self._removed.append(profile)
         if self._document.default == key:
             self._document.default = None
-        return RemovedLogin(base_url=key, entry=entry)
+        return RemovedLogin(base_url=key, login=None if entry is None else entry.login)
 
 
 class CredentialStore:
@@ -184,9 +183,12 @@ class CredentialStore:
     @contextmanager
     def transaction(self) -> Iterator[StoreTransaction]:
         with self._locked():
-            transaction = StoreTransaction(self._read())
+            document = self._read()
+            unchanged = document.model_dump_json()
+            transaction = StoreTransaction(document)
             yield transaction
-            self._commit(transaction)
+            if transaction._written or document.model_dump_json() != unchanged:
+                self._commit(transaction)
 
     def _read(self) -> _Document:
         try:
@@ -208,9 +210,7 @@ class CredentialStore:
         document = transaction._document
         backend = _keyring()
         for key, login in transaction._written.items():
-            profile = document.profiles[key]
-            if isinstance(profile.secrets, _KeyringSecrets):
-                profile.secrets = _store_in_keyring(backend, login)
+            document.profiles[key].secrets = _secrets(backend, login)
         for profile in transaction._removed:
             if isinstance(profile.secrets, _KeyringSecrets) and backend is not None:
                 _delete_from_keyring(backend, profile.base_url)
@@ -326,7 +326,7 @@ def _read_keyring(base_url: str) -> tuple[SecretStr, SecretStr]:
     return SecretStr(access_token), SecretStr(refresh_token)
 
 
-def _store_in_keyring(
+def _secrets(
     backend: "KeyringBackend | None", login: StoredLogin
 ) -> _FileSecrets | _KeyringSecrets:
     if backend is None:

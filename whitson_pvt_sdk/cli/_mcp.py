@@ -27,23 +27,26 @@ class LoginBearer(httpx2.Auth):
         token = await anyio.to_thread.run_sync(self._bearer.current, str(request.url))
         set_bearer(request.headers, token)
         response = yield request
-        if response.status_code != 401:
-            return
-        renewed = await anyio.to_thread.run_sync(self._bearer.renewed_after_rejection)
-        if renewed is None:
-            raise AuthError(
-                f"{self._base_url}/mcp refused the API token: personal tokens are not available "
-                f"on MCP yet. Unset WHITSON_PVT_TOKEN and run `wpvt auth login --url "
-                f"{self._base_url}`.",
-                401,
-            )
-        set_bearer(request.headers, renewed)
-        response = yield request
         if response.status_code == 401:
+            renewed = await anyio.to_thread.run_sync(self._bearer.renewed_after_rejection)
+            if renewed is None:
+                raise AuthError(
+                    f"{self._base_url}/mcp refused the API token: personal tokens are not "
+                    f"available on MCP yet. Unset WHITSON_PVT_TOKEN and run `wpvt auth login "
+                    f"--url {self._base_url}`.",
+                    401,
+                )
+            set_bearer(request.headers, renewed)
+            response = yield request
+            if response.status_code == 401:
+                raise AuthError(
+                    f"{self._base_url}/mcp refused the stored login. Run `wpvt auth login --url "
+                    f"{self._base_url}`.",
+                    401,
+                )
+        if response.status_code == 403:
             raise AuthError(
-                f"{self._base_url}/mcp refused the stored login. Run `wpvt auth login --url "
-                f"{self._base_url}`.",
-                401,
+                f"{self._base_url}/mcp refused access with this credential (HTTP 403).", 403
             )
 
 

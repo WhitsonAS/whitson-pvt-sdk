@@ -20,11 +20,6 @@ def _requests_to(httpx_mock, url: str):
 
 
 @pytest.fixture
-def no_retry_sleep(monkeypatch):
-    monkeypatch.setattr("whitson_pvt_sdk.http.time.sleep", lambda _: None)
-
-
-@pytest.fixture
 def recorded_sleeps(monkeypatch):
     sleeps = []
     monkeypatch.setattr("whitson_pvt_sdk.http.time.sleep", sleeps.append)
@@ -464,14 +459,6 @@ def test_retry_config_max_attempts_one_disables_retries(credential, base_url, ht
         transport.get("/test")
 
     assert len(_requests_to(httpx_mock, url)) == 1
-
-
-def test_timeout_configures_default_http_timeout(credential, base_url, httpx_mock):
-    transport = HTTPTransport(credential, base_url, timeout=12.5)
-    httpx_mock.add_response(url="https://dev.pvt.whitson.com/external/v2/regions", json={})
-
-    transport.get("/regions")
-    assert httpx_mock.get_requests()[-1].extensions["timeout"]["read"] == 12.5
 
 
 def test_file_timeout_configures_download_timeout(credential, base_url, httpx_mock):

@@ -16,7 +16,9 @@
         "shortDescription": "whitson PVT MCP tools and skill through the wpvt command",
         "developerName": "Whitson AS",
         "category": "Productivity",
-        "websiteURL": "https://github.com/WhitsonAS/whitson-pvt-sdk"
+        "websiteURL": "https://github.com/WhitsonAS/whitson-pvt-sdk",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
       }
     }
   }

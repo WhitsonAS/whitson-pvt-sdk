@@ -4,13 +4,12 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from tests.conftest import TOKEN_ENDPOINT
+from tests.conftest import EMPTY_PAGE, TOKEN_ENDPOINT
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk._store import ActiveLogin, InvalidLogin
 from whitson_pvt_sdk.errors import AuthError, ConfigurationError, LoginError
 from whitson_pvt_sdk.http import HTTPTransport
 
-EMPTY_PAGE = {"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}}
 RENEWED = {
     "access_token": "new-access",
     "refresh_token": "new-refresh",

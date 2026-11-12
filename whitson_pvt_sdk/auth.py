@@ -7,9 +7,8 @@ from pydantic import BaseModel, ConfigDict, SecretStr, TypeAdapter, ValidationEr
 
 from whitson_pvt_sdk._refresh import (
     NoLongerValid,
-    Refreshed,
     RefreshOutcome,
-    StillValid,
+    Usable,
     replace_access_token,
     usable_login,
 )
@@ -19,6 +18,7 @@ from whitson_pvt_sdk.credentials import (
     Credential,
     DeploymentUrl,
     StoredLogin,
+    origin,
     same_origin,
 )
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError
@@ -126,10 +126,8 @@ class BearerSource:
                 return api_token.token
             case StoredLogin() as login:
                 if not same_origin(url, login.base_url):
-                    target = httpx.URL(url)
                     raise ConfigurationError(
-                        f"Refusing to send the stored login for {login.base_url} to "
-                        f"{target.scheme}://{target.netloc.decode()}."
+                        f"Refusing to send the stored login for {login.base_url} to {origin(url)}."
                     )
                 return self._adopt(usable_login(login, self._store)).access_token
 
@@ -142,7 +140,7 @@ class BearerSource:
 
     def _adopt(self, outcome: RefreshOutcome) -> StoredLogin:
         match outcome:
-            case StillValid(login=login) | Refreshed(login=login):
+            case Usable(login=login):
                 self._credential = login
                 return login
             case NoLongerValid(base_url=base_url, reason=reason):

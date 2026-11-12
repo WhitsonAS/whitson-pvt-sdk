@@ -5,11 +5,10 @@ import pytest
 from keyring.backend import KeyringBackend
 from keyring.errors import PasswordDeleteError
 
+from tests.conftest import EMPTY_PAGE
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.errors import ConfigurationError
 from whitson_pvt_sdk.login import logout
-
-EMPTY_PAGE = {"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}}
 
 
 class MemoryKeyring(KeyringBackend):

@@ -10,7 +10,7 @@ import typer
 from pydantic import AwareDatetime, BaseModel
 
 from whitson_pvt_sdk import WhitsonPVTClient, __version__
-from whitson_pvt_sdk.cli._output import JsonOption, emit, reporting
+from whitson_pvt_sdk.cli._output import FileReport, JsonOption, emit, reporting
 from whitson_pvt_sdk.errors import ConfigurationError
 from whitson_pvt_sdk.v2.models import (
     BlackOilTableRowModel,
@@ -57,10 +57,6 @@ class SampleExport(BaseModel):
 
 class SamplesExportReport(BaseModel):
     samples: list[SampleExport]
-
-
-class FileReport(BaseModel):
-    path: str
 
 
 def export_samples(
