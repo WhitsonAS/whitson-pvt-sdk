@@ -1,13 +1,13 @@
 ---
 name: whitson-pvt
-description: Install and use the Whitson PVT Python SDK and its wpvt command from external Python projects. Use when configuring WhitsonPVTClient, authenticating with an API token (WHITSON_PVT_TOKEN) or a stored wpvt login, checking who is logged in with wpvt auth status, using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
+description: Install and use the Whitson PVT Python SDK and its wpvt command from external Python projects and agent shells. Use when configuring WhitsonPVTClient, connecting an agent to whitson PVT with wpvt mcp, fetching full data that an MCP tool result paged, downsampled or omitted (wpvt api, wpvt samples export), authenticating with an API token (WHITSON_PVT_TOKEN) or a stored wpvt login, checking who is logged in with wpvt auth status, using the API resources, calling regions/wells/samples/projects/fluid models/black oil tables/reports, or working with the SDK's Pydantic request and response models.
 ---
 
 # Whitson PVT SDK
 
 ## Install
 
-Use Python 3.10 or newer.
+Use Python 3.11 or newer.
 
 ```bash
 uv add whitson-pvt-sdk
@@ -50,6 +50,20 @@ The deployment is `base_url=`, else `WHITSON_PVT_URL`, else the default `wpvt` l
 - A login to a `*.pvt.whitson.com` deployment that names whitson's login server needs no confirmation. One that names another login server, or asks for access to any service other than itself (`https://<deployment host>/mcp`), is refused and cannot be overridden: tell the user to report it to whitson. A login to another host (`--trust-host`), or to localhost with another login server or another audience, asks the user to confirm.
 - Never pass `--trust-host` or `--yes` to `wpvt auth login`, or `trust_host=True` or an always-yes `confirm=` to `login()`, on your own initiative, and never suggest them to get past a refusal. They decide whether to trust a host outside `*.pvt.whitson.com` and whether to sign in at a login server other than whitson's: those are the user's decisions. Show the user the refusal or the hosts and let them decide.
 - A stored login is bound to its deployment URL and is never sent to another one. It renews itself; when it cannot, the error says to log in again.
+
+## Data From The Command Line And MCP
+
+`wpvt mcp` connects an agent host to the deployment's MCP tools over stdio with the user's `wpvt` login (`claude mcp add wpvt -- wpvt mcp`, `codex mcp add wpvt -- wpvt mcp`). MCP needs `wpvt auth login`; it refuses API tokens for now. If `wpvt mcp` fails to start, show the user its stderr message and let them run the command it names.
+
+- Prefer the MCP tools for lookups and small answers.
+- When a tool result says the data was paged, downsampled or omitted and carries `full_data` (`{"available_through": "whitsonpvt_cli_and_python_sdk", "method": ..., "path": ...}`), fetch the full data to a file and work on the file (grep, page, script), instead of calling the tool again: `wpvt api METHOD PATH --out FILE` with that exact method and path, or the matching command: `wpvt samples export ID --out DIR` (one directory per sample: `index.json` first, then `sample.json`, `compositions/`, `experiments/`), `wpvt black-oil-tables export ID --out FILE [--format csv]`.
+- Discover routes with `wpvt api --list --json` and `wpvt api --describe METHOD PATH --json` instead of guessing paths. PATH is relative to `/external/v2`. Add `--paginate` on a paged GET to get every page in one document, `-q KEY=VALUE` for query parameters and `-d @FILE` (or inline JSON, or `-`) for a body; METHOD defaults to GET, or POST with `-d`. Use `jq` on the output; there is no built-in query flag.
+- Lists: `wpvt regions list`, `wpvt wells list --region ID`, `wpvt samples list --well ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt black-oil-tables list --fluid-model ID`, each with `--all --json`; `wpvt <resource> get ID` prints one as JSON.
+- Calculations: `wpvt calc flash|saturation-pressure|phase-envelope --input request.json --out result.json`; with `--sample ID --fluid-model ID` the feed comes from the stored sample and the input file leaves out `fluid_model_id` and `feed_composition`.
+- Never print, log or paste tokens, and never read the credentials file. Never run `wpvt auth login` yourself: ask the user to run it in their own terminal.
+- Exit codes: 2 usage or configuration, 3 authentication, 4 network or server; errors are on stderr.
+
+In Python, `client.request(method, path, params=..., body=...)` calls any route the same way and returns `status_code`, `headers` and `content`.
 
 SDK 2.x has no client credentials, no `version=` argument and no v1 API. Code that passes `credentials=ClientCredentials(...)` or `version=` needs SDK 1.x.
 

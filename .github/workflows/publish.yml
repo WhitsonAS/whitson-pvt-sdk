@@ -41,7 +41,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.14"
+          python-version: |
+            3.11
+            3.15
 
       - name: Install just
         uses: extractions/setup-just@v4
@@ -60,6 +62,11 @@ jobs:
 
       - name: Run release checks
         run: just prepare-release
+
+      - name: Run tests on the minimum Python
+        run: uv run --python 3.11 pytest tests/
+        env:
+          UV_PROJECT_ENVIRONMENT: .venv-3.11
 
       - name: Commit release version
         run: |

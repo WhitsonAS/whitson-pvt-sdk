@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import httpx
@@ -57,7 +57,7 @@ class StoredLogin(BaseModel):
     expires_at: AwareDatetime
 
     def expiring(self) -> bool:
-        return self.expires_at - REFRESH_MARGIN <= datetime.now(timezone.utc)
+        return self.expires_at - REFRESH_MARGIN <= datetime.now(UTC)
 
 
 Credential = ApiToken | StoredLogin

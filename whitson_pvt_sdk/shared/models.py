@@ -17,6 +17,14 @@ class RetryConfig(BaseModel):
     methods: frozenset[HTTPMethod] = frozenset({"GET"})
 
 
+class ApiResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    status_code: int
+    headers: dict[str, str]
+    content: bytes
+
+
 class PaginationParams(BaseModel):
     cursor: str | None = None
     limit: int | None = Field(default=None, ge=1, le=250)

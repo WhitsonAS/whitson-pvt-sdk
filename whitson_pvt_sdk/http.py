@@ -1,5 +1,7 @@
 import logging
+import re
 import time
+from collections.abc import Mapping
 from typing import Any, TypeAlias
 
 import httpx
@@ -10,18 +12,22 @@ from whitson_pvt_sdk.credentials import Credential
 from whitson_pvt_sdk.errors import (
     APIError,
     AuthError,
+    ConfigurationError,
     NoResponseError,
     NotFoundError,
     RateLimitError,
     ValidationError,
 )
-from whitson_pvt_sdk.shared.models import HTTPMethod, RetryConfig
+from whitson_pvt_sdk.shared.models import ApiResponse, HTTPMethod, RetryConfig
 
 logger = logging.getLogger("whitson_pvt_sdk")
 
 JSONBody: TypeAlias = dict[str, Any] | list[dict[str, Any]] | None
 
-Params: TypeAlias = dict[str, str | int | float | bool] | None
+Params: TypeAlias = Mapping[str, str | int | float | bool] | None
+
+API_PREFIX = "/external/v2"
+_SEGMENT = re.compile(r"[A-Za-z0-9._~-]+")
 
 
 class HTTPTransport:
@@ -119,12 +125,38 @@ class HTTPTransport:
     def get_bytes(self, path: str, *, params: Params = None) -> bytes:
         return self._request("GET", path, params=params, timeout=self._file_timeout).content
 
+    def request(
+        self, method: HTTPMethod, path: str, *, params: Params = None, body: JSONBody = None
+    ) -> ApiResponse:
+        response = self._request(
+            method, external_path(path), params=params, json=body, timeout=self._file_timeout
+        )
+        return ApiResponse(
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            content=response.content,
+        )
+
     def post_multipart(
         self, path: str, *, files: dict[str, Any], data: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         return self._request(
             "POST", path, files=files, data=data, timeout=self._file_timeout
         ).json()
+
+
+def external_path(path: str) -> str:
+    segments = path.removeprefix("/").split("/")
+    if segments[:2] == API_PREFIX.lstrip("/").split("/"):
+        segments = segments[2:]
+    if not segments or any(
+        segment in (".", "..") or not _SEGMENT.fullmatch(segment) for segment in segments
+    ):
+        raise ConfigurationError(
+            f"Refusing the path {path!r}: give a route under {API_PREFIX}, such as /regions or "
+            f"{API_PREFIX}/samples/123, without a host, '..', percent-encoding or a query string."
+        )
+    return "/" + "/".join(segments)
 
 
 def _raise_for_status(response: httpx.Response) -> None:

@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import keyring
@@ -71,7 +71,7 @@ def make_login(
         token_endpoint=TOKEN_ENDPOINT,
         access_token=SecretStr(access),
         refresh_token=SecretStr(refresh),
-        expires_at=datetime.now(timezone.utc) + expires_in,
+        expires_at=datetime.now(UTC) + expires_in,
     )
 
 

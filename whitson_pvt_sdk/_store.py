@@ -6,9 +6,9 @@ import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, PlainSerializer, SecretStr
 from pydantic import ValidationError as PydanticValidationError
@@ -142,7 +142,7 @@ class StoreTransaction:
 
     def mark_invalid(self, base_url: str, reason: str) -> None:
         profile = self._document.profiles[normalise_url(base_url)]
-        profile.status = _Invalid(reason=reason, since=datetime.now(timezone.utc))
+        profile.status = _Invalid(reason=reason, since=datetime.now(UTC))
 
     def remove(self, base_url: str) -> RemovedLogin | None:
         key = normalise_url(base_url)
@@ -167,7 +167,7 @@ class CredentialStore:
         self._lock_path = directory / "credentials.lock"
 
     @classmethod
-    def from_environment(cls) -> "CredentialStore":
+    def from_environment(cls) -> Self:
         return cls(config_directory())
 
     def get(self, base_url: str) -> StoreEntry | None:

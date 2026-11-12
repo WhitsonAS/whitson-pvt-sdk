@@ -14,7 +14,7 @@ from whitson_pvt_sdk.auth import (
     resolve_base_url,
     resolve_credential,
 )
-from whitson_pvt_sdk.cli._output import emit, note, reporting
+from whitson_pvt_sdk.cli._output import JsonOption, emit, note, reporting
 from whitson_pvt_sdk.credentials import Credential
 from whitson_pvt_sdk.errors import AuthError, ConfigurationError
 from whitson_pvt_sdk.http import HTTPTransport
@@ -48,7 +48,6 @@ UrlOption = Annotated[
         "Defaults to WHITSON_PVT_URL, then the default login.",
     ),
 ]
-JsonOption = Annotated[bool, typer.Option("--json", help="Print one JSON document on stdout.")]
 
 
 class LoginReport(BaseModel):

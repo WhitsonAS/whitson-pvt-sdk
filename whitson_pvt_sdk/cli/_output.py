@@ -1,9 +1,10 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Literal
+from typing import Annotated, Literal
 
 import typer
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 
 from whitson_pvt_sdk.cli import ExitCode
 from whitson_pvt_sdk.errors import (
@@ -14,6 +15,8 @@ from whitson_pvt_sdk.errors import (
     ResponseError,
     SDKError,
 )
+
+JsonOption = Annotated[bool, typer.Option("--json", help="Print one JSON document on stdout.")]
 
 ErrorKind = Literal["configuration", "authentication", "network", "server", "error"]
 
@@ -31,6 +34,10 @@ def emit(report: BaseModel, text: str, *, json_output: bool) -> None:
     typer.echo(report.model_dump_json(indent=2) if json_output else text)
 
 
+def emit_data(data: BaseModel) -> None:
+    typer.echo(data.model_dump_json(indent=2))
+
+
 @contextmanager
 def reporting(*, json_output: bool) -> Iterator[None]:
     try:
@@ -45,6 +52,8 @@ def reporting(*, json_output: bool) -> Iterator[None]:
         _fail("server", exc.message, ExitCode.SERVER, json_output)
     except SDKError as exc:
         _fail("error", exc.message, 1, json_output)
+    except PydanticValidationError as exc:
+        _fail("server", f"Unexpected response from the API: {exc}", ExitCode.SERVER, json_output)
 
 
 def _fail(kind: ErrorKind, message: str, code: int, json_output: bool) -> None:

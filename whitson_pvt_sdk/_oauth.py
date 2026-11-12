@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 import httpx
@@ -51,7 +51,7 @@ class TokenResponse(BaseModel):
         return value
 
     def expires_at(self) -> datetime:
-        return datetime.now(timezone.utc) + timedelta(seconds=self.expires_in)
+        return datetime.now(UTC) + timedelta(seconds=self.expires_in)
 
 
 class OAuthError(BaseModel):

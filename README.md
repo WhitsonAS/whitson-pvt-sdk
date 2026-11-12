@@ -2,7 +2,7 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/WhitsonAS/whitson-pvt-sdk/blob/main/LICENSE)
 
-HTTP client for the whitson PVT external API. Python 3.10+.
+HTTP client for the whitson PVT external API. Python 3.11+.
 
 ## Install
 
@@ -58,6 +58,7 @@ a fall-through. A stored login that the authorization server no longer accepts r
 
 2.0 authenticates only with API tokens and talks only to external API v2.
 
+- Python 3.11 or newer is required; 3.10 is no longer supported. Stay on 1.x for Python 3.10.
 - Removed: `ClientCredentials`, the `credentials=` argument, the `/auth/token`
   exchange, `client.get_access_token()`, `whitson_pvt_sdk.auth.TokenManager` and
   `TokenData`. Pass `token=` or set `WHITSON_PVT_TOKEN` instead; the bearer is the token you
@@ -198,6 +199,18 @@ Limit defaults to the API default (usually 20) when omitted. `iterate()` and
 All five resources also accept `name=` on `list()`, `iterate()`, and `list_all()`.
 This is a case-insensitive exact match; the API trims surrounding whitespace.
 
+### Any route
+
+`client.request(method, path, params=..., body=...)` calls an external v2 route that has no
+resource method and returns an `ApiResponse` (`status_code`, `headers`, `content` bytes). `path`
+is relative to `/external/v2` (a leading `/external/v2` is accepted); a host, `..`,
+percent-encoding or a query string in it raises `ConfigurationError` before any request.
+
+```python
+response = client.request("GET", "/samples/345")
+sample = json.loads(response.content)
+```
+
 ### Staged imports and OSDU export
 
 `client.import_sessions` exposes archive upload, inspection, per-record resolution,
@@ -226,8 +239,8 @@ More runnable examples are available in [examples](https://github.com/WhitsonAS/
 
 ## Command line
 
-The `wpvt` command is an optional extra; the library itself keeps its two runtime dependencies
-(httpx and pydantic).
+The `wpvt` command is an optional extra (Typer, keyring and FastMCP); the library itself keeps
+its two runtime dependencies (httpx and pydantic).
 
 ```bash
 pip install "whitson-pvt-sdk[cli]"      # or: uv tool install "whitson-pvt-sdk[cli]"
@@ -264,9 +277,99 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   tokens when the authorization server offers revocation.
 - `wpvt --version` prints the version.
 
-The URL comes from `--url`, else `WHITSON_PVT_URL`, else the default login. Every command takes
-`--json`: one JSON document on stdout, errors as one JSON document (`error`, `message`) on stderr.
-Progress messages (the login URL, the device code) go to stderr.
+The URL comes from `--url`, else `WHITSON_PVT_URL`, else the default login. Commands that report
+take `--json`: one JSON document on stdout; errors go to stderr, as one JSON document (`error`,
+`message`) with `--json`. Progress messages (the login URL, the device code) go to stderr.
+
+### Data commands
+
+For what an MCP tool result cannot carry: full tables, whole samples, many records at once. Each
+command calls the external API through `WhitsonPVTClient()` with the same URL and credential as
+above (`WHITSON_PVT_URL` and `WHITSON_PVT_TOKEN`, else the default login) and adds no logic of its
+own.
+
+| Command | Does |
+| --- | --- |
+| `wpvt regions list`, `wpvt wells list --region ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt black-oil-tables list --fluid-model ID` | One page (`--limit`, `--cursor`), or every page with `--all`; `id` and `name` per line, or `{"items": [...], "next_cursor": ...}` with `--json` |
+| `wpvt samples list --well ID` | Every sample of a well |
+| `wpvt <resource> get ID` | The resource as JSON |
+| `wpvt samples export ID... --out DIR` | One directory per sample, see below |
+| `wpvt black-oil-tables export ID --out FILE [--format csv]` | The whole table as JSON, or its rows as CSV with units in the header |
+| `wpvt reports export REPORT_ID --out FILE` | The report archive (`--format osdu`, `--native-payload`, `--structured-experiments`) |
+| `wpvt reports import FILE [--region ID] [--acknowledge-suggestions] [--preflight]` | Import an archive, or only check it; prints the result |
+| `wpvt calc flash\|saturation-pressure\|phase-envelope --input FILE [--out FILE]` | Validate the request with the SDK's model and run it; `-` reads stdin |
+| `wpvt api [METHOD] PATH` | Any external v2 route, like `gh api` |
+
+```console
+$ wpvt wells list --region 12 --all --json > wells.json
+$ wpvt samples export 345 346 --out ./samples
+Wrote sample 345 to samples/345
+Wrote sample 346 to samples/346
+$ wpvt calc flash --sample 345 --fluid-model 78 --input conditions.json --out flash.json
+```
+
+`samples export` writes `DIR/<sample id>/` with `index.json` (layout, units convention, SDK and API
+version), `sample.json` (the sample without its compositions and experiments),
+`compositions/<field>.json` (one per composition, such as `gas_composition`) and
+`experiments/<n>-<type>.json` (one per experiment, in order, such as `1-CCE.json`). Directory and
+file names come only from ids, positions and experiment types, never from names stored on the
+server. A sample directory that exists and is not empty is refused unless `--force`, which
+replaces it. Values are in the units the API returns: a quantity's unit is in the field of the
+same name with `_unit` appended.
+
+`calc` reads the request from `--input`. With `--sample ID --fluid-model ID` the feed composition
+comes from the stored sample through `calculations.get_sample_feed_composition`
+(`--source slate_to_slate_converted`, the default, or `adjusted_compositions`), and `--input` holds
+the rest of the request without `fluid_model_id` or `feed_composition`; it can be left out for a
+phase envelope. `--sample` and `--fluid-model` go together, and a request file that sets either
+field is refused.
+
+`wpvt api` sends any external v2 route with the same credential. PATH is relative to
+`/external/v2`; a leading `/external/v2` is accepted, so the `full_data` route in an MCP tool
+result works as given. Absolute URLs, `..`, percent-encoding, backslashes, empty segments and
+query strings in PATH are refused before any request, so the credential never leaves the
+deployment's external API. METHOD defaults to GET, or POST with `--data`.
+
+```console
+$ wpvt api --list                                   # every route, from the deployment's OpenAPI
+$ wpvt api --describe GET /samples/{sample_id}      # parameters and schema names
+$ wpvt api /regions/12/wells -q limit=250 --paginate --out wells.json
+$ wpvt api GET /external/v2/samples/345 --out sample-345.json
+$ wpvt api /calculations/phase-envelope -d @request.json
+```
+
+- `-q KEY=VALUE` adds a query parameter; `-d` takes inline JSON, `@FILE` or `-` for stdin, and is
+  checked to be a JSON object or list of objects before sending.
+- `--paginate` follows `pagination.next_cursor` on a GET and prints one document: the first
+  page's envelope with the list concatenated across pages and
+  `"pagination": {"next_cursor": null, "prev_cursor": null}`. A response without cursor
+  pagination is refused rather than guessed at.
+- `--include` prints the status and the rate-limit headers to stderr.
+- `--list` and `--describe` read `/external/v2/docs/openapi.json` from the deployment each time;
+  add `--json` for one document. There is no query language; pipe to `jq`.
+
+### `wpvt mcp`
+
+`wpvt mcp` serves the deployment's MCP tools over stdio for an agent host, using the same login
+as the rest of `wpvt`. It is a proxy to `<deployment>/mcp`: the tools are defined by the server,
+not by the SDK.
+
+```bash
+claude mcp add wpvt -- wpvt mcp
+codex mcp add wpvt -- wpvt mcp
+```
+
+- MCP currently needs a login from `wpvt auth login`; the server refuses API tokens
+  (`whitson_pvt_...`) on MCP, and `wpvt mcp` says so when `WHITSON_PVT_TOKEN` is set.
+- It never starts a login or opens a browser. With no login, a login that is no longer valid,
+  a credential the server refuses, or an unreachable deployment, it exits before serving with
+  the message on stderr, so the host shows the server as failed. A login that stops working while
+  serving turns into a tool error naming `wpvt auth login --url ...`.
+- The stored login renews itself, is persisted under the store's lock and goes only to its own
+  deployment. Every request carries `X-PVT-Client: wpvt/<version>`.
+- stdout carries only MCP messages; diagnostics go to stderr (`--verbose` for more). Tokens are
+  never logged.
+- `--url` picks the deployment; otherwise `WHITSON_PVT_URL`, else the default login.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -575,7 +678,8 @@ whitson_pvt_sdk/
 ├── _store.py                # the credential store: credentials.json, keyring, lock
 ├── _refresh.py              # renewal of a stored login under the store lock
 ├── _oauth.py                # OAuth/OIDC wire protocol: /auth/config, discovery, token requests
-├── cli/                     # the wpvt command (Typer; the cli extra)
+├── cli/                     # the wpvt command (Typer; the cli extra): auth, data commands,
+│                            #   export, calc, api, mcp
 ├── http.py                  # HTTPTransport (httpx, retries, error mapping)
 ├── errors.py                # SDKError, ConfigurationError, ResponseError, ...
 ├── shared/models.py         # hand-maintained shared models

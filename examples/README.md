@@ -6,7 +6,7 @@ License: [Apache-2.0](https://github.com/WhitsonAS/whitson-pvt-sdk/blob/main/LIC
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - The whitson PVT SDK
 - Optional: `python-dotenv` for loading local `.env` files
 

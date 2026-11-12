@@ -5,11 +5,11 @@ description = "whitson PVT SDK — HTTP client for the whitson PVT external API"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Whitson AS" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["httpx>=0.28.0", "pydantic>=2.12.0"]
 
 [project.optional-dependencies]
-cli = ["typer>=0.29.0", "keyring>=25.0"]
+cli = ["typer>=0.29.0", "keyring>=25.0", "fastmcp>=4.1,<4.2"]
 
 [project.scripts]
 wpvt = "whitson_pvt_sdk.cli:main"
@@ -32,7 +32,7 @@ module-root = "."
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "TID251", "UP", "W"]
@@ -61,6 +61,7 @@ dev = [
   "python-dotenv>=1.2.0",
   "typer>=0.29.0",
   "keyring>=25.0",
+  "fastmcp>=4.1,<4.2",
 ]
 
 [tool.pytest.ini_options]

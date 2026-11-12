@@ -1,5 +1,5 @@
 import os
-from collections.abc import Generator
+from collections.abc import Generator, MutableMapping
 from typing import Literal
 
 import httpx
@@ -115,31 +115,30 @@ def _login_invalid(base_url: str, reason: str) -> LoginError:
     )
 
 
-class CredentialAuth(httpx.Auth):
-    requires_request_body = True
-
+class BearerSource:
     def __init__(self, credential: Credential) -> None:
-        self._credential = credential
+        self._credential: Credential = credential
         self._store = CredentialStore.from_environment()
 
-    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+    def current(self, url: str | httpx.URL) -> SecretStr:
         match self._credential:
-            case ApiToken(token=token):
-                _set_bearer(request, token)
-                yield request
+            case ApiToken() as api_token:
+                return api_token.token
             case StoredLogin() as login:
-                if not same_origin(request.url, login.base_url):
+                if not same_origin(url, login.base_url):
+                    target = httpx.URL(url)
                     raise ConfigurationError(
                         f"Refusing to send the stored login for {login.base_url} to "
-                        f"{request.url.scheme}://{request.url.netloc.decode()}."
+                        f"{target.scheme}://{target.netloc.decode()}."
                     )
-                login = self._adopt(usable_login(login, self._store))
-                _set_bearer(request, login.access_token)
-                response = yield request
-                if response.status_code == 401:
-                    login = self._adopt(replace_access_token(login, self._store))
-                    _set_bearer(request, login.access_token)
-                    yield request
+                return self._adopt(usable_login(login, self._store)).access_token
+
+    def renewed_after_rejection(self) -> SecretStr | None:
+        match self._credential:
+            case ApiToken():
+                return None
+            case StoredLogin() as login:
+                return self._adopt(replace_access_token(login, self._store)).access_token
 
     def _adopt(self, outcome: RefreshOutcome) -> StoredLogin:
         match outcome:
@@ -150,5 +149,21 @@ class CredentialAuth(httpx.Auth):
                 raise _login_invalid(base_url, reason)
 
 
-def _set_bearer(request: httpx.Request, token: SecretStr) -> None:
-    request.headers["Authorization"] = f"Bearer {token.get_secret_value()}"
+class CredentialAuth(httpx.Auth):
+    requires_request_body = True
+
+    def __init__(self, credential: Credential) -> None:
+        self._bearer = BearerSource(credential)
+
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        set_bearer(request.headers, self._bearer.current(request.url))
+        response = yield request
+        if response.status_code == 401:
+            renewed = self._bearer.renewed_after_rejection()
+            if renewed is not None:
+                set_bearer(request.headers, renewed)
+                yield request
+
+
+def set_bearer(headers: MutableMapping[str, str], token: SecretStr) -> None:
+    headers["Authorization"] = f"Bearer {token.get_secret_value()}"
