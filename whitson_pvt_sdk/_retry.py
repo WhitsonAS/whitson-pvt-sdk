@@ -1,10 +1,13 @@
 import email.utils
+import math
 import random
 import time
 
 import httpx2
 
 from whitson_pvt_sdk.shared.models import HTTPMethod, RetryConfig
+
+MAX_SERVER_DELAY_SECONDS = 60.0
 
 
 def retry_delay(
@@ -20,7 +23,9 @@ def retry_delay(
             status == 429 or method in config.methods
         ):
             server_delay = retry_after(outcome)
-            return _backoff(config, attempt) if server_delay is None else server_delay
+            if server_delay is None:
+                return _backoff(config, attempt)
+            return min(server_delay, MAX_SERVER_DELAY_SECONDS)
         case httpx2.TransportError() if method in config.methods:
             return _backoff(config, attempt)
         case _:
@@ -33,33 +38,37 @@ def _backoff(config: RetryConfig, attempt: int) -> float:
 
 
 def retry_after(response: httpx2.Response) -> float | None:
-    value = response.headers.get("retry-after-ms")
-    if value is not None:
-        try:
-            return max(float(value) / 1000, 0)
-        except ValueError:
-            pass
+    milliseconds = _seconds(response.headers.get("retry-after-ms"))
+    if milliseconds is not None:
+        return milliseconds / 1000
 
     value = response.headers.get("retry-after")
     if value is None:
         return _rate_limit_reset_after(response)
+    seconds = _seconds(value)
+    if seconds is not None:
+        return seconds
     try:
-        return max(float(value), 0)
-    except ValueError:
-        try:
-            retry_date = email.utils.parsedate_to_datetime(value)
-        except (TypeError, ValueError):
-            return _rate_limit_reset_after(response)
-        if retry_date is None:
-            return _rate_limit_reset_after(response)
-        return max(retry_date.timestamp() - time.time(), 0)
+        retry_date = email.utils.parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return _rate_limit_reset_after(response)
+    if retry_date is None:
+        return _rate_limit_reset_after(response)
+    return max(retry_date.timestamp() - time.time(), 0)
 
 
 def _rate_limit_reset_after(response: httpx2.Response) -> float | None:
-    value = response.headers.get("x-ratelimit-reset")
-    if value is None or response.status_code != 429:
+    reset = _seconds(response.headers.get("x-ratelimit-reset"))
+    if reset is None or response.status_code != 429:
+        return None
+    return max(reset - time.time(), 0)
+
+
+def _seconds(value: str | None) -> float | None:
+    if value is None:
         return None
     try:
-        return max(float(value) - time.time(), 0)
+        number = float(value)
     except ValueError:
         return None
+    return number if math.isfinite(number) and number >= 0 else None

@@ -1,3 +1,5 @@
+import logging
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Annotated, Literal
@@ -30,20 +32,39 @@ class ErrorReport(BaseModel):
     message: str
 
 
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def _printable(text: str) -> str:
+    return _CONTROL.sub(lambda match: f"\\x{ord(match.group()):02x}", text)
+
+
 def note(message: str) -> None:
-    typer.echo(message, err=True)
+    typer.echo(_printable(message), err=True)
 
 
 def emit(report: BaseModel, text: str, *, json_output: bool) -> None:
-    typer.echo(report.model_dump_json(indent=2) if json_output else text)
+    typer.echo(report.model_dump_json(indent=2) if json_output else _printable(text))
 
 
 def emit_data(data: BaseModel) -> None:
     typer.echo(data.model_dump_json(indent=2))
 
 
+class _NoteHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        note(self.format(record))
+
+
+_SDK_LOGGER = logging.getLogger("whitson_pvt_sdk")
+
+
 @contextmanager
 def reporting(*, json_output: bool) -> Iterator[None]:
+    # Without a handler, Python's last-resort handler would print SDK warnings unescaped, and
+    # with --json they would break the one JSON document on stderr.
+    log_handler = logging.NullHandler() if json_output else _NoteHandler()
+    _SDK_LOGGER.addHandler(log_handler)
     try:
         yield
     except ConfigurationError as exc:
@@ -58,9 +79,13 @@ def reporting(*, json_output: bool) -> Iterator[None]:
         _fail("error", exc.message, 1, json_output)
     except PydanticValidationError as exc:
         _fail("server", f"Unexpected response from the API: {exc}", ExitCode.SERVER, json_output)
+    finally:
+        _SDK_LOGGER.removeHandler(log_handler)
 
 
 def _fail(kind: ErrorKind, message: str, code: int, json_output: bool) -> None:
     report = ErrorReport(error=kind, message=message)
-    typer.echo(report.model_dump_json() if json_output else f"Error: {message}", err=True)
+    typer.echo(
+        report.model_dump_json() if json_output else _printable(f"Error: {message}"), err=True
+    )
     raise typer.Exit(code)

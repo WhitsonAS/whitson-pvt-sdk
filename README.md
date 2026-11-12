@@ -48,7 +48,9 @@ The client resolves its deployment and credential in a fixed order:
 | Credential | `token=` | `WHITSON_PVT_TOKEN` | the stored login for that deployment | `ConfigurationError` naming all three and `wpvt auth login --url <url>` |
 
 An API token (`token=` or `WHITSON_PVT_TOKEN`) is used only with a deployment from `base_url=` or
-`WHITSON_PVT_URL`; with one from the default login it is refused, as below.
+`WHITSON_PVT_URL`; with one from the default login it is refused, as below. It is only sent over
+HTTPS: a plain `http://` URL is refused with `ConfigurationError` unless it is this machine
+(`localhost`, a name under `localhost`, `127.0.0.1` or `::1`).
 
 An API token is sent as the bearer token on every request and wins even when a stored login
 exists for the same deployment, but only to a deployment you named: `base_url=` (`--url`) or
@@ -123,7 +125,8 @@ multipart uploads) are not retried by default, except on HTTP `429` (rate
 limiting).
 
 Retry delays honor `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
-headers when present. `X-RateLimit-Limit` and `X-RateLimit-Remaining` are left
+headers when present, waiting at most 60 s per retry; a value that is negative, infinite or not
+a number counts as absent. `X-RateLimit-Limit` and `X-RateLimit-Remaining` are left
 available on the raw HTTP response internally, but do not affect retry timing.
 
 If retries are exhausted on HTTP `429`, the SDK raises `RateLimitError` with
@@ -280,7 +283,7 @@ Without the `cli` extra, `wpvt` prints its install command and exits with code 2
 ```console
 $ wpvt auth login --url https://example.pvt.whitson.com
 Opened a browser to log in. If it did not open, visit:
-https://whitson.eu.auth0.com/authorize?...
+http://127.0.0.1:52817/start?n=...
 Logged in to https://example.pvt.whitson.com as Ada Lovelace <ada@example.com> (role: project_editor). This login is now the default.
 
 $ wpvt auth status
@@ -297,10 +300,14 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   authorization code flow and PKCE through a one-off listener on `127.0.0.1`, on the first free
   port of 52817, 54631, 57493 and 61287 (the redirect URI must match exactly, so these are the
   ports registered on the login server; the login fails with a message naming them when all are
-  busy). Only a callback carrying this login's `state` ends the wait; any other request to the
-  listener is answered 400 and ignored. It opens a browser only when attached to a terminal;
-  otherwise it prints the URL. `--device` logs in with a code entered on another device, for SSH
-  sessions, containers and sandboxes, on deployments that enable it. The login is stored, and
+  busy). The browser is given a one-time link to the listener, `/start?n=<random>`, which
+  redirects it to the login server, so the login's `state` and PKCE challenge never appear on a
+  command line that other users of the machine can read; if that link is opened a second time,
+  the login stops, since another program may have used it first. Only a callback carrying this
+  login's `state` ends the wait; any other request to the listener is answered 400 or 404 and
+  ignored. It opens a browser only when attached to a terminal; otherwise it prints the link,
+  which must be opened on the same machine. `--device` logs in with a code entered on another
+  device, for SSH sessions, containers and sandboxes, on deployments that enable it. The login is stored, and
   becomes the default, only after `/external/v2/me` accepts it; if that check fails, nothing is
   stored and the previous default stays.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
@@ -481,14 +488,19 @@ one that asks for access to another service, such as another deployment: the tok
 valid there, and the deployment you logged in to could use them against it.
 
 Asking first means: the first login to such a deployment from this machine, and a login after its
-login server changed, shows the deployment host and the login server host, and the audience
-when it is not the deployment itself, and asks to continue (default no). Later logins to the
-same deployment with the same login server ask nothing. Without a terminal, the login is refused
-unless you pass `--yes`, which only answers this question. In Python, pass `confirm=`, a function
-that receives a `FirstUse` or `IssuerChanged` from `whitson_pvt_sdk.login` (each with
-`deployment_host`, `issuer_host`, `foreign_audience` and `describe()`) and returns whether to
-continue; without it, such a login raises `ConfigurationError`. A login that needs no question
-needs no `confirm=`.
+login server or its audience changed, shows the deployment host and the login server host, and
+the audience when it is not the deployment itself, and asks to continue (default no). What is
+remembered is the pair of login server and audience of the stored login for that deployment, so
+later logins to the same deployment with the same login server and the same audience ask
+nothing, and a change of either asks again. Without a terminal, the login is refused unless you
+pass `--yes`, which only answers this question. `--yes` never accepts access to another service:
+when the audience is not the deployment itself, the login is refused with `--yes` and must be
+confirmed at a terminal. In Python, pass `confirm=`, a function that receives a `FirstUse`, `IssuerChanged` or
+`AudienceChanged` from `whitson_pvt_sdk.login` (each with `deployment_host`, `issuer_host`,
+`foreign_audience` and `describe()`; `IssuerChanged` adds `previous_issuer_host` and
+`AudienceChanged` adds `previous_audience`) and returns whether to continue; ask a person
+whenever `foreign_audience` is set. Without it, such a login raises `ConfigurationError`. A login
+that needs no question needs no `confirm=`.
 
 `login()` also takes `verify=`, a function called with the new login before it is stored;
 `login()` returns its result. If it raises, nothing is stored and the previous default stays.
@@ -504,8 +516,9 @@ Device login (`--device`) is available only on deployments that enable it (`devi
 machine with a browser or use an API token in `WHITSON_PVT_TOKEN`.
 
 These checks apply to logging in. An API token (`token=` or `WHITSON_PVT_TOKEN`) is sent to
-the URL you give in `base_url=`, `--url` or `WHITSON_PVT_URL`, never to one taken from the
-default login, and a stored login only ever to its own deployment.
+the URL you give in `base_url=`, `--url` or `WHITSON_PVT_URL`, over HTTPS (plain HTTP only to
+this machine), never to one taken from the default login, and a stored login only ever to its
+own deployment.
 
 Library code never starts a login. Scripts and agents should use `WHITSON_PVT_TOKEN`; a login
 made with `wpvt auth login` is for people at a terminal, and every SDK client on the machine then
@@ -550,6 +563,10 @@ or delete the keyring entries then, and says so.
   `whitson_pvt_sdk.login.login`, starts a login, and only to a trusted deployment that names
   whitson's login server, or after you confirm the hosts (see above).
 - Tokens, refresh tokens, authorization codes and PKCE verifiers are never logged or printed.
+- **Terminal-safe output.** Text the server controls (names, error messages, login server
+  errors) is printed with control characters other than newline and tab shown escaped, such as
+  `\x1b`, so a response cannot move the cursor or retitle the terminal. `--json` output is
+  JSON-escaped already; `wpvt api` writes the response body unchanged, as `curl` does.
 
 ## Development
 

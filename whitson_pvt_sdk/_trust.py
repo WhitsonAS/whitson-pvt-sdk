@@ -184,11 +184,39 @@ class IssuerChanged(BaseModel):
         )
 
 
-Confirmation = FirstUse | IssuerChanged
+class AudienceChanged(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    deployment_host: str
+    issuer_host: str
+    previous_audience: str
+    foreign_audience: str | None
+
+    def describe(self) -> str:
+        now = (
+            "itself"
+            if self.foreign_audience is None
+            else f"{self.foreign_audience!r}, which is not {self.deployment_host} itself,"
+        )
+        return (
+            f"{self.deployment_host} now asks for access to {now} instead of "
+            f"{self.previous_audience!r} as at the last login. You will sign in at "
+            f"{self.issuer_host}. Continue only if you expected this change."
+        )
+
+
+Confirmation = FirstUse | IssuerChanged | AudienceChanged
+
+
+class Remembered(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    issuer: str
+    audience: str
 
 
 def login_decision(
-    host: TrustedHost, issuer: str, audience: str, previous_issuer: str | None
+    host: TrustedHost, issuer: str, audience: str, remembered: Remembered | None
 ) -> Proceed | Confirmation:
     pinned = KNOWN_ISSUERS.includes(issuer)
     own_audience = _is_own_audience(host.url, audience)
@@ -212,20 +240,29 @@ def login_decision(
         case TrustedLoopback(url=url) | TrustedByOverride(url=url):
             deployment_host = host_name(url)
             foreign_audience = None if own_audience else audience
-            if previous_issuer is None:
-                return FirstUse(
-                    deployment_host=deployment_host,
-                    issuer_host=host_name(issuer),
-                    foreign_audience=foreign_audience,
-                )
-            if previous_issuer.rstrip("/") != issuer.rstrip("/"):
-                return IssuerChanged(
-                    deployment_host=deployment_host,
-                    issuer_host=host_name(issuer),
-                    previous_issuer_host=host_name(previous_issuer),
-                    foreign_audience=foreign_audience,
-                )
-            return Proceed()
+            match remembered:
+                case None:
+                    return FirstUse(
+                        deployment_host=deployment_host,
+                        issuer_host=host_name(issuer),
+                        foreign_audience=foreign_audience,
+                    )
+                case Remembered(issuer=previous) if previous.rstrip("/") != issuer.rstrip("/"):
+                    return IssuerChanged(
+                        deployment_host=deployment_host,
+                        issuer_host=host_name(issuer),
+                        previous_issuer_host=host_name(previous),
+                        foreign_audience=foreign_audience,
+                    )
+                case Remembered(audience=previous) if previous != audience:
+                    return AudienceChanged(
+                        deployment_host=deployment_host,
+                        issuer_host=host_name(issuer),
+                        previous_audience=previous,
+                        foreign_audience=foreign_audience,
+                    )
+                case Remembered():
+                    return Proceed()
 
 
 def _is_own_audience(url: str, audience: str) -> bool:
@@ -242,16 +279,21 @@ class InsecureUrlError(ValueError):
     pass
 
 
+def is_secure_url(url: str | httpx2.URL) -> bool:
+    parsed = httpx2.URL(url)
+    if parsed.scheme == "https":
+        return bool(parsed.host)
+    return parsed.scheme == "http" and ALLOWLIST.is_loopback(host_name(parsed))
+
+
 def _secure_url(value: str) -> str:
     try:
-        url = httpx2.URL(value)
+        secure = is_secure_url(value)
     except httpx2.InvalidURL:
         raise ValueError("must be a URL") from None
-    if url.scheme == "https" and url.host:
-        return value
-    if url.scheme == "http" and ALLOWLIST.is_loopback(host_name(url)):
-        return value
-    raise InsecureUrlError("must be an https URL (http only on this machine)")
+    if not secure:
+        raise InsecureUrlError("must be an https URL (http only on this machine)")
+    return value
 
 
 SecureUrl = Annotated[str, AfterValidator(_secure_url)]

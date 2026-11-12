@@ -13,6 +13,7 @@ from whitson_pvt_sdk._refresh import (
     usable_login,
 )
 from whitson_pvt_sdk._store import ActiveLogin, CredentialStore, InvalidLogin
+from whitson_pvt_sdk._trust import is_secure_url
 from whitson_pvt_sdk.credentials import (
     ApiToken,
     Credential,
@@ -109,7 +110,12 @@ def resolve_credential(deployment: ResolvedUrl, token: str | None) -> ResolvedCr
                 f"login ({url}). An API token is only sent to a URL given explicitly: set "
                 f"{URL_ENV_VAR} (or pass --url or base_url=), or drop the token to use the login."
             )
-        case UrlFromArgument() | UrlFromEnvironment():
+        case UrlFromArgument(url=url) | UrlFromEnvironment(url=url):
+            if not is_secure_url(url):
+                raise ConfigurationError(
+                    f"Refusing to send an API token over plain HTTP to {url}; use https:// "
+                    "(http only for this machine, such as http://localhost)."
+                )
             return given
 
 

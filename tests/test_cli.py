@@ -197,6 +197,14 @@ OTHER_DEPLOYMENT = {"audience": "https://prod.pvt.whitson.com/mcp"}
         ("https://pvt.example.org", OTHER_LOGIN_SERVER, ["--trust-host"], 2, "--yes"),
         ("http://localhost:4000", OTHER_LOGIN_SERVER, [], 2, "--yes"),
         ("http://localhost:4000", OTHER_DEPLOYMENT, [], 2, "prod.pvt.whitson.com/mcp"),
+        ("http://localhost:4000", OTHER_DEPLOYMENT, ["--yes"], 2, "without --yes"),
+        (
+            "https://pvt.example.org",
+            OTHER_DEPLOYMENT,
+            ["--trust-host", "--yes"],
+            2,
+            "without --yes",
+        ),
         (
             "https://dev.pvt.whitson.com",
             OTHER_LOGIN_SERVER,
@@ -223,6 +231,8 @@ OTHER_DEPLOYMENT = {"audience": "https://prod.pvt.whitson.com/mcp"}
         "trust-host-without-yes",
         "localhost-without-yes",
         "localhost-other-audience-without-yes",
+        "localhost-other-audience-yes",
+        "trust-host-other-audience-yes",
         "deployment",
         "deployment-trust-host",
         "deployment-other-audience",
@@ -231,7 +241,10 @@ OTHER_DEPLOYMENT = {"audience": "https://prod.pvt.whitson.com/mcp"}
 def test_login_to_another_login_server_asks_or_is_refused(
     httpx2_mock, store, url, config, options, exit_code, message
 ):
-    httpx2_mock.add_response(url=f"{url}/external/v2/auth/config", json={**AUTH_CONFIG, **config})
+    httpx2_mock.add_response(
+        url=f"{url}/external/v2/auth/config",
+        json={**AUTH_CONFIG, "audience": f"{url}/mcp", **config},
+    )
 
     result = runner.invoke(app, ["auth", "login", "--url", url, "--device", "--json", *options])
 
@@ -328,6 +341,45 @@ def test_login_whose_identity_check_fails_keeps_the_previous_default(
     assert store.get(base_url) is None
     assert store.default_url() == previous
     _no_secrets(result)
+
+
+TERMINAL_TITLE = "\x1b]0;x\x07"
+
+
+@pytest.mark.parametrize(
+    ("argv", "route", "response"),
+    [
+        (
+            ["regions", "list"],
+            "regions",
+            {
+                "json": {
+                    "regions": [{"id": 1, "name": f"North {TERMINAL_TITLE}"}],
+                    "pagination": {"next_cursor": f"c{TERMINAL_TITLE}", "prev_cursor": None},
+                }
+            },
+        ),
+        (["auth", "status"], "me", {"json": {**IDENTITY, "name": f"Ada {TERMINAL_TITLE}"}}),
+        (
+            ["regions", "list"],
+            "regions",
+            {"status_code": 400, "json": {"message": f"Bad {TERMINAL_TITLE}"}},
+        ),
+    ],
+    ids=["list-and-cursor", "me", "server-error"],
+)
+def test_server_text_cannot_send_control_sequences_to_the_terminal(
+    base_url, httpx2_mock, monkeypatch, argv, route, response
+):
+    monkeypatch.setenv("WHITSON_PVT_URL", base_url)
+    monkeypatch.setenv("WHITSON_PVT_TOKEN", "env-token")
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/{route}", **response)
+
+    result = runner.invoke(app, argv)
+
+    output = result.stdout + result.stderr
+    assert "\x1b" not in output and "\x07" not in output
+    assert "\\x1b]0;x\\x07" in output
 
 
 @pytest.mark.parametrize(

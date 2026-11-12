@@ -32,6 +32,7 @@ from whitson_pvt_sdk._oauth import (
 )
 from whitson_pvt_sdk._store import CredentialStore, KeyringCleanup, RemovedLogin
 from whitson_pvt_sdk._trust import (
+    AudienceChanged,
     Confirmation,
     FirstUse,
     IssuerChanged,
@@ -46,6 +47,7 @@ from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
 __all__ = [
     "CALLBACK_PORTS",
+    "AudienceChanged",
     "BrowserLogin",
     "Confirmation",
     "DeviceLogin",
@@ -108,7 +110,7 @@ def login(
             trusted,
             config.issuer,
             config.audience,
-            CredentialStore.from_environment().issuer(url),
+            CredentialStore.from_environment().remembered(url),
         )
         if isinstance(method, DeviceLogin) and not config.device_login:
             raise ConfigurationError(
@@ -118,7 +120,7 @@ def login(
         match decision:
             case Proceed():
                 pass
-            case FirstUse() | IssuerChanged() as confirmation:
+            case FirstUse() | IssuerChanged() | AudienceChanged() as confirmation:
                 if confirm is None:
                     raise ConfigurationError(
                         f"{confirmation.describe()} Pass confirm= to login() to ask the user."
@@ -187,6 +189,16 @@ def _scope(config: AuthConfig) -> str:
     return " ".join([*config.scopes, "offline_access"])
 
 
+class _AwaitingStart(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    authorize_url: str
+
+
+class _Started(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
 class _CodeReceived(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -199,6 +211,10 @@ class _AuthorizationRefused(BaseModel):
     error: OAuthError
 
 
+class _StartedTwice(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
 class _StateMismatch(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -208,6 +224,8 @@ class _CallbackTimedOut(BaseModel):
 
 
 _Callback = _CodeReceived | _AuthorizationRefused
+_Listening = _AwaitingStart | _Started
+_Finished = _Callback | _StartedTwice
 
 
 def _browser_flow(
@@ -221,8 +239,8 @@ def _browser_flow(
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
     state = secrets.token_urlsafe(32)
-    with _callback_server(state) as server:
-        redirect_uri = f"http://127.0.0.1:{server.server_address[1]}/callback"
+
+    def authorize_url(redirect_uri: str) -> str:
         params = {
             "response_type": "code",
             "client_id": config.client_id,
@@ -235,16 +253,18 @@ def _browser_flow(
         }
         if config.connection is not None:
             params["connection"] = config.connection
-        authorize_url = str(httpx2.URL(provider.authorization_endpoint).copy_merge_params(params))
-        if open_browser is not None and open_browser(authorize_url):
-            output(f"Opened a browser to log in. If it did not open, visit:\n{authorize_url}")
+        return str(httpx2.URL(provider.authorization_endpoint).copy_merge_params(params))
+
+    with _callback_server(state, authorize_url) as server:
+        if open_browser is not None and open_browser(server.start_url):
+            output(f"Opened a browser to log in. If it did not open, visit:\n{server.start_url}")
         else:
             output(
-                f"Open this URL in a browser on this machine to log in:\n{authorize_url}\n"
+                f"Open this URL in a browser on this machine to log in:\n{server.start_url}\n"
                 + _without_a_browser(config)
             )
-        callback = server.wait(timeout)
-    match callback:
+        outcome = server.wait(timeout)
+    match outcome:
         case _CodeReceived(code=code):
             result = request_token(
                 http,
@@ -254,7 +274,7 @@ def _browser_flow(
                     "client_id": config.client_id,
                     "code": code.get_secret_value(),
                     "code_verifier": verifier,
-                    "redirect_uri": redirect_uri,
+                    "redirect_uri": server.redirect_uri,
                 },
             )
             match result:
@@ -264,15 +284,20 @@ def _browser_flow(
                     raise LoginError(f"The login was refused: {error.describe()}.")
         case _AuthorizationRefused(error=error):
             raise LoginError(f"The login was refused: {error.describe()}.")
+        case _StartedTwice():
+            raise LoginError(
+                "The login link was opened more than once, so another program on this machine "
+                "may have used it first; the login was stopped. Log in again."
+            )
         case _CallbackTimedOut():
             raise LoginError(f"Timed out after {timeout:.0f} s waiting for the browser login.")
 
 
-def _callback_server(state: str) -> "_CallbackServer":
+def _callback_server(state: str, authorize_url: Callable[[str], str]) -> "_CallbackServer":
     failure: OSError | None = None
     for port in CALLBACK_PORTS:
         try:
-            return _CallbackServer(state, port)
+            return _CallbackServer(port, state, authorize_url)
         except OSError as exc:
             failure = exc
     raise LoginError(
@@ -287,25 +312,35 @@ class _CallbackServer(HTTPServer):
     # SO_REUSEADDR on Windows would let this bind over another program's listener on the port.
     allow_reuse_address = sys.platform != "win32"
 
-    def __init__(self, state: str, port: int) -> None:
-        self.expected_state = state
-        self.callback: _Callback | None = None
+    def __init__(self, port: int, state: str, authorize_url: Callable[[str], str]) -> None:
         super().__init__(("127.0.0.1", port), _CallbackHandler)
+        origin = f"http://127.0.0.1:{self.server_address[1]}"
+        nonce = secrets.token_urlsafe(32)
+        self.expected_state = state
+        self.expected_nonce = nonce
+        self.redirect_uri = f"{origin}/callback"
+        self.start_url = f"{origin}/start?n={nonce}"
+        self.phase: _Listening | _Finished = _AwaitingStart(
+            authorize_url=authorize_url(self.redirect_uri)
+        )
 
     def server_bind(self) -> None:
         socketserver.TCPServer.server_bind(self)
         self.server_name = "127.0.0.1"
         self.server_port = self.server_address[1]
 
-    def wait(self, timeout: float) -> _Callback | _CallbackTimedOut:
+    def wait(self, timeout: float) -> _Finished | _CallbackTimedOut:
         deadline = time.monotonic() + timeout
-        while self.callback is None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return _CallbackTimedOut()
-            self.timeout = remaining
-            self.handle_request()
-        return self.callback
+        while True:
+            match self.phase:
+                case _AwaitingStart() | _Started():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return _CallbackTimedOut()
+                    self.timeout = remaining
+                    self.handle_request()
+                case _CodeReceived() | _AuthorizationRefused() | _StartedTwice() as finished:
+                    return finished
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
@@ -314,21 +349,45 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         target = urlsplit(self.path)
-        if target.path != "/callback" or self.server.callback is not None:
-            self._page(404, "Not found.")
-            return
-        match _parse_callback(parse_qs(target.query), self.server.expected_state):
-            case _StateMismatch():
-                self._page(400, "This is not the login this terminal is waiting for.")
-            case _CodeReceived() as callback:
-                self.server.callback = callback
-                self._page(200, "Logged in to whitson PVT. You can close this window.")
-            case _AuthorizationRefused() as callback:
-                self.server.callback = callback
-                self._page(400, "The whitson PVT login failed. Return to the terminal.")
+        query = parse_qs(target.query)
+        match (target.path, self.server.phase):
+            case ("/start", _AwaitingStart(authorize_url=authorize_url)) if self._nonce_matches(
+                query
+            ):
+                self.server.phase = _Started()
+                self._redirect(authorize_url)
+            case ("/start", _Started()) if self._nonce_matches(query):
+                self.server.phase = _StartedTwice()
+                self._page(400, "This login link was already used. Return to the terminal.")
+            case ("/callback", _Started()):
+                self._callback(query)
+            case _:
+                self._page(404, "Not found.")
 
     def log_message(self, format: str, *args: object) -> None:
         return
+
+    def _nonce_matches(self, query: dict[str, list[str]]) -> bool:
+        return _matches(_single(query, "n"), self.server.expected_nonce)
+
+    def _callback(self, query: dict[str, list[str]]) -> None:
+        match _parse_callback(query, self.server.expected_state):
+            case _StateMismatch():
+                self._page(400, "This is not the login this terminal is waiting for.")
+            case _CodeReceived() as callback:
+                self.server.phase = callback
+                self._page(200, "Logged in to whitson PVT. You can close this window.")
+            case _AuthorizationRefused() as callback:
+                self.server.phase = callback
+                self._page(400, "The whitson PVT login failed. Return to the terminal.")
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
 
     def _page(self, status: int, message: str) -> None:
         body = (
@@ -344,8 +403,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
 
 def _parse_callback(query: dict[str, list[str]], expected_state: str) -> _Callback | _StateMismatch:
-    state = _single(query, "state")
-    if state is None or not hmac.compare_digest(state, expected_state):
+    if not _matches(_single(query, "state"), expected_state):
         return _StateMismatch()
     error = _single(query, "error")
     if error is not None:
@@ -356,6 +414,11 @@ def _parse_callback(query: dict[str, list[str]], expected_state: str) -> _Callba
     if not code:
         return _AuthorizationRefused(error=OAuthError(error="invalid_request"))
     return _CodeReceived(code=SecretStr(code))
+
+
+def _matches(given: str | None, expected: str) -> bool:
+    # compare_digest refuses non-ASCII str, which a percent-encoded query can carry.
+    return given is not None and hmac.compare_digest(given.encode(), expected.encode())
 
 
 def _single(query: dict[str, list[str]], name: str) -> str | None:

@@ -102,8 +102,22 @@ def test_unusable_authentication_is_rejected(
         ("https://Arg.pvt.whitson.com/", OTHER_URL, "t", "https://arg.pvt.whitson.com", "t"),
         (None, "https://env.pvt.whitson.com", "t", "https://env.pvt.whitson.com", "t"),
         (None, None, None, OTHER_URL, STORED_TOKEN),
+        ("http://localhost:4000", None, "t", "http://localhost:4000", "t"),
+        (None, "http://127.0.0.1:4000", "t", "http://127.0.0.1:4000", "t"),
+        ("http://[::1]:4000", None, "t", "http://[::1]:4000", "t"),
+        (None, "http://api.pvt.localhost:4000", "t", "http://api.pvt.localhost:4000", "t"),
+        ("https://pvt.example.org", None, "t", "https://pvt.example.org", "t"),
     ],
-    ids=["argument", "env-over-default", "default-login"],
+    ids=[
+        "argument",
+        "env-over-default",
+        "default-login",
+        "http-localhost",
+        "http-loopback-address",
+        "http-loopback-ipv6",
+        "http-under-localhost",
+        "https-any-host",
+    ],
 )
 def test_deployment_url_is_resolved(
     httpx2_mock, monkeypatch, store_login, argument, env_url, token, expected, bearer
@@ -118,29 +132,48 @@ def test_deployment_url_is_resolved(
     assert requests[0].headers["Authorization"] == f"Bearer {bearer}"
 
 
+DEFAULT_LOGIN_REFUSAL = (f"default login ({OTHER_URL})", "WHITSON_PVT_URL")
+
+
 @pytest.mark.parametrize(
-    ("explicit", "env", "names"),
+    ("explicit", "env", "argument", "env_url", "names"),
     [
-        (TOKEN, None, "The token= argument"),
-        (None, ENV_TOKEN, "WHITSON_PVT_TOKEN"),
-        (TOKEN, ENV_TOKEN, "The token= argument"),
+        (TOKEN, None, None, None, ("The token= argument", *DEFAULT_LOGIN_REFUSAL)),
+        (None, ENV_TOKEN, None, None, ("WHITSON_PVT_TOKEN", *DEFAULT_LOGIN_REFUSAL)),
+        (TOKEN, ENV_TOKEN, None, None, ("The token= argument", *DEFAULT_LOGIN_REFUSAL)),
+        (TOKEN, None, "http://dev.pvt.whitson.com", None, ("http://dev.pvt.whitson.com", "https")),
+        (None, ENV_TOKEN, None, "http://10.0.0.5:4000", ("http://10.0.0.5:4000", "https")),
+        (
+            None,
+            ENV_TOKEN,
+            None,
+            "http://localhost.evil.example",
+            ("http://localhost.evil.example", "https"),
+        ),
     ],
-    ids=["token", "env", "token-and-env"],
+    ids=[
+        "token",
+        "env",
+        "token-and-env",
+        "http-argument",
+        "http-env-address",
+        "http-localhost-lookalike",
+    ],
 )
-def test_api_token_is_only_sent_to_a_url_given_explicitly(
-    httpx2_mock, monkeypatch, store_login, explicit, env, names
+def test_api_token_is_only_sent_to_a_url_given_explicitly_and_securely(
+    httpx2_mock, monkeypatch, store_login, explicit, env, argument, env_url, names
 ):
     if env is not None:
         monkeypatch.setenv("WHITSON_PVT_TOKEN", env)
+    if env_url is not None:
+        monkeypatch.setenv("WHITSON_PVT_URL", env_url)
     store_login(OTHER_URL, access=STORED_TOKEN)
 
     with pytest.raises(ConfigurationError) as refusal:
-        WhitsonPVTClient(token=explicit)
+        WhitsonPVTClient(token=explicit, base_url=argument)
 
     message = refusal.value.message
-    assert names in message
-    assert f"default login ({OTHER_URL})" in message
-    assert "WHITSON_PVT_URL" in message
+    assert all(name in message for name in names)
     assert TOKEN not in message and ENV_TOKEN not in message
     assert httpx2_mock.get_requests() == []
 

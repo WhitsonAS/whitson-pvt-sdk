@@ -93,9 +93,9 @@ def login_command(
         typer.Option(
             "--yes",
             help="Answer yes to the question asked before the first login to a --trust-host "
-            "deployment, or to a localhost one that names a login server other than whitson's "
-            "or asks for access to another service, and after its login server changed. "
-            "Required there without a terminal.",
+            "deployment, or to a localhost one that names a login server other than whitson's, "
+            "and after its login server changed. Required there without a terminal. It never "
+            "answers a question about access to another service: that needs a terminal.",
         ),
     ] = False,
     json_output: JsonOption = False,
@@ -116,12 +116,20 @@ def login_command(
 
         def confirm(confirmation: Confirmation) -> bool:
             note(confirmation.describe())
+            foreign = confirmation.foreign_audience is not None
+            if yes and foreign:
+                raise ConfigurationError(
+                    "--yes does not accept access to another service. Run the login again "
+                    "without --yes, in a terminal, and answer the question yourself."
+                )
             if yes:
                 return True
             if not interactive:
                 raise ConfigurationError(
-                    "Confirming a login needs a terminal. Check the hosts above and pass --yes "
-                    "to continue."
+                    "Confirming access to another service needs a terminal; run the login in one."
+                    if foreign
+                    else "Confirming a login needs a terminal. Check the hosts above and pass "
+                    "--yes to continue."
                 )
             return typer.confirm("Continue?", default=False, err=True)
 

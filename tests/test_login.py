@@ -15,6 +15,7 @@ from whitson_pvt_sdk.credentials import StoredLogin
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, SDKError
 from whitson_pvt_sdk.login import (
     CALLBACK_PORTS,
+    AudienceChanged,
     BrowserLogin,
     Confirmation,
     DeviceLogin,
@@ -80,16 +81,36 @@ def _form(request):
     return {key: value[0] for key, value in parse_qs(request.content.decode()).items()}
 
 
-def _visit_later(urls, statuses) -> threading.Thread:
-    def visit():
-        for url in urls:
-            try:
-                with urllib.request.urlopen(url, timeout=5) as response:
-                    statuses.append(response.status)
-            except urllib.error.HTTPError as error:
-                statuses.append(error.code)
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None
 
-    thread = threading.Thread(target=visit)
+
+_BROWSER = urllib.request.build_opener(_NoRedirects)
+
+
+def _get(url: str) -> tuple[int, str | None]:
+    try:
+        with _BROWSER.open(url, timeout=5) as response:
+            return response.status, response.headers.get("Location")
+    except urllib.error.HTTPError as error:
+        return error.code, error.headers.get("Location")
+
+
+def _query(url: str) -> dict[str, str]:
+    return {key: value[0] for key, value in parse_qs(urlsplit(url).query).items()}
+
+
+def _browser_later(start_url: str, statuses, then) -> threading.Thread:
+    def browse():
+        if urlsplit(start_url).hostname != "127.0.0.1":
+            return
+        status, authorize = _get(start_url)
+        statuses.append(status)
+        for url in then(authorize or ""):
+            statuses.append(_get(url)[0])
+
+    thread = threading.Thread(target=browse)
     thread.start()
     return thread
 
@@ -97,16 +118,17 @@ def _visit_later(urls, statuses) -> threading.Thread:
 @pytest.mark.usefixtures("authorization_server")
 def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_mock, store):
     httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
-    opened, messages, statuses, visits = [], [], [], []
+    authorized, messages, statuses, visits = [], [], [], []
+
+    def sign_in(authorize: str) -> list[str]:
+        authorized.append(authorize)
+        query = _query(authorize)
+        redirect = query["redirect_uri"]
+        stray = redirect.replace("/callback", "/favicon.ico")
+        return [stray, f"{redirect}?code=the-code&state={query['state']}"]
 
     def open_browser(url: str) -> bool:
-        opened.append(url)
-        query = parse_qs(urlsplit(url).query)
-        redirect = query["redirect_uri"][0]
-        stray = redirect.replace("/callback", "/favicon.ico")
-        visits.append(
-            _visit_later([stray, f"{redirect}?code=the-code&state={query['state'][0]}"], statuses)
-        )
+        visits.append(_browser_later(url, statuses, sign_in))
         return True
 
     stored = login(
@@ -117,18 +139,19 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
     )
     visits.pop().join()
 
-    authorize = parse_qs(urlsplit(opened[0]).query)
-    assert {key: value[0] for key, value in authorize.items() if key not in {"state"}} == {
+    authorize = _query(authorized[0])
+    assert authorized[0].startswith(f"{AUTHORIZE}?")
+    assert {key: value for key, value in authorize.items() if key != "state"} == {
         "response_type": "code",
         "client_id": "cli-client",
-        "redirect_uri": authorize["redirect_uri"][0],
+        "redirect_uri": authorize["redirect_uri"],
         "scope": "read:data write:data offline_access",
         "audience": "https://dev.pvt.whitson.com/mcp",
-        "code_challenge": authorize["code_challenge"][0],
+        "code_challenge": authorize["code_challenge"],
         "code_challenge_method": "S256",
         "connection": "acme-sso",
     }
-    redirect = urlsplit(authorize["redirect_uri"][0])
+    redirect = urlsplit(authorize["redirect_uri"])
     assert (redirect.hostname, redirect.port, redirect.path) == (
         "127.0.0.1",
         CALLBACK_PORTS[0],
@@ -137,14 +160,14 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
     exchange = _form(httpx2_mock.get_requests(url=TOKEN_ENDPOINT)[0])
     verifier = exchange.pop("code_verifier")
     digest = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=")
-    assert digest.decode() == authorize["code_challenge"][0]
+    assert digest.decode() == authorize["code_challenge"]
     assert exchange == {
         "grant_type": "authorization_code",
         "client_id": "cli-client",
         "code": "the-code",
-        "redirect_uri": authorize["redirect_uri"][0],
+        "redirect_uri": authorize["redirect_uri"],
     }
-    assert statuses == [404, 200]
+    assert statuses == [302, 404, 200]
     assert not any(verifier in message or "the-code" in message for message in messages)
     assert stored.access_token.get_secret_value() == "fresh-access"
     assert stored.audience == "https://dev.pvt.whitson.com/mcp"
@@ -159,12 +182,15 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
         httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
     statuses, visits = [], []
 
-    def open_browser(url: str) -> bool:
-        query = parse_qs(urlsplit(url).query)
-        redirect = query["redirect_uri"][0]
+    def sign_in(authorize: str) -> list[str]:
+        query = _query(authorize)
+        redirect = query["redirect_uri"]
         forged = [f"{redirect}?code=forged-code&state=forged-state", f"{redirect}?code=forged-code"]
-        valid = [f"{redirect}?code=the-code&state={query['state'][0]}"] if then_valid else []
-        visits.append(_visit_later(forged + valid, statuses))
+        valid = [f"{redirect}?code=the-code&state={query['state']}"] if then_valid else []
+        return forged + valid
+
+    def open_browser(url: str) -> bool:
+        visits.append(_browser_later(url, statuses, sign_in))
         return True
 
     def attempt():
@@ -181,10 +207,81 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
         assert store.get(base_url) is None
     visits.pop().join()
 
-    assert statuses == [400, 400] + ([200] if then_valid else [])
+    assert statuses == [302, 400, 400] + ([200] if then_valid else [])
     assert [_form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
         ["the-code"] if then_valid else []
     )
+
+
+@pytest.mark.parametrize(
+    ("suffixes", "statuses", "failure"),
+    [
+        ([""], [302, 200], None),
+        (["x", ""], [404, 302, 200], None),
+        (["%C3%A9", ""], [404, 302, 200], None),
+        (["", ""], [302, 400], "opened more than once"),
+    ],
+    ids=["once", "wrong-nonce-ignored", "non-ascii-nonce-ignored", "twice"],
+)
+@pytest.mark.usefixtures("authorization_server")
+def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
+    base_url, httpx2_mock, store, suffixes, statuses, failure
+):
+    if failure is None:
+        httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
+    opened, messages, seen, authorized, visits = [], [], [], [], []
+
+    def browse(start_url: str) -> None:
+        for suffix in suffixes:
+            status, authorize = _get(f"{start_url}{suffix}")
+            seen.append(status)
+            if authorize is not None:
+                authorized.append(authorize)
+        if failure is None:
+            query = _query(authorized[0])
+            seen.append(_get(f"{query['redirect_uri']}?code=the-code&state={query['state']}")[0])
+
+    def open_browser(url: str) -> bool:
+        opened.append(url)
+        if urlsplit(url).hostname == "127.0.0.1":
+            visits.append(threading.Thread(target=browse, args=(url,)))
+            visits[-1].start()
+        return True
+
+    try:
+        outcome: StoredLogin | LoginError = login(
+            base_url,
+            BrowserLogin(open_browser=open_browser, timeout=5),
+            output=messages.append,
+            verify=_keep,
+        )
+    except LoginError as refusal:
+        outcome = refusal
+    for visit in visits:
+        visit.join()
+
+    start = urlsplit(opened[0])
+    assert (start.scheme, start.hostname, start.path, set(_query(opened[0]))) == (
+        "http",
+        "127.0.0.1",
+        "/start",
+        {"n"},
+    )
+    assert not any("state=" in message or "code_challenge" in message for message in messages)
+    assert opened[0] in messages[0]
+    assert seen == statuses
+    assert len(authorized) == 1
+    assert authorized[0].startswith(f"{AUTHORIZE}?")
+    assert [_form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
+        ["the-code"] if failure is None else []
+    )
+    if failure is None:
+        assert isinstance(outcome, StoredLogin)
+        assert store.get(base_url) == ActiveLogin(login=outcome)
+    else:
+        assert isinstance(outcome, LoginError)
+        assert failure in outcome.message
+        assert store.get(base_url) is None
 
 
 @pytest.mark.parametrize(
@@ -280,6 +377,17 @@ def _changed(deployment_host, previous_issuer_host="old-login.example.com"):
     )
 
 
+def _audience_changed(
+    deployment_host, previous_audience, foreign_audience, issuer_host="whitson.eu.auth0.com"
+):
+    return AudienceChanged(
+        deployment_host=deployment_host,
+        issuer_host=issuer_host,
+        previous_audience=previous_audience,
+        foreign_audience=foreign_audience,
+    )
+
+
 OWN = "own"
 
 
@@ -292,7 +400,7 @@ OWN = "own"
             False,
             ISSUER,
             OWN,
-            OLD_ISSUER,
+            (OLD_ISSUER, OWN),
             None,
             None,
             PROCEEDS,
@@ -317,7 +425,7 @@ OWN = "own"
             False,
             OTHER_ISSUER,
             OWN,
-            OTHER_ISSUER,
+            (OTHER_ISSUER, OWN),
             True,
             None,
             REFUSED,
@@ -328,7 +436,7 @@ OWN = "own"
             True,
             ISSUER,
             OTHER_DEPLOYMENT,
-            ISSUER,
+            (ISSUER, OTHER_DEPLOYMENT),
             True,
             None,
             OTHER_SERVICE,
@@ -351,11 +459,33 @@ OWN = "own"
             False,
             ISSUER,
             LOCAL_MCP,
-            ISSUER,
+            (ISSUER, LOCAL_MCP),
             None,
             None,
             PROCEEDS,
             id="loopback-known-other-audience-known",
+        ),
+        pytest.param(
+            LOOPBACK,
+            False,
+            ISSUER,
+            LOCAL_MCP,
+            (ISSUER, OWN),
+            False,
+            _audience_changed("localhost", "http://localhost:4000/mcp", LOCAL_MCP),
+            "cancelled",
+            id="loopback-known-issuer-other-audience",
+        ),
+        pytest.param(
+            LOOPBACK,
+            False,
+            OTHER_ISSUER,
+            LOCAL_MCP,
+            (OTHER_ISSUER, OTHER_DEPLOYMENT),
+            False,
+            _audience_changed("localhost", OTHER_DEPLOYMENT, LOCAL_MCP, "login.example.com"),
+            "cancelled",
+            id="loopback-other-issuer-another-foreign-audience",
         ),
         pytest.param(
             LOOPBACK,
@@ -384,7 +514,7 @@ OWN = "own"
             False,
             OTHER_ISSUER,
             OWN,
-            OLD_ISSUER,
+            (OLD_ISSUER, OWN),
             False,
             _changed("localhost"),
             "cancelled",
@@ -395,7 +525,7 @@ OWN = "own"
             False,
             OTHER_ISSUER,
             OWN,
-            ISSUER,
+            (ISSUER, OWN),
             False,
             _changed("localhost", "whitson.eu.auth0.com"),
             "cancelled",
@@ -406,7 +536,7 @@ OWN = "own"
             False,
             OTHER_ISSUER,
             OWN,
-            OTHER_ISSUER,
+            (OTHER_ISSUER, OWN),
             None,
             None,
             PROCEEDS,
@@ -448,6 +578,44 @@ OWN = "own"
         pytest.param(
             UNLISTED,
             True,
+            ISSUER,
+            OTHER_DEPLOYMENT,
+            (ISSUER, OWN),
+            False,
+            _audience_changed(
+                "pvt.example.org",
+                "https://pvt.example.org/mcp",
+                OTHER_DEPLOYMENT,
+                "whitson.eu.auth0.com",
+            ),
+            "cancelled",
+            id="trust-host-known-issuer-other-audience",
+        ),
+        pytest.param(
+            UNLISTED,
+            True,
+            ISSUER,
+            OWN,
+            (ISSUER, OTHER_DEPLOYMENT),
+            False,
+            _audience_changed("pvt.example.org", OTHER_DEPLOYMENT, None, "whitson.eu.auth0.com"),
+            "cancelled",
+            id="trust-host-foreign-audience-to-own",
+        ),
+        pytest.param(
+            UNLISTED,
+            True,
+            ISSUER,
+            OTHER_DEPLOYMENT,
+            (ISSUER, OTHER_DEPLOYMENT),
+            None,
+            None,
+            PROCEEDS,
+            id="trust-host-known-issuer-and-audience",
+        ),
+        pytest.param(
+            UNLISTED,
+            True,
             OTHER_ISSUER,
             OWN,
             None,
@@ -472,7 +640,7 @@ OWN = "own"
             True,
             OTHER_ISSUER,
             OWN,
-            OLD_ISSUER,
+            (OLD_ISSUER, OWN),
             False,
             _changed("pvt.example.org"),
             "cancelled",
@@ -484,9 +652,12 @@ def test_login_decides_by_deployment_issuer_and_audience(
     httpx2_mock, store, deployment, trust_host, issuer, audience, stored, answer, asked, error
 ):
     if stored is not None:
-        previous = make_login(deployment, refresh="old-refresh")
-        previous = previous.model_copy(
-            update={"issuer": OTHER_ISSUER if stored == "invalid" else stored}
+        stored_issuer, stored_audience = (OTHER_ISSUER, OWN) if stored == "invalid" else stored
+        previous = make_login(deployment, refresh="old-refresh").model_copy(
+            update={
+                "issuer": stored_issuer,
+                "audience": f"{deployment}/mcp" if stored_audience == OWN else stored_audience,
+            }
         )
         with store.transaction() as transaction:
             transaction.put(previous)
@@ -830,10 +1001,10 @@ def test_browser_login_listens_on_the_first_free_registered_port(base_url, busy)
         listener.bind(("127.0.0.1", port))
         listener.listen()
         occupied.append(listener)
-    redirects = []
+    ports = []
 
     def open_browser(url: str) -> bool:
-        redirects.append(parse_qs(urlsplit(url).query)["redirect_uri"][0])
+        ports.append(urlsplit(url).port)
         return True
 
     try:
@@ -849,10 +1020,10 @@ def test_browser_login_listens_on_the_first_free_registered_port(base_url, busy)
             listener.close()
 
     if busy == len(CALLBACK_PORTS):
-        assert redirects == []
+        assert ports == []
         assert all(str(port) in failure.value.message for port in CALLBACK_PORTS)
     else:
-        assert redirects == [f"http://127.0.0.1:{CALLBACK_PORTS[1]}/callback"]
+        assert ports == [CALLBACK_PORTS[1]]
         assert "Timed out" in failure.value.message
 
 

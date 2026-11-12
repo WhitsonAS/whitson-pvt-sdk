@@ -335,6 +335,11 @@ def test_retry_logs_debug_message(transport, httpx2_mock, recorded_sleeps, caplo
         (429, {"x-ratelimit-reset": "1700000007"}, 7),
         (503, {"x-ratelimit-reset": "1700000007"}, pytest.approx(0.25, abs=0.05)),
         (503, {"retry-after": "3"}, 3),
+        (429, {"retry-after": "86400"}, 60),
+        (429, {"retry-after-ms": "inf", "retry-after": "4"}, 4),
+        (429, {"retry-after": "nan"}, pytest.approx(0.25, abs=0.05)),
+        (429, {"retry-after": "-5"}, pytest.approx(0.25, abs=0.05)),
+        (429, {"x-ratelimit-reset": "inf"}, pytest.approx(0.25, abs=0.05)),
     ],
     ids=[
         "retry-after-ms",
@@ -342,6 +347,11 @@ def test_retry_logs_debug_message(transport, httpx2_mock, recorded_sleeps, caplo
         "rate-limit-reset",
         "rate-limit-reset-ignored-for-503",
         "retry-after-for-503",
+        "capped",
+        "infinite-is-absent",
+        "nan-is-absent",
+        "negative-is-absent",
+        "infinite-reset-is-absent",
     ],
 )
 def test_retry_waits_as_the_response_says(

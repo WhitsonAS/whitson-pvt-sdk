@@ -14,6 +14,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, PlainSerialize
 from pydantic import ValidationError as PydanticValidationError
 
 from whitson_pvt_sdk._oauth import HTTP_TIMEOUT_SECONDS
+from whitson_pvt_sdk._trust import Remembered
 from whitson_pvt_sdk.credentials import DeploymentUrl, StoredLogin, normalise_url
 from whitson_pvt_sdk.errors import ConfigurationError, CredentialStoreBusyError
 
@@ -184,9 +185,11 @@ class CredentialStore:
         profile = self._read().profiles.get(normalise_url(base_url))
         return None if profile is None else _load_entry(profile)
 
-    def issuer(self, base_url: str) -> str | None:
+    def remembered(self, base_url: str) -> Remembered | None:
         profile = self._read().profiles.get(normalise_url(base_url))
-        return None if profile is None else profile.issuer
+        if profile is None:
+            return None
+        return Remembered(issuer=profile.issuer, audience=profile.audience)
 
     def default_url(self) -> str | None:
         return self._read().default
