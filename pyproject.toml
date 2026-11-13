@@ -9,7 +9,7 @@ requires-python = ">=3.11"
 dependencies = ["httpx2>=2.15.1", "pydantic>=2.12.0"]
 
 [project.optional-dependencies]
-cli = ["typer>=0.28.0", "keyring>=25.0"]
+cli = ["typer>=0.29.0", "keyring>=25.0"]
 mcp = ["whitson-pvt-sdk[cli]", "fastmcp>=4.1,<4.2"]
 
 [project.scripts]
@@ -63,7 +63,7 @@ dev = [
   "pytest>=9.0.3",
   "httpx2-pytest>=2.0.0",
   "python-dotenv>=1.2.0",
-  "typer>=0.28.0",
+  "typer>=0.29.0",
   "keyring>=25.0",
   "fastmcp>=4.1,<4.2",
 ]
