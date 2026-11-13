@@ -5,9 +5,11 @@ import socket
 import threading
 import urllib.error
 import urllib.request
+from email.message import Message
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from pydantic import BaseModel, ConfigDict
 
 from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form, make_login
 from whitson_pvt_sdk._store import ActiveLogin
@@ -34,6 +36,10 @@ TOKENS = {
     "token_type": "Bearer",
     "expires_in": 3600,
 }
+
+STARTED = (302, None)
+LOGGED_IN = (200, "Logged in")
+NOT_FOUND = (404, "Not found")
 
 
 PROVIDER = {
@@ -76,26 +82,50 @@ class _NoRedirects(urllib.request.HTTPRedirectHandler):
 _BROWSER = urllib.request.build_opener(_NoRedirects)
 
 
-def _get(url: str) -> tuple[int, str | None]:
+class _Response(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    status: int
+    location: str | None
+    headers: dict[str, str]
+    body: str
+
+    @property
+    def outcome(self) -> tuple[int, str | None]:
+        heading = re.search(r"<h1>(.*?)</h1>", self.body)
+        return self.status, None if heading is None else heading[1]
+
+
+def _get(url: str) -> _Response:
     try:
         with _BROWSER.open(url, timeout=5) as response:
-            return response.status, response.headers.get("Location")
+            return _response(response.status, response.headers, response.read())
     except urllib.error.HTTPError as error:
-        return error.code, error.headers.get("Location")
+        with error:
+            return _response(error.code, error.headers, error.read())
+
+
+def _response(status: int, headers: Message, body: bytes) -> _Response:
+    return _Response(
+        status=status,
+        location=headers.get("Location"),
+        headers=dict(headers),
+        body=body.decode(),
+    )
 
 
 def _query(url: str) -> dict[str, str]:
     return {key: value[0] for key, value in parse_qs(urlsplit(url).query).items()}
 
 
-def _browser_later(start_url: str, statuses, then) -> threading.Thread:
+def _browser_later(start_url: str, responses, then) -> threading.Thread:
     def browse():
         if urlsplit(start_url).hostname != "127.0.0.1":
             return
-        status, authorize = _get(start_url)
-        statuses.append(status)
-        for url in then(authorize or ""):
-            statuses.append(_get(url)[0])
+        start = _get(start_url)
+        responses.append(start)
+        for url in then(start.location or ""):
+            responses.append(_get(url))
 
     thread = threading.Thread(target=browse)
     thread.start()
@@ -105,7 +135,7 @@ def _browser_later(start_url: str, statuses, then) -> threading.Thread:
 @pytest.mark.usefixtures("authorization_server")
 def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_mock, store):
     httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
-    authorized, messages, statuses, visits = [], [], [], []
+    authorized, messages, responses, visits = [], [], [], []
 
     def sign_in(authorize: str) -> list[str]:
         authorized.append(authorize)
@@ -115,7 +145,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         return [stray, f"{redirect}?code=the-code&state={query['state']}"]
 
     def open_browser(url: str) -> bool:
-        visits.append(_browser_later(url, statuses, sign_in))
+        visits.append(_browser_later(url, responses, sign_in))
         return True
 
     stored = login(
@@ -154,7 +184,14 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         "code": "the-code",
         "redirect_uri": authorize["redirect_uri"],
     }
-    assert statuses == [302, 404, 200]
+    assert [response.outcome for response in responses] == [STARTED, NOT_FOUND, LOGGED_IN]
+    for page in responses[1:]:
+        assert (page.headers["Content-Security-Policy"], page.headers["Cache-Control"]) == (
+            "default-src 'none'; style-src 'unsafe-inline'",
+            "no-store",
+        )
+        assert page.headers["Content-Type"] == "text/html; charset=utf-8"
+        assert not re.search(r"https?://", page.body)
     assert not any(verifier in message or "the-code" in message for message in messages)
     assert stored.access_token.get_secret_value() == "fresh-access"
     assert stored.audience == "https://dev.pvt.whitson.com/mcp"
@@ -167,7 +204,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
 def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, store, then_valid):
     if then_valid:
         httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
-    statuses, visits = [], []
+    responses, visits = [], []
 
     def sign_in(authorize: str) -> list[str]:
         query = _query(authorize)
@@ -177,7 +214,7 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
         return forged + valid
 
     def open_browser(url: str) -> bool:
-        visits.append(_browser_later(url, statuses, sign_in))
+        visits.append(_browser_later(url, responses, sign_in))
         return True
 
     def attempt():
@@ -194,25 +231,30 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
         assert store.get(base_url) is None
     visits.pop().join()
 
-    assert statuses == [302, 400, 400] + ([200] if then_valid else [])
+    other_login = (400, "Unexpected login")
+    assert [response.outcome for response in responses] == [
+        STARTED,
+        other_login,
+        other_login,
+    ] + ([LOGGED_IN] if then_valid else [])
     assert [form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (
         ["the-code"] if then_valid else []
     )
 
 
 @pytest.mark.parametrize(
-    ("suffixes", "statuses", "failure"),
+    ("suffixes", "outcomes", "failure"),
     [
-        ([""], [302, 200], None),
-        (["x", ""], [404, 302, 200], None),
-        (["%C3%A9", ""], [404, 302, 200], None),
-        (["", ""], [302, 400], "opened more than once"),
+        ([""], [STARTED, LOGGED_IN], None),
+        (["x", ""], [NOT_FOUND, STARTED, LOGGED_IN], None),
+        (["%C3%A9", ""], [NOT_FOUND, STARTED, LOGGED_IN], None),
+        (["", ""], [STARTED, (400, "Link already used")], "opened more than once"),
     ],
     ids=["once", "wrong-nonce-ignored", "non-ascii-nonce-ignored", "twice"],
 )
 @pytest.mark.usefixtures("authorization_server")
 def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
-    base_url, httpx2_mock, store, suffixes, statuses, failure
+    base_url, httpx2_mock, store, suffixes, outcomes, failure
 ):
     if failure is None:
         httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
@@ -220,13 +262,14 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
 
     def browse(start_url: str) -> None:
         for suffix in suffixes:
-            status, authorize = _get(f"{start_url}{suffix}")
-            seen.append(status)
-            if authorize is not None:
-                authorized.append(authorize)
+            response = _get(f"{start_url}{suffix}")
+            seen.append(response.outcome)
+            if response.location is not None:
+                authorized.append(response.location)
         if failure is None:
             query = _query(authorized[0])
-            seen.append(_get(f"{query['redirect_uri']}?code=the-code&state={query['state']}")[0])
+            callback = f"{query['redirect_uri']}?code=the-code&state={query['state']}"
+            seen.append(_get(callback).outcome)
 
     def open_browser(url: str) -> bool:
         opened.append(url)
@@ -256,7 +299,7 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
     )
     assert not any("state=" in message or "code_challenge" in message for message in messages)
     assert opened[0] in messages[0]
-    assert seen == statuses
+    assert seen == outcomes
     assert len(authorized) == 1
     assert authorized[0].startswith(f"{AUTHORIZE}?")
     assert [form(request)["code"] for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)] == (

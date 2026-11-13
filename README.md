@@ -306,9 +306,11 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   command line that other users of the machine can read; if that link is opened a second time,
   the login stops, since another program may have used it first. Only a callback carrying this
   login's `state` ends the wait; any other request to the listener is answered 400 or 404 and
-  ignored. It opens a browser only when attached to a terminal; otherwise it prints the link,
-  which must be opened on the same machine. `--device` logs in with a code entered on another
-  device, for SSH sessions, containers and sandboxes, on deployments that enable it. The login is stored, and
+  ignored. The listener's pages are fixed text with no external resources, served with
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`. It opens a browser
+  only when attached to a terminal, with the browser's own output kept off the terminal;
+  otherwise it prints the link, which must be opened on the same machine. `--device` logs in
+  with a code entered on another device, for SSH sessions, containers and sandboxes, on deployments that enable it. The login is stored, and
   becomes the default, only after `/external/v2/me` accepts it; if that check fails, nothing is
   stored and the previous default stays.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
@@ -774,6 +776,7 @@ whitson_pvt_sdk/
 ├── credentials.py           # ApiToken and StoredLogin, the two credential kinds
 ├── auth.py                  # URL and credential resolution; the httpx2.Auth that sends them
 ├── login.py                 # login (browser with PKCE, or device) and logout
+├── _login_page.py           # the pages the browser login's listener answers with
 ├── _store.py                # the credential store: credentials.json, keyring, lock
 ├── _refresh.py              # renewal of a stored login under the store lock
 ├── _oauth.py                # OAuth/OIDC wire protocol: /auth/config, discovery, token requests

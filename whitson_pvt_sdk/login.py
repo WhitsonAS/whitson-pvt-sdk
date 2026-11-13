@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from whitson_pvt_sdk._login_page import CONTENT_SECURITY_POLICY, Outcome, login_page
 from whitson_pvt_sdk._oauth import (
     AuthConfig,
     DeviceAuthorization,
@@ -357,11 +358,11 @@ class _CallbackHandler(BaseHTTPRequestHandler):
                 self._redirect(authorize_url)
             case ("/start", _Started()) if self._nonce_matches(query):
                 self.server.phase = _StartedTwice()
-                self._page(400, "This login link was already used. Return to the terminal.")
+                self._page("link_used")
             case ("/callback", _Started()):
                 self._callback(query)
             case _:
-                self._page(404, "Not found.")
+                self._page("not_found")
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -372,13 +373,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def _callback(self, query: dict[str, list[str]]) -> None:
         match _parse_callback(query, self.server.expected_state):
             case _StateMismatch():
-                self._page(400, "This is not the login this terminal is waiting for.")
+                self._page("other_login")
             case _CodeReceived() as callback:
                 self.server.phase = callback
-                self._page(200, "Logged in to whitson PVT. You can close this window.")
+                self._page("logged_in")
             case _AuthorizationRefused() as callback:
                 self.server.phase = callback
-                self._page(400, "The whitson PVT login failed. Return to the terminal.")
+                self._page("login_failed")
 
     def _redirect(self, location: str) -> None:
         self.send_response(302)
@@ -388,17 +389,15 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
 
-    def _page(self, status: int, message: str) -> None:
-        body = (
-            "<!doctype html><meta charset=utf-8><title>whitson PVT</title>"
-            f"<p style='font-family:sans-serif'>{message}</p>"
-        ).encode()
-        self.send_response(status)
+    def _page(self, outcome: Outcome) -> None:
+        page = login_page(outcome)
+        self.send_response(page.status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(len(page.body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         self.end_headers()
-        self.wfile.write(body)
+        self.wfile.write(page.body)
 
 
 def _parse_callback(query: dict[str, list[str]], expected_state: str) -> _Callback | _StateMismatch:
