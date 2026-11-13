@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import webbrowser
 
 import httpx2
 import pytest
@@ -8,6 +9,7 @@ from typer.testing import CliRunner
 
 from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form
 from whitson_pvt_sdk.cli._app import app
+from whitson_pvt_sdk.cli._auth import _open_browser
 
 REVOKE = f"{ISSUER}oauth/revoke"
 IDENTITY = {
@@ -392,3 +394,32 @@ def test_wpvt_without_an_extra_prints_the_install_command(missing, argv, extra):
     assert result.returncode == 2
     assert f'pip install "whitson-pvt-sdk[{extra}]"' in result.stderr
     assert "Traceback" not in result.stderr
+
+
+@pytest.mark.skipif(
+    sys.platform in ("win32", "darwin"),
+    reason="a shell script stands in for the browser, and macOS would fall back to a real one",
+)
+@pytest.mark.parametrize(("exit_code", "opened"), [(0, True), (1, False)], ids=["opens", "fails"])
+def test_the_browser_writes_nothing_to_the_terminal(
+    tmp_path, monkeypatch, capfd, exit_code, opened
+):
+    browser = tmp_path / "browser"
+    visited = tmp_path / "visited"
+    browser.write_text(
+        f'#!/bin/sh\necho "$1" > {visited}\necho browser log\necho browser error >&2\n'
+        f"exit {exit_code}\n"
+    )
+    browser.chmod(0o755)
+    for name in ("DISPLAY", "WAYLAND_DISPLAY", "TERM"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("BROWSER", str(browser))
+    monkeypatch.setattr(webbrowser, "_tryorder", None)
+    monkeypatch.setattr(webbrowser, "_browsers", {})
+
+    result = _open_browser("http://127.0.0.1:52817/start?n=x")
+    print("after")
+
+    assert result is opened
+    assert visited.read_text() == "http://127.0.0.1:52817/start?n=x\n"
+    assert capfd.readouterr() == ("after\n", "")

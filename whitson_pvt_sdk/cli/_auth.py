@@ -110,7 +110,7 @@ def login_command(
         if device:
             method: BrowserLogin | DeviceLogin = DeviceLogin()
         elif interactive:
-            method = BrowserLogin(open_browser=webbrowser.open)
+            method = BrowserLogin(open_browser=_open_browser)
         else:
             note("No terminal is attached, so no browser is opened.")
             method = BrowserLogin()
@@ -214,6 +214,28 @@ def logout_command(
             "\n".join(lines) or "No stored login to remove.",
             json_output=json_output,
         )
+
+
+def _open_browser(url: str) -> bool:
+    # A browser started on Linux inherits descriptors 1 and 2 and logs to the terminal through them.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None:
+            stream.flush()
+    saved: list[tuple[int, int]] = []
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        for descriptor in (1, 2):
+            try:
+                saved.append((descriptor, os.dup(descriptor)))
+            except OSError:
+                continue
+            os.dup2(devnull, descriptor)
+        return webbrowser.open(url)
+    finally:
+        for descriptor, copy in saved:
+            os.dup2(copy, descriptor)
+            os.close(copy)
+        os.close(devnull)
 
 
 def _identity(credential: Credential, base_url: str) -> Identity:
