@@ -416,6 +416,7 @@ OPENAPI = {
             "parameters": [{"$ref": "#/components/parameters/Shared"}],
             "get": {
                 "summary": "Get a sample",
+                "security": [{"m2m_auth": []}, {"api_token": ["samples:read"]}],
                 "parameters": [
                     {
                         "name": "sample_id",
@@ -470,6 +471,7 @@ def test_api_lists_and_describes_routes_from_the_openapi_document(httpx2_mock):
     assert described.stdout.splitlines() == [
         "GET /samples/{sample_id}",
         "  Get a sample",
+        "  scopes: samples:read",
         "  path sample_id (integer, required)",
         "  request: -",
         "  response 200: GetSampleModel",

@@ -66,6 +66,7 @@ class Route(BaseModel):
 
 
 class RouteDetail(Route):
+    scopes: list[str]
     parameters: list[Parameter]
     request_schema: str | None
     response_schemas: dict[str, str | None]
@@ -99,6 +100,7 @@ class _SpecOperation(BaseModel):
     parameters: list[_SpecParameter] = Field(default_factory=list)
     request_body: _SpecBody | None = Field(default=None, alias="requestBody")
     responses: dict[str, _SpecBody] = Field(default_factory=dict)
+    security: list[dict[str, list[str]]] = Field(default_factory=list)
 
 
 class _Spec(BaseModel):
@@ -355,6 +357,14 @@ def _routes(client: WhitsonPVTClient) -> list[RouteDetail]:
                     method=parsed_method,
                     path="/" + path.removeprefix(API_PREFIX).lstrip("/"),
                     summary=parsed.summary,
+                    scopes=list(
+                        dict.fromkeys(
+                            scope
+                            for requirement in parsed.security
+                            for scopes in requirement.values()
+                            for scope in scopes
+                        )
+                    ),
                     parameters=[
                         Parameter(
                             name=parameter.name,
@@ -407,6 +417,8 @@ def _describe(route: RouteDetail) -> str:
     lines = [f"{route.method} {route.path}"]
     if route.summary:
         lines.append(f"  {route.summary}")
+    if route.scopes:
+        lines.append(f"  scopes: {', '.join(route.scopes)}")
     for parameter in route.parameters:
         required = ", required" if parameter.required else ""
         lines.append(
