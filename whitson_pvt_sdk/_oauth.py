@@ -14,8 +14,8 @@ HTTP_TIMEOUT_SECONDS = 30.0
 _Model = TypeVar("_Model", bound=BaseModel)
 
 
-# Hand-written until GET /external/v2/auth/config is in the OpenAPI document; then replace
-# it with the generated model.
+# Not the generated AuthConfig: the issuer must pass SecureUrl before login trusts the
+# deployment, and scopes stay str so a scope added on the server does not break login.
 class AuthConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 

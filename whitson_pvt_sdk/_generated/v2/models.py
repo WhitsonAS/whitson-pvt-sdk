@@ -21,7 +21,87 @@ class ApiErrorResponse(BaseModel):
     status_code: int
 
 
+ApiScope = TypeAliasType(
+    "ApiScope",
+    Literal[
+        "regions:read",
+        "regions:write",
+        "wells:read",
+        "wells:write",
+        "samples:read",
+        "samples:write",
+        "projects:read",
+        "fluid-models:read",
+        "reports:read",
+        "imports:write",
+        "calculations:run",
+    ],
+)
+
+
+class ApiTokenCaller(BaseModel):
+    email: str | None
+    """
+    Email of that user; null for an integration's service account.
+    """
+    kind: Literal["api_token"]
+    """
+    An integration API token.
+    """
+    name: str | None
+    """
+    Name of that user.
+    """
+    role: Role
+    """
+    Role the credential acts with.
+    """
+    scopes: list[ApiScope]
+    """
+    External API scopes this credential may use: those it was issued or consented with, narrowed by the role.
+    """
+    token_id: int
+    """
+    Id of the API token.
+    """
+    token_name: str
+    """
+    Name of the API token.
+    """
+    user_id: int
+    """
+    Id of the whitsonPVT user the credential acts as.
+    """
+
+
 ArchiveEntity = TypeAliasType("ArchiveEntity", Literal["report", "well", "sample", "experiment"])
+
+
+class AuthConfig(BaseModel):
+    audience: str
+    """
+    Value of the `audience` parameter. Access tokens for it are accepted by this API and by this deployment's MCP server.
+    """
+    client_id: str
+    """
+    Public client id of the whitsonPVT command-line application, a native application without a secret. Log in with the authorization code flow with PKCE, or with the device authorization flow where `device_login` is true.
+    """
+    connection: str | None
+    """
+    Auth0 connection to send as the `connection` parameter, for deployments that log in through a database connection. Null means the client sends none.
+    """
+    device_login: bool
+    """
+    Whether this deployment allows the device authorization flow. When false, the client must not start a device authorization flow and should offer browser login or an API token instead.
+    """
+    issuer: str
+    """
+    Auth0 issuer URL of this deployment, ending in a slash. Discover the authorization, token and device authorization endpoints from `<issuer>.well-known/openid-configuration`.
+    """
+    scopes: list[ApiScope]
+    """
+    External API scopes to request. The client adds `offline_access` to get a refresh token; it is not listed because it is not an API scope. The API narrows the granted scopes by the user's role.
+    """
 
 
 BinaryInteractionParameterModel = TypeAliasType(
@@ -49,7 +129,7 @@ class CCEExperimentModel(BaseModel):
     relative_oil_volume_unit: RelativeOilVolumeBasis | None = "Vo/Vsat (%)"
     relative_total_volume_unit: RelativeTotalVolumeUnitType | None = "Vtot/Vsat"
     saturation_pressure_type: SaturationPressureType | None = None
-    single_phase_density_unit: LiquidDensityUnit | None = "g/cm3"
+    single_phase_density_unit: DensityUnit | None = "g/cm3"
     stages: list[CCEStageModel]
     temperature: float
     temperature_unit: TemperatureUnit
@@ -69,20 +149,20 @@ class CVDExperimentModel(BaseModel):
     cumulative_moles_removed_unit: AmountUnit | None = "%"
     final_stage_oil_composition: CompositionModel | None = None
     final_stage_oil_density: float | None = None
-    final_stage_oil_density_unit: LiquidDensityUnit | None = None
+    final_stage_oil_density_unit: DensityUnit | None = None
     final_stage_oil_mw: float | None = None
-    gas_density_unit: GasDensityUnit | None = "g/cm3"
+    gas_density_unit: DensityUnit | None = "g/cm3"
     gas_viscosity_unit: ViscosityUnit | None = "cP"
     incremental_moles_removed_unit: AmountUnit | None = "%"
     liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
     name: str
-    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    oil_density_unit: DensityUnit | None = "g/cm3"
     pressure_unit: PressureUnit | None = "bara"
     relative_oil_volume_unit: AmountUnit | None = "%"
     saturation_pressure_type: SaturationPressureType
     stages: list[CVDStageModel]
     stock_tank_oil_density: float | None = None
-    stock_tank_oil_density_unit: LiquidDensityUnit | None = None
+    stock_tank_oil_density_unit: DensityUnit | None = None
     temperature: float
     temperature_unit: TemperatureUnit
     type: Literal["CVD"]
@@ -225,7 +305,7 @@ class CreateSampleModel(BaseModel):
     bottom_perforation_depth: float | None = None
     bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: LiquidDensityUnit | None = None
+    drained_water_density_unit: DensityUnit | None = None
     drawdown_pressure: float | None = None
     drawdown_pressure_unit: PressureUnit | None = None
     experiments: list[Experiments] | None = None
@@ -236,7 +316,7 @@ class CreateSampleModel(BaseModel):
     flashed_oil_contamination: float | None = None
     flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: LiquidDensityUnit | None = None
+    flashed_oil_density_unit: DensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
     flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -256,7 +336,7 @@ class CreateSampleModel(BaseModel):
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: LiquidDensityUnit | None = None
+    obm_density_unit: DensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
     pressure_at_lab_unit: PressureUnit | None = None
@@ -273,7 +353,7 @@ class CreateSampleModel(BaseModel):
     recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: LiquidDensityUnit | None = None
+    reservoir_density_unit: DensityUnit | None = None
     reservoir_pressure: float | None = None
     reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
@@ -285,7 +365,7 @@ class CreateSampleModel(BaseModel):
     sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: LiquidDensityUnit | None = None
+    sep_oil_density_unit: DensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
     sep_pressure_unit: PressureUnit | None = None
@@ -298,7 +378,7 @@ class CreateSampleModel(BaseModel):
     ssf_flashed_oil_contamination: float | None = None
     ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
     ssf_flashed_oil_density: float | None = None
-    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_density_unit: DensityUnit | None = None
     ssf_flashed_oil_mw: float | None = None
     ssf_flashed_oil_temperature: float | None = None
     ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -356,7 +436,7 @@ class CreateWellSampleModel(BaseModel):
     bottom_perforation_depth: float | None = None
     bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: LiquidDensityUnit | None = None
+    drained_water_density_unit: DensityUnit | None = None
     drawdown_pressure: float | None = None
     drawdown_pressure_unit: PressureUnit | None = None
     experiments: list[Experiments] | None = None
@@ -367,7 +447,7 @@ class CreateWellSampleModel(BaseModel):
     flashed_oil_contamination: float | None = None
     flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: LiquidDensityUnit | None = None
+    flashed_oil_density_unit: DensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
     flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -387,7 +467,7 @@ class CreateWellSampleModel(BaseModel):
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: LiquidDensityUnit | None = None
+    obm_density_unit: DensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
     pressure_at_lab_unit: PressureUnit | None = None
@@ -404,7 +484,7 @@ class CreateWellSampleModel(BaseModel):
     recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: LiquidDensityUnit | None = None
+    reservoir_density_unit: DensityUnit | None = None
     reservoir_pressure: float | None = None
     reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
@@ -416,7 +496,7 @@ class CreateWellSampleModel(BaseModel):
     sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: LiquidDensityUnit | None = None
+    sep_oil_density_unit: DensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
     sep_pressure_unit: PressureUnit | None = None
@@ -429,7 +509,7 @@ class CreateWellSampleModel(BaseModel):
     ssf_flashed_oil_contamination: float | None = None
     ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
     ssf_flashed_oil_density: float | None = None
-    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_density_unit: DensityUnit | None = None
     ssf_flashed_oil_mw: float | None = None
     ssf_flashed_oil_temperature: float | None = None
     ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -466,18 +546,18 @@ class CreateWellSampleModel(BaseModel):
 
 class DLEExperimentModel(BaseModel):
     average_residual_oil_density: float | None = None
-    average_residual_oil_density_unit: LiquidDensityUnit | None = None
+    average_residual_oil_density_unit: DensityUnit | None = None
     average_residual_oil_mw: float | None = None
     dle_experiment_type: DLEExperimentType
     evolved_gas_composition: CompositionModel | None = None
     evolved_gas_specific_gravity: float | None = None
-    gas_density_unit: GasDensityUnit | None = "g/cm3"
+    gas_density_unit: DensityUnit | None = "g/cm3"
     gas_viscosity_unit: ViscosityUnit | None = "cP"
     gor_unit: StocktankGorUnit | None = "Sm3/Sm3"
     liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
     liberated_gas_unit: GorUnit | None = "Sm3/Sm3"
     name: str
-    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    oil_density_unit: DensityUnit | None = "g/cm3"
     oil_fvf_unit: FvfUnit | None = "m3/Sm3"
     pressure_unit: PressureUnit | None = "bara"
     residual_oil_composition: CompositionModel | None = None
@@ -504,6 +584,9 @@ class DLEStageModel(BaseModel):
     oil_density: float | None = None
     oil_fvf: float | None = None
     pressure: float
+
+
+DensityUnit = TypeAliasType("DensityUnit", Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"])
 
 
 class DuplicateImportSessionConflictResponseModel(BaseModel):
@@ -760,11 +843,6 @@ class GammaModelModel(BaseModel):
     shape: float
 
 
-GasDensityUnit = TypeAliasType(
-    "GasDensityUnit", Literal["SG", "kg/m3", "g/cm3", "lbm/bbl", "lbm/ft3"]
-)
-
-
 GasExpansionFactorUnit = TypeAliasType("GasExpansionFactorUnit", Literal["Sm3/m3", "scf/bbl"])
 
 
@@ -830,7 +908,7 @@ class GetProjectModel(BaseModel):
 
 
 class GetProjectWithFluidModelsModel(BaseModel):
-    fluid_models: list[GetSimpleFluidModelModel]
+    fluid_models: list[GetSimpleFluidModelModel] | None = None
     id: int
     name: str | None = None
     note: str | None = None
@@ -838,7 +916,7 @@ class GetProjectWithFluidModelsModel(BaseModel):
     owners: list[str] | None = None
     public: bool | None = None
     region_id: int | None = None
-    samples: list[ProjectSampleModel]
+    samples: list[ProjectSampleModel] | None = None
     user_email: str | None = None
 
 
@@ -859,7 +937,7 @@ class GetSampleModel(BaseModel):
     bottom_perforation_depth: float | None = None
     bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: LiquidDensityUnit | None = None
+    drained_water_density_unit: DensityUnit | None = None
     drawdown_pressure: float | None = None
     drawdown_pressure_unit: PressureUnit | None = None
     experiments: list[Experiments] | None = None
@@ -870,7 +948,7 @@ class GetSampleModel(BaseModel):
     flashed_oil_contamination: float | None = None
     flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: LiquidDensityUnit | None = None
+    flashed_oil_density_unit: DensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
     flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -890,7 +968,7 @@ class GetSampleModel(BaseModel):
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: LiquidDensityUnit | None = None
+    obm_density_unit: DensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
     pressure_at_lab_unit: PressureUnit | None = None
@@ -907,7 +985,7 @@ class GetSampleModel(BaseModel):
     recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: LiquidDensityUnit | None = None
+    reservoir_density_unit: DensityUnit | None = None
     reservoir_pressure: float | None = None
     reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
@@ -919,7 +997,7 @@ class GetSampleModel(BaseModel):
     sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: LiquidDensityUnit | None = None
+    sep_oil_density_unit: DensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
     sep_pressure_unit: PressureUnit | None = None
@@ -932,7 +1010,7 @@ class GetSampleModel(BaseModel):
     ssf_flashed_oil_contamination: float | None = None
     ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
     ssf_flashed_oil_density: float | None = None
-    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_density_unit: DensityUnit | None = None
     ssf_flashed_oil_mw: float | None = None
     ssf_flashed_oil_temperature: float | None = None
     ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -1013,7 +1091,7 @@ class GetWellModel(BaseModel):
     location: dict[str, Any] | None = None
     name: str | None = None
     region_id: int | None = None
-    samples: list[GetSampleModel]
+    samples: list[GetSampleModel] | None = None
     sub_basin_id: float | None = None
     sub_basin_name: str | None
     uwi: str | None = None
@@ -1315,7 +1393,7 @@ class ImportSessionModel(BaseModel):
     )
     archive_cloud_filename: str | None = None
     archive_content_sha256: str | None = None
-    created_at: AwareDatetime | None = None
+    created_at: UtcDatetime | None = None
     created_by: str | None = None
     id: int
     managed_by: ImportSessionOrigin | None = "internal"
@@ -1395,6 +1473,21 @@ IonType = TypeAliasType("IonType", Literal["anion", "cation"])
 LabVolumeUnit = TypeAliasType("LabVolumeUnit", Literal["L", "mL", "cm3", "m3"])
 
 
+class LegacyClientCaller(BaseModel):
+    client_subject: str | None
+    """
+    Subject (`sub` claim) of the client.
+    """
+    full_access: Literal[True]
+    """
+    A legacy client has every scope and sees every row.
+    """
+    kind: Literal["legacy_client"]
+    """
+    A legacy Auth0 client-credentials token.
+    """
+
+
 class LiberatedGasComponentModel(BaseModel):
     input_name: str
     mw: Mw | None = None
@@ -1417,19 +1510,14 @@ class LiberatedGasStageModel(BaseModel):
     stage_number: int
 
 
-LiquidDensityUnit = TypeAliasType(
-    "LiquidDensityUnit", Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"]
-)
-
-
 class MSSExperimentModel(BaseModel):
-    gas_density_unit: GasDensityUnit | None = "g/cm3"
+    gas_density_unit: DensityUnit | None = "g/cm3"
     gas_viscosity_unit: ViscosityUnit | None = "cP"
     gor_unit: StocktankGorUnit | None = "Sm3/Sm3"
     liberated_gas_compositions: LiberatedGasCompositionsModel | None = None
     liberated_gas_unit: GorUnit | None = "Sm3/Sm3"
     name: str
-    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    oil_density_unit: DensityUnit | None = "g/cm3"
     oil_fvf_unit: FvfUnit | None = "m3/Sm3"
     pressure_unit: PressureUnit | None = "bara"
     saturation_pressure_type: SaturationPressureType | None = None
@@ -1437,7 +1525,7 @@ class MSSExperimentModel(BaseModel):
     stages: list[MSSStageModel]
     stock_tank_oil_composition: CompositionModel | None = None
     stock_tank_oil_density: float | None = None
-    stock_tank_oil_density_unit: LiquidDensityUnit | None = None
+    stock_tank_oil_density_unit: DensityUnit | None = None
     stock_tank_oil_molecular_weight: float | None = None
     temperature_unit: TemperatureUnit | None = "C"
     type: Literal["MSS"]
@@ -1493,7 +1581,7 @@ MultiContactDirection = TypeAliasType(
 
 
 class MultiContactExperimentModel(BaseModel):
-    density_unit: LiquidDensityUnit | None = "g/cm3"
+    density_unit: DensityUnit | None = "g/cm3"
     direction: MultiContactDirection
     equilibrium_volume_unit: LabVolumeUnit | None = "cm3"
     fvf_gas_unit: GasFvfUnit | None = "m3/Sm3"
@@ -1552,7 +1640,7 @@ class MultiContactStageModel(BaseModel):
     relative_moles_injected: float | None = None
     relative_oil_volume_unit: RelativeOilVolumeBasis | None = "Vo/Vsat (%)"
     relative_volume_injected: float | None = None
-    single_phase_density_unit: LiquidDensityUnit | None = "g/cm3"
+    single_phase_density_unit: DensityUnit | None = "g/cm3"
     single_phase_viscosity_unit: ViscosityUnit | None = "cP"
     upper_phase_composition: CompositionModel | None = None
     viscosity_gas: float | None = None
@@ -1744,6 +1832,9 @@ ReservoirType = TypeAliasType("ReservoirType", Literal["Conventional", "Unconven
 
 
 ResistivityUnit = TypeAliasType("ResistivityUnit", Literal["ohm-m"])
+
+
+Role = TypeAliasType("Role", Literal["admin", "sample_editor", "project_editor", "reader"])
 
 
 class SampleImportPayloadModel(BaseModel):
@@ -1957,7 +2048,7 @@ class SlimtubeExperimentModel(BaseModel):
     reported_minimum_miscibility_pressure: float | None = None
     reported_minimum_miscibility_pressure_unit: PressureUnit | None = None
     stages: list[SlimtubeStageModel]
-    stock_tank_oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    stock_tank_oil_density_unit: DensityUnit | None = "g/cm3"
     target_injection_pressure_unit: PressureUnit | None = "bara"
     target_temperature: float | None = None
     target_temperature_unit: TemperatureUnit | None = None
@@ -2046,7 +2137,7 @@ class SurfaceProcessStageModel(BaseModel):
 
 
 class SwellTestExperimentModel(BaseModel):
-    density_at_saturation_pressure_unit: LiquidDensityUnit | None = "g/cm3"
+    density_at_saturation_pressure_unit: DensityUnit | None = "g/cm3"
     gas_oil_ratio_unit: GorUnit | None = "Sm3/Sm3"
     injection_gas_composition: CompositionModel | None = None
     moles_injected_unit: MolesInjectedUnit | None = "inj./total %"
@@ -2078,7 +2169,7 @@ class SwellTestStageModel(BaseModel):
     relative_volume_at_saturation_pressure: float | None = None
     saturation_pressure: float
     saturation_pressure_type: SaturationPressureType | None = None
-    single_phase_density_unit: LiquidDensityUnit | None = "g/cm3"
+    single_phase_density_unit: DensityUnit | None = "g/cm3"
     single_phase_viscosity_unit: ViscosityUnit | None = "cP"
 
 
@@ -2097,7 +2188,7 @@ class TBPExperimentModel(BaseModel):
     cumulative_mass_amount_unit: AmountUnit | None = "%"
     cumulative_volume_amount_unit: AmountUnit | None = "%"
     cuts: list[TBPCutModel]
-    density_unit: LiquidDensityUnit | None = "g/cm3"
+    density_unit: DensityUnit | None = "g/cm3"
     lower_temperature_unit: TemperatureUnit | None = "C"
     mass_amount_unit: AmountUnit | None = "%"
     name: str
@@ -2132,7 +2223,7 @@ class UpdateSampleItemModel(BaseModel):
     bottom_perforation_depth: float | None = None
     bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: LiquidDensityUnit | None = None
+    drained_water_density_unit: DensityUnit | None = None
     drawdown_pressure: float | None = None
     drawdown_pressure_unit: PressureUnit | None = None
     experiments: list[Experiments] | None = None
@@ -2143,7 +2234,7 @@ class UpdateSampleItemModel(BaseModel):
     flashed_oil_contamination: float | None = None
     flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: LiquidDensityUnit | None = None
+    flashed_oil_density_unit: DensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
     flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -2163,7 +2254,7 @@ class UpdateSampleItemModel(BaseModel):
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: LiquidDensityUnit | None = None
+    obm_density_unit: DensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
     pressure_at_lab_unit: PressureUnit | None = None
@@ -2180,7 +2271,7 @@ class UpdateSampleItemModel(BaseModel):
     recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: LiquidDensityUnit | None = None
+    reservoir_density_unit: DensityUnit | None = None
     reservoir_pressure: float | None = None
     reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
@@ -2192,7 +2283,7 @@ class UpdateSampleItemModel(BaseModel):
     sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: LiquidDensityUnit | None = None
+    sep_oil_density_unit: DensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
     sep_pressure_unit: PressureUnit | None = None
@@ -2205,7 +2296,7 @@ class UpdateSampleItemModel(BaseModel):
     ssf_flashed_oil_contamination: float | None = None
     ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
     ssf_flashed_oil_density: float | None = None
-    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_density_unit: DensityUnit | None = None
     ssf_flashed_oil_mw: float | None = None
     ssf_flashed_oil_temperature: float | None = None
     ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -2248,7 +2339,7 @@ class UpdateSampleModel(BaseModel):
     bottom_perforation_depth: float | None = None
     bottom_perforation_depth_unit: HeightUnit | None = None
     drained_water_density: float | None = None
-    drained_water_density_unit: LiquidDensityUnit | None = None
+    drained_water_density_unit: DensityUnit | None = None
     drawdown_pressure: float | None = None
     drawdown_pressure_unit: PressureUnit | None = None
     experiments: list[Experiments] | None = None
@@ -2259,7 +2350,7 @@ class UpdateSampleModel(BaseModel):
     flashed_oil_contamination: float | None = None
     flashed_oil_contamination_unit: MudContaminationUnit | None = None
     flashed_oil_density: float | None = None
-    flashed_oil_density_unit: LiquidDensityUnit | None = None
+    flashed_oil_density_unit: DensityUnit | None = None
     flashed_oil_mw: float | None = None
     flashed_oil_temperature: float | None = None
     flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -2279,7 +2370,7 @@ class UpdateSampleModel(BaseModel):
     note: str | None = None
     obm_composition: CompositionModel | None = None
     obm_density: float | None = None
-    obm_density_unit: LiquidDensityUnit | None = None
+    obm_density_unit: DensityUnit | None = None
     obm_mw: float | None = None
     pressure_at_lab: float | None = None
     pressure_at_lab_unit: PressureUnit | None = None
@@ -2296,7 +2387,7 @@ class UpdateSampleModel(BaseModel):
     recombined_fluid_gor_unit: GorUnit | None = None
     recombined_fluid_mw: float | None = None
     reservoir_density: float | None = None
-    reservoir_density_unit: LiquidDensityUnit | None = None
+    reservoir_density_unit: DensityUnit | None = None
     reservoir_pressure: float | None = None
     reservoir_pressure_unit: PressureUnit | None = None
     reservoir_temperature: float | None = None
@@ -2308,7 +2399,7 @@ class UpdateSampleModel(BaseModel):
     sep_gor_unit: GorUnit | None = None
     sep_oil_composition: CompositionModel | None = None
     sep_oil_density: float | None = None
-    sep_oil_density_unit: LiquidDensityUnit | None = None
+    sep_oil_density_unit: DensityUnit | None = None
     sep_oil_mw: float | None = None
     sep_pressure: float | None = None
     sep_pressure_unit: PressureUnit | None = None
@@ -2321,7 +2412,7 @@ class UpdateSampleModel(BaseModel):
     ssf_flashed_oil_contamination: float | None = None
     ssf_flashed_oil_contamination_unit: MudContaminationUnit | None = None
     ssf_flashed_oil_density: float | None = None
-    ssf_flashed_oil_density_unit: LiquidDensityUnit | None = None
+    ssf_flashed_oil_density_unit: DensityUnit | None = None
     ssf_flashed_oil_mw: float | None = None
     ssf_flashed_oil_temperature: float | None = None
     ssf_flashed_oil_temperature_unit: TemperatureUnit | None = None
@@ -2388,14 +2479,55 @@ class UpdateWellsListModel(RootModel[list[UpdateWellItemModel]]):
     root: list[UpdateWellItemModel]
 
 
+class UserTokenCaller(BaseModel):
+    client_id: str | None
+    """
+    OAuth client that obtained the token (its `azp` claim). Informational only; it grants nothing.
+    """
+    email: str | None
+    """
+    Email of that user; null for an integration's service account.
+    """
+    kind: Literal["user_token"]
+    """
+    A user's access token from an OAuth login, such as the command-line tool or an MCP client.
+    """
+    name: str | None
+    """
+    Name of that user.
+    """
+    role: Role
+    """
+    Role the credential acts with.
+    """
+    scopes: list[ApiScope]
+    """
+    External API scopes this credential may use: those it was issued or consented with, narrowed by the role.
+    """
+    user_id: int
+    """
+    Id of the whitsonPVT user the credential acts as.
+    """
+
+
+Caller = TypeAliasType(
+    "Caller",
+    Annotated[ApiTokenCaller | UserTokenCaller | LegacyClientCaller, Field(discriminator="kind")],
+)
+
+
 UtcDatetime = TypeAliasType("UtcDatetime", AwareDatetime)
 
 
+VISCODepletionType = TypeAliasType("VISCODepletionType", Literal["CCE", "DLE"])
+
+
 class VISCOExperimentModel(BaseModel):
-    gas_density_unit: LiquidDensityUnit | None = "g/cm3"
+    depletion_type: VISCODepletionType | None = "DLE"
+    gas_density_unit: DensityUnit | None = "g/cm3"
     gas_viscosity_unit: ViscosityUnit | None = "cP"
     name: str
-    oil_density_unit: LiquidDensityUnit | None = "g/cm3"
+    oil_density_unit: DensityUnit | None = "g/cm3"
     oil_viscosity_unit: ViscosityUnit | None = "cP"
     pressure_unit: PressureUnit | None = "bara"
     saturation_pressure_type: SaturationPressureType | None = None
@@ -2489,6 +2621,10 @@ ValidComponentName = TypeAliasType(
         "EC-C5",
         "Toluene",
         "C-C7",
+        "224TM-C5",
+        "2M-C7",
+        "3M-C7",
+        "4M-C7",
         "n-C8",
         "C8",
         "E-Benzene",

@@ -43,8 +43,8 @@ class ImportArchiveOptions(BaseModel):
     resolutions: list[ImportResolutionModel] = Field(default_factory=list)
 
 
-# Hand-written until GET /external/v2/me is in the OpenAPI document; then replace with the
-# generated models.
+# Not the generated Caller: role and scopes stay str, so a role or scope added on the server
+# does not fail the /me check of `wpvt auth login` in installed SDKs.
 class _UserIdentity(BaseModel):
     user_id: int
     name: str | None

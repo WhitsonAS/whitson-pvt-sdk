@@ -90,9 +90,26 @@ only their represented fields, not all native compositions, primary flags, or
 saturation-pressure classifications. File.Generic JSON-only imports are staged as
 unsupported because they carry no bytes. Use archives to transfer files.
 
+## Density units
+
+`GasDensityUnit` and `LiquidDensityUnit` are replaced by one `DensityUnit`
+(`g/cm3`, `kg/m3`, `lbm/bbl`, `lbm/ft3`) on every experiment and sample density-unit
+field. `"SG"`, which `GasDensityUnit` allowed, is no longer a density unit; give gas
+densities in one of the four units above.
+
+## Lists a credential may not read
+
+An API token or login carries scopes. Without `samples:read`, `GET /wells/{id}`
+omits the well's `samples`; without `fluid-models:read` or `samples:read`,
+`GET /projects/{id}` omits `fluid_models` or `samples`. `GetWellModel.samples`,
+`GetProjectWithFluidModelsModel.fluid_models` and `.samples` are therefore
+`list[...] | None`: `None` means the credential may not read them, not that there
+are none. `client.samples.list(well_id)` raises `AuthError` when the well comes back
+without its samples, instead of returning an empty list.
+
 ## Verification before release
 
-Run `just test`, `just lint`, `just ty`, `just generate-check v2`, and `just build`.
+Run `just test`, `just lint`, `just ty`, `just generate-check`, and `just build`.
 For live schema/wiring verification without credentials:
 
 ```bash

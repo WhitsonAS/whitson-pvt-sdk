@@ -202,7 +202,9 @@ def test_report_roundtrip(
         sample_ids = {
             record.committed_entity_id for record in committed if record.entity_type == "sample"
         }
-        assert {sample.id for well in wells.values() for sample in well.samples} == sample_ids
+        assert {
+            sample.id for well_id in wells for sample in client_v2.samples.list(well_id).samples
+        } == sample_ids
         actual_sample_keys = []
         for sample_id in sample_ids:
             assert sample_id is not None

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, TypeAlias
 from pydantic import TypeAdapter
 
 from whitson_pvt_sdk._generated.v2 import resources as generated_resources
-from whitson_pvt_sdk.errors import APIError, CalculationError, MissingDataError
+from whitson_pvt_sdk.errors import APIError, AuthError, CalculationError, MissingDataError
 from whitson_pvt_sdk.shared.models import CompositionSource, Identity
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
@@ -12,6 +12,7 @@ from whitson_pvt_sdk.v2.models import (
     ExternalCalculationSuccessResultModelExternalGorRecombinationCalculationResultModel,
     ExternalCalculationSuccessResultModelExternalSampleToEosSlateConversionCalculationResultModel,
     GetSampleListModel,
+    GetWellModel,
     GorRecombinationCalculationInputModel,
     GorRecombinationCalculationRequestModel,
     GorUnit,
@@ -227,8 +228,14 @@ def _feed_compositions(
 
 class Samples(generated_resources.Samples):
     def list(self, well_id: int) -> GetSampleListModel:
-        body = self._transport.get(f"/wells/{well_id}")
-        return GetSampleListModel.model_validate(body)
+        well = GetWellModel.model_validate(self._transport.get(f"/wells/{well_id}"))
+        if well.samples is None:
+            raise AuthError(
+                f"Well {well_id} was returned without its samples: this credential may not read "
+                "samples (it needs the samples:read scope).",
+                403,
+            )
+        return GetSampleListModel(samples=well.samples)
 
 
 __all__ = (

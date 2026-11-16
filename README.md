@@ -99,6 +99,10 @@ and talks only to external API v2.
   `path` for `output.json`.
 - The unused multi-domain copy models (`DomainAuthConfig`, `MultiDomainCopyConfig`
   and related) are removed from `whitson_pvt_sdk.shared.models`.
+- `GasDensityUnit` and `LiquidDensityUnit` are replaced by `DensityUnit`, which has no `"SG"`.
+  `GetWellModel.samples` and `GetProjectWithFluidModelsModel.fluid_models`/`samples` are
+  `None` when the credential may not read them, and `samples.list(well_id)` then raises
+  `AuthError`. See `docs/api-v2-update.md`.
 - `calculations.get_sample_feed_composition(s)` raise `MissingDataError` instead of
   `ValueError` when the fluid model has no adjusted composition for a requested sample.
 - The HTTP library is now [httpx2](https://github.com/pydantic/httpx2), Pydantic's fork of
@@ -384,7 +388,7 @@ deployment's external API. METHOD defaults to GET, or POST with `--data`.
 
 ```console
 $ wpvt api --list                                   # every route, from the deployment's OpenAPI
-$ wpvt api --describe GET /samples/{sample_id}      # parameters and schema names
+$ wpvt api --describe GET /samples/{sample_id}      # scopes, parameters and schema names
 $ wpvt api /regions/12/wells -q limit=250 --paginate --out wells.json
 $ wpvt api GET /external/v2/samples/345 --out sample-345.json
 $ wpvt api /calculations/phase-envelope -d @request.json
@@ -631,11 +635,10 @@ just test                        # pytest
 just integration                 # opt-in tests against a real API
 just build                       # uv build
 just plugins-sync                # copy the packaged skill into plugins/wpvt (just lint checks it)
-just generate v2                 # regenerate v2 models and endpoint wrappers from a live API
-just generate-all                # regenerate every supported version (v2)
-just generate-file v2 FILE       # regenerate v2 from an OpenAPI file, no API needed
-just generate-file-check v2 FILE # only show what would change
-just all                         # generate-all + lint/format + build
+just generate                    # regenerate models and endpoint wrappers from a live API
+just generate-file FILE          # regenerate from an OpenAPI file, no API needed
+just generate-file-check FILE    # only show what would change
+just all                         # generate + lint/format + build
 ```
 
 Integration tests are skipped by default. They create an isolated region, well,
@@ -727,7 +730,10 @@ published. The GitHub CLI must be authenticated with release permissions; use
 
 Generated code comes from the external API's OpenAPI document. `just generate`
 fetches `/external/{version}/docs/openapi.json` from the configured `BASE_URL`;
-`just generate-file` reads a saved document instead, so no API has to run. Both
+`just generate-file FILE` reads a saved document instead, so no API has to run.
+Every generate recipe takes the API version as an optional last argument (such
+as `just generate-file FILE v2`); without it, the generator uses the latest
+version it supports (`LATEST_VERSION` in `scripts/sdk_generator/config.py`). Both
 run `datamodel-code-generator` for Pydantic models, then the repo-specific
 generator in `scripts/sdk_generator/` for endpoint modules and resource facades.
 The `-check` recipes only print the diff.
@@ -763,8 +769,8 @@ mise-activated shell):
 ```bash
 just test                                                    # unit tests
 just lint && just ty                                         # lint and type check
-just generate-file v2 ../app/api/openapi-external.json       # regenerate from the workspace's API
-just generate-file-check v2 ../app/api/openapi-external.json # only show the drift
+just generate-file ../app/api/openapi-external.json          # regenerate from the workspace's API
+just generate-file-check ../app/api/openapi-external.json    # only show the drift
 just integration                                             # integration tests against the workspace API
 ```
 
