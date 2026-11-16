@@ -11,7 +11,7 @@ def to_json(data: object, *, indent: int = 2) -> str:
 
 
 def print_json(data: object, *, indent: int = 2) -> None:
-    print(to_json(data, indent=indent))
+    print(to_json(data, indent=indent))  # noqa: T201 - printing is this public helper's purpose
 
 
 def write_json(

@@ -1,7 +1,7 @@
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 from urllib.parse import parse_qs
 
 import httpx2
@@ -22,6 +22,14 @@ DISCOVERY = f"{ISSUER}.well-known/openid-configuration"
 EMPTY_PAGE = {"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}}
 
 StoreLogin = Callable[..., StoredLogin]
+
+
+class LoginFields(TypedDict, total=False):
+    access: str
+    refresh: str
+    expires_in: timedelta
+    audience: str
+    token_endpoint: str
 
 
 def form(request: httpx2.Request) -> dict[str, str]:
@@ -108,7 +116,7 @@ def make_login(
 
 @pytest.fixture
 def store_login(store: CredentialStore) -> StoreLogin:
-    def save(base_url: str, **fields: Any) -> StoredLogin:
+    def save(base_url: str, **fields: Unpack[LoginFields]) -> StoredLogin:
         login = make_login(base_url, **fields)
         with store.transaction() as transaction:
             transaction.put(login)

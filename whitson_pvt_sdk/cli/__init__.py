@@ -22,6 +22,6 @@ def main() -> None:
     except ModuleNotFoundError as exc:
         if exc.name != "typer":
             raise
-        print(INSTALL_HINT, file=sys.stderr)
+        print(INSTALL_HINT, file=sys.stderr)  # noqa: T201 - runs without Typer, so before cli._output can load
         raise SystemExit(ExitCode.USAGE) from None
     app()

@@ -11,6 +11,7 @@ from sdk_generator.models import BodyKind, Endpoint, EndpointParam, HTTPMethod, 
 from sdk_generator.naming import singular, to_snake
 
 JsonObject = dict[str, Any]
+JsonValue = JsonObject | list[Any] | str | int | float | bool | None
 
 SCHEMA_REF_PREFIX = "#/components/schemas/"
 
@@ -62,7 +63,7 @@ def normalize_schema_titles(spec: JsonObject) -> JsonObject:
     return normalized
 
 
-def rewrite_schema_refs(value: Any, renames: dict[str, str]) -> None:
+def rewrite_schema_refs(value: JsonValue, renames: dict[str, str]) -> None:
     if isinstance(value, dict):
         ref = value.get("$ref")
         if isinstance(ref, str):

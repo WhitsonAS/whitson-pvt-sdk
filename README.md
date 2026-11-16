@@ -641,6 +641,13 @@ just generate-file-check FILE    # only show what would change
 just all                         # generate + lint/format + build
 ```
 
+`just lint` runs Ruff over the package, `tests/`, `scripts/` and `examples/` with the API
+repository's rule set (`ANN401`, `B`, `C4`, `DTZ`, `E`, `F`, `I`, `ICN`, `ISC`, `N`,
+`PGH003`, `PIE`, `RET`, `RUF`, `S110`, `S608`, `SIM`, `T201`, `TID251`, `UP`, plus `W`), so
+`print` is reserved for `scripts/` and `examples/`. Tests follow the API repository's
+`TESTING.md`: they prove behaviour through the public interface, mock only HTTP, the clock and
+OS calls, and do not restate generated models or the generator's output.
+
 Integration tests are skipped by default. They create an isolated region, well,
 sample, and simple experiment for each run so existing staging data is not modified.
 The external API does not currently expose delete endpoints for these resources,

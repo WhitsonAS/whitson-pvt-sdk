@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 import httpx2
@@ -107,7 +108,7 @@ def test_refused_renewal_marks_the_login_and_says_to_log_in(
     )
 
     with pytest.raises(
-        LoginError, match="wpvt auth login --url https://dev.pvt.whitson.com"
+        LoginError, match=re.escape("wpvt auth login --url https://dev.pvt.whitson.com")
     ) as exc:
         WhitsonPVTClient(base_url=base_url).regions.list()
 
@@ -116,7 +117,7 @@ def test_refused_renewal_marks_the_login_and_says_to_log_in(
     entry = store.get(base_url)
     assert isinstance(entry, InvalidLogin)
     assert "invalid_grant" in entry.reason
-    with pytest.raises(LoginError, match="no longer valid.*invalid_grant"):
+    with pytest.raises(LoginError, match=r"no longer valid.*invalid_grant"):
         WhitsonPVTClient(base_url=base_url)
 
 

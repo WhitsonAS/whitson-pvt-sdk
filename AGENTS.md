@@ -7,11 +7,13 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 - Setup: `uv sync`; install the task runner with `uv tool install rust-just` if `just` is missing.
 - Dependency cooldown: `[tool.uv] exclude-newer = "3 days"` in `pyproject.toml`, as in the API repository, so `uv lock` never picks a release younger than three days; add a per-package exception only when a fix is required, and say why.
 - Focused checks: `just lint`, `just ty`, `just build`.
+- `just lint` runs Ruff over `whitson_pvt_sdk/`, `tests/`, `scripts/` and `examples/` with the API repository's rule set (`pyproject.toml`, `[tool.ruff.lint]`) plus `W`; `T201` keeps `print` to `scripts/`, `examples/` and the integration tests, and a `noqa` needs its reason on the line. Fix the code rather than ignoring a rule; generated code gets per-file ignores, never hand edits.
 - `just check` runs `lint -> format -> ty`; it is not read-only because `format` runs `ruff format whitson_pvt_sdk/`.
 - `just all` regenerates models, applies lint fixes/formatting, typechecks, then builds.
 
 ## Tests
 
+- Tests follow the API repository's `TESTING.md`: each proves a behaviour through the public interface and fails when it breaks; no tests that restate generated models or the generator's output, copy an implementation, or duplicate a contract proven at its owning layer.
 - Mock only at boundaries. Lint bans `unittest.mock` and `pytest_mock` (`TID251`), and `just lint` covers `tests/`: use `httpx2_mock` for HTTP and `monkeypatch` for the clock and OS calls, never for an SDK function.
 - HTTP is mocked with `httpx2-pytest` (the `pytest-httpx` API for httpx2): request the `httpx2_mock` fixture. It patches httpx2's transports, so a test that requests it cannot also reach the loopback server `tests/test_cli_mcp.py` starts.
 - Run the test suite with `just test`; it executes `uv run pytest tests/ -v`.

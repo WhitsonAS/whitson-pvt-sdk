@@ -20,7 +20,7 @@ class Paginator:
         *,
         cursor: str | None = None,
         limit: int | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> Iterator[_T]:
         while True:
             page = page_fn(cursor=cursor, limit=limit, **kwargs)
@@ -36,6 +36,6 @@ class Paginator:
         *,
         cursor: str | None = None,
         limit: int | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> list[_T]:
         return list(Paginator.iterate(page_fn, items_field, cursor=cursor, limit=limit, **kwargs))

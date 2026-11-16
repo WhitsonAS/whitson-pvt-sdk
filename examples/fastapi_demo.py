@@ -62,7 +62,7 @@ def list_regions(
             "prev_cursor": page.pagination.prev_cursor,
         }
     except SDKError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/regions/{region_id}")
@@ -70,12 +70,12 @@ def get_region(region_id: int, client: Annotated[WhitsonPVTClient, Depends(get_c
     try:
         region = client.regions.get(region_id)
         return region.model_dump()
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Region not found")
-    except AuthError:
-        raise HTTPException(status_code=401, detail="Authentication failed")
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail="Region not found") from e
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail="Authentication failed") from e
     except SDKError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/regions/{region_id}/wells")
@@ -92,10 +92,10 @@ def list_wells(
             "next_cursor": page.pagination.next_cursor,
             "prev_cursor": page.pagination.prev_cursor,
         }
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Region not found")
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail="Region not found") from e
     except SDKError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/regions/{region_id}/projects")
@@ -112,10 +112,10 @@ def list_projects(
             "next_cursor": page.pagination.next_cursor,
             "prev_cursor": page.pagination.prev_cursor,
         }
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Region not found")
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail="Region not found") from e
     except SDKError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":

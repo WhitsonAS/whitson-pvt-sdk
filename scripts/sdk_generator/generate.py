@@ -196,7 +196,7 @@ def ensure_pydantic_import(content: str, import_name: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def strip_schema_titles(value: Any) -> Any:
+def strip_schema_titles(value: object) -> object:
     if isinstance(value, dict):
         return {key: strip_schema_titles(child) for key, child in value.items() if key != "title"}
     if isinstance(value, list):
@@ -223,7 +223,7 @@ def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> No
     # Format all files in one batch
     ordered = sorted(generated)
     contents = format_python([generated[p] for p in ordered])
-    for path, content in zip(ordered, contents):
+    for path, content in zip(ordered, contents, strict=True):
         if check:
             assert_same(path, content)
         else:

@@ -174,9 +174,8 @@ def test_waiting_for_the_lock_outlasts_a_token_refresh(monkeypatch, store):
 
     monkeypatch.setattr("whitson_pvt_sdk._store.time.sleep", sleep)
     try:
-        with pytest.raises(CredentialStoreBusyError, match="try again"):
-            with store.transaction():
-                pass
+        with pytest.raises(CredentialStoreBusyError, match="try again"), store.transaction():
+            pass
     finally:
         release.set()
         holder.join()

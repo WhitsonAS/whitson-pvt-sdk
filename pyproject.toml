@@ -37,11 +37,39 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "TID251", "UP", "W"]
+select = [
+  "ANN401",
+  "E",
+  "F",
+  "I",
+  "N",
+  "B",
+  "C4",
+  "DTZ",
+  "ISC",
+  "PGH003",
+  "ICN",
+  "PIE",
+  "RET",
+  "SIM",
+  "T201",
+  "TID251",
+  "RUF",
+  "S110",
+  "UP",
+  "S608",
+  "W",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "whitson_pvt_sdk/_generated/*/models.py" = ["E501"]
 "whitson_pvt_sdk/v2/models/__init__.py" = ["TID251"]
+"examples/**" = ["T201"]
+"scripts/**" = ["T201"]
+"tests/integration/**" = ["T201"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["whitson_pvt_sdk.shared.models.RetryConfig"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "whitson_pvt_sdk._generated.v2.models".msg = "Import models from whitson_pvt_sdk.v2.models instead."

@@ -25,10 +25,10 @@ generate-file-check file version='':
 install-hooks:
     uv run prek install --hook-type commit-msg
 
-lint +files='whitson_pvt_sdk/ tests/': plugins-check
+lint +files='whitson_pvt_sdk/ tests/ scripts/ examples/': plugins-check
     uv run ruff check {{files}}
 
-lint-fix +files='whitson_pvt_sdk/ tests/':
+lint-fix +files='whitson_pvt_sdk/ tests/ scripts/ examples/':
     uv run ruff check {{files}} --fix
 
 format:
