@@ -13,7 +13,7 @@ from datamodel_code_generator.enums import DataModelType
 from datamodel_code_generator.format import Formatter
 from datamodel_code_generator.parser import LiteralType
 
-from sdk_generator.config import GENERATED_DIR, SUPPORTED_VERSIONS
+from sdk_generator.config import GENERATED_DIR, LATEST_VERSION, SUPPORTED_VERSIONS
 from sdk_generator.models import Endpoint
 from sdk_generator.openapi import load_openapi, parse_endpoints
 from sdk_generator.render import format_python, render_resources
@@ -26,31 +26,32 @@ LIST_TYPE_ALIAS_RE = re.compile(
 
 def main() -> None:
     args = parse_args()
-    versions = SUPPORTED_VERSIONS if args.version == "all" else (args.version,)
-
-    for version in versions:
-        spec = load_openapi(version, args.openapi, args.base_url)
-        if not args.endpoints_only:
-            generate_models(
-                version,
-                spec,
-                check=args.check,
-                reuse_model=args.reuse_model,
-                collapse_reuse_models=args.collapse_reuse_models,
-            )
-        if not args.models_only:
-            generate_endpoints(version, spec, check=args.check)
+    spec = load_openapi(args.version, args.openapi, args.base_url)
+    if not args.endpoints_only:
+        generate_models(
+            args.version,
+            spec,
+            check=args.check,
+            reuse_model=args.reuse_model,
+            collapse_reuse_models=args.collapse_reuse_models,
+        )
+    if not args.models_only:
+        generate_endpoints(args.version, spec, check=args.check)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate whitson PVT SDK models and endpoint wrappers."
     )
-    parser.add_argument("version", choices=[*SUPPORTED_VERSIONS, "all"])
-    parser.add_argument("--base-url", default="http://localhost:4000/external")
     parser.add_argument(
-        "--openapi", type=Path, help="OpenAPI JSON file. Only valid for one version."
+        "version",
+        nargs="?",
+        choices=SUPPORTED_VERSIONS,
+        default=LATEST_VERSION,
+        help=f"API version; defaults to the latest, {LATEST_VERSION}.",
     )
+    parser.add_argument("--base-url", default="http://localhost:4000/external")
+    parser.add_argument("--openapi", type=Path, help="OpenAPI JSON file instead of a live API.")
     parser.add_argument("--models-only", action="store_true")
     parser.add_argument("--reuse-model", action="store_true")
     parser.add_argument("--collapse-reuse-models", action="store_true")
@@ -59,8 +60,6 @@ def parse_args() -> argparse.Namespace:
         "--check", action="store_true", help="Diff generated output without writing files."
     )
     args = parser.parse_args()
-    if args.openapi and args.version == "all":
-        parser.error("--openapi can only be used with a single version")
     if args.models_only and args.endpoints_only:
         parser.error("--models-only and --endpoints-only are mutually exclusive")
     return args

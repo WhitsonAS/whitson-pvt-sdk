@@ -9,6 +9,7 @@ GENERATED_DIR = SDK_DIR / "_generated"
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 SUPPORTED_VERSIONS: tuple[Version, ...] = get_args(Version)
+LATEST_VERSION: Version = SUPPORTED_VERSIONS[-1]
 EXCLUDED_RESOURCES = {"authentication"}
 
 OVERRIDES: dict[tuple[str, str, str], EndpointOverride] = {

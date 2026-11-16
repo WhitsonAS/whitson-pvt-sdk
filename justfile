@@ -1,26 +1,24 @@
 # ── code generation ───────────────────────────────────────────────
 BASE_URL := "http://localhost:4000/external"
 
-generate version:
+# VERSION defaults to the latest API version the generator supports
+generate version='':
     uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}}
 
-generate-models version:
+generate-models version='':
     uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}} --models-only
 
-generate-endpoints version:
+generate-endpoints version='':
     uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}} --endpoints-only
 
-generate-check version:
+generate-check version='':
     uv run python scripts/generate_sdk.py {{version}} --base-url {{BASE_URL}} --check
 
-generate-all:
-    uv run python scripts/generate_sdk.py all --base-url {{BASE_URL}}
-
 # Generate from an OpenAPI file instead of a live API
-generate-file version file:
+generate-file file version='':
     uv run python scripts/generate_sdk.py {{version}} --openapi {{file}}
 
-generate-file-check version file:
+generate-file-check file version='':
     uv run python scripts/generate_sdk.py {{version}} --openapi {{file}} --check
 
 # ── lint & typecheck ──────────────────────────────────────────────
@@ -89,4 +87,4 @@ release version:
     gh workflow run publish.yml --ref main -f version={{version}}
 
 # ── run all ───────────────────────────────────────────────────────
-all: generate-all lint-fix format ty build
+all: generate lint-fix format ty build
