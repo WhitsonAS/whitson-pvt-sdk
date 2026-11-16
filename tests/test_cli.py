@@ -81,18 +81,32 @@ def test_status_reports_the_credential_and_identity(
     _no_secrets(text)
 
 
+ROLE_NOT_CONFIRMED = (
+    "Your whitsonPVT role has not been confirmed in the last 30 days; sign in to the whitsonPVT "
+    "web app, then try again"
+)
+
+
 @pytest.mark.parametrize(
-    ("setup", "exit_code", "kind", "message"),
+    ("setup", "exit_code", "kind", "message", "absent"),
     [
-        ("nothing", 2, "configuration", "wpvt auth login --url"),
-        ("invalid-login", 3, "authentication", "no longer valid"),
-        ("rejected-token", 3, "authentication", "Check the token in WHITSON_PVT_TOKEN"),
-        ("unreachable", 4, "network", "Request failed"),
+        ("nothing", 2, "configuration", "wpvt auth login --url", None),
+        ("invalid-login", 3, "authentication", "no longer valid", None),
+        (
+            "refused-login",
+            3,
+            "authentication",
+            f"rejected the credential: {ROLE_NOT_CONFIRMED}.",
+            "wpvt auth login",
+        ),
+        ("refused-login-without-reason", 3, "authentication", "wpvt auth login --url", None),
+        ("rejected-token", 3, "authentication", "Check the token in WHITSON_PVT_TOKEN", None),
+        ("unreachable", 4, "network", "Request failed", None),
     ],
 )
 @pytest.mark.usefixtures("no_retry_sleep")
 def test_status_failures_have_distinct_exit_codes(
-    base_url, httpx2_mock, monkeypatch, store, store_login, setup, exit_code, kind, message
+    base_url, httpx2_mock, monkeypatch, store, store_login, setup, exit_code, kind, message, absent
 ):
     monkeypatch.setenv("WHITSON_PVT_URL", base_url)
     me = f"{base_url}/external/v2/me"
@@ -101,6 +115,15 @@ def test_status_failures_have_distinct_exit_codes(
             store_login(base_url, access="stored-access", refresh="stored-refresh")
             with store.transaction() as transaction:
                 transaction.mark_invalid(base_url, "the refresh token was revoked")
+        case "refused-login" | "refused-login-without-reason":
+            store_login(base_url, access="stored-access", refresh="stored-refresh")
+            httpx2_mock.add_response(
+                method="POST",
+                url=TOKEN_ENDPOINT,
+                json={"access_token": "renewed-access", "token_type": "Bearer", "expires_in": 3600},
+            )
+            refusal = {"message": ROLE_NOT_CONFIRMED} if setup == "refused-login" else None
+            httpx2_mock.add_response(url=me, status_code=401, json=refusal, is_reusable=True)
         case "rejected-token":
             monkeypatch.setenv("WHITSON_PVT_TOKEN", "env-token")
             httpx2_mock.add_response(url=me, status_code=401, json={"message": "Invalid token"})
@@ -115,6 +138,7 @@ def test_status_failures_have_distinct_exit_codes(
     error = json.loads(result.stderr)
     assert error["error"] == kind
     assert message in error["message"]
+    assert absent is None or absent not in error["message"]
     _no_secrets(result)
 
 
@@ -289,9 +313,14 @@ def _device_login_server(base_url, httpx2_mock, monkeypatch) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("env_token", "token_note"), [(None, False), ("", True)], ids=["token-unset", "token-empty"]
+)
 def test_device_login_makes_the_login_the_default_and_prints_who(
-    base_url, httpx2_mock, monkeypatch, store
+    base_url, httpx2_mock, monkeypatch, store, env_token, token_note
 ):
+    if env_token is not None:
+        monkeypatch.setenv("WHITSON_PVT_TOKEN", env_token)
     _device_login_server(base_url, httpx2_mock, monkeypatch)
     httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
 
@@ -305,19 +334,24 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
         for r in httpx2_mock.get_requests(url=f"{base_url}/external/v2/me")
     ] == ["Bearer stored-access"]
     assert store.default_url() == base_url
+    assert ("WHITSON_PVT_TOKEN is set" in result.stderr) is token_note
     _no_secrets(result)
 
 
 @pytest.mark.parametrize(
-    ("me", "exit_code"),
+    ("me", "exit_code", "message"),
     [
-        ({"status_code": 403, "json": {"message": "No access to this deployment"}}, 3),
-        ({"json": {"kind": "unknown"}}, 4),
+        (
+            {"status_code": 403, "json": {"message": "No access to this deployment"}},
+            3,
+            "No access to this deployment",
+        ),
+        ({"json": {"kind": "unknown"}}, 4, "kind"),
     ],
     ids=["no-access", "unexpected-identity"],
 )
 def test_login_whose_identity_check_fails_keeps_the_previous_default(
-    base_url, httpx2_mock, monkeypatch, store, store_login, me, exit_code
+    base_url, httpx2_mock, monkeypatch, store, store_login, me, exit_code, message
 ):
     previous = "https://other.pvt.whitson.com"
     store_login(previous)
@@ -328,6 +362,7 @@ def test_login_whose_identity_check_fails_keeps_the_previous_default(
 
     assert result.exit_code == exit_code
     assert result.stdout == ""
+    assert message in json.loads(result.stderr.splitlines()[-1])["message"]
     assert store.get(base_url) is None
     assert store.default_url() == previous
     _no_secrets(result)

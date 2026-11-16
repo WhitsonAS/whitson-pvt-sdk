@@ -10,6 +10,7 @@ from fastmcp.server.providers.proxy import ProxyClient
 from whitson_pvt_sdk import __version__
 from whitson_pvt_sdk.auth import TOKEN_ENV_VAR, BearerSource, resolve_credential, set_bearer
 from whitson_pvt_sdk.errors import AuthError, NoResponseError, ResponseError, SDKError
+from whitson_pvt_sdk.http import API_PREFIX, raise_for_status
 
 CLIENT_HEADER = "X-PVT-Client"
 
@@ -39,15 +40,42 @@ class LoginBearer(httpx2.Auth):
             set_bearer(request.headers, renewed)
             response = yield request
             if response.status_code == 401:
-                raise AuthError(
-                    f"{self._base_url}/mcp refused the stored login. Run `wpvt auth login --url "
-                    f"{self._base_url}`.",
-                    401,
-                )
+                raise await self._refused_login(request)
         if response.status_code == 403:
             raise AuthError(
                 f"{self._base_url}/mcp refused access with this credential (HTTP 403).", 403
             )
+
+    async def _refused_login(self, refused: httpx2.Request) -> AuthError:
+        # FastMCP answers any refusal on /mcp with a generic 401, so ask the API why, with the
+        # same token and without renewing it again.
+        probe = httpx2.Request(
+            "GET",
+            f"{self._base_url}{API_PREFIX}/me",
+            headers={name: refused.headers[name] for name in ("Authorization", CLIENT_HEADER)},
+        )
+        try:
+            async with httpx2.AsyncClient() as http:
+                raise_for_status(await http.send(probe))
+        except AuthError as exc:
+            if exc.server_message is not None:
+                return AuthError(
+                    f"{self._base_url} refused the stored login: {exc.server_message}.", 401
+                )
+        except (ResponseError, httpx2.HTTPError):
+            pass
+        else:
+            return AuthError(
+                f"The stored login works for the API of {self._base_url}, but "
+                f"{self._base_url}/mcp refuses it. Ask the deployment's administrator to check "
+                "its MCP access.",
+                401,
+            )
+        return AuthError(
+            f"{self._base_url}/mcp refused the stored login. Run `wpvt auth login --url "
+            f"{self._base_url}`.",
+            401,
+        )
 
 
 def serve(url: str | None, *, verbose: bool) -> None:

@@ -168,7 +168,7 @@ Everything the SDK raises derives from `SDKError` in `whitson_pvt_sdk.errors`:
 | `ConfigurationError` | the client is created without a usable URL or credential | `message` |
 | `LoginError` | a login did not complete, or the stored login is no longer valid | `message` |
 | `NoResponseError` | a request gets no response (connection error, timeout) after retries | `message` |
-| `ResponseError` | the API answers with an error status; base of the five below | `status_code`, `response_body`, `request_id` |
+| `ResponseError` | the API answers with an error status; base of the five below | `status_code`, `response_body`, `request_id`, `server_message` (the `message` of the JSON error body, `None` without one) |
 | `AuthError` | HTTP 401 or 403 | as `ResponseError` |
 | `NotFoundError` | HTTP 404 | as `ResponseError` |
 | `ValidationError` | HTTP 400 or 422 | as `ResponseError` |
@@ -312,11 +312,14 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   otherwise it prints the link, which must be opened on the same machine. `--device` logs in
   with a code entered on another device, for SSH sessions, containers and sandboxes, on deployments that enable it. The login is stored, and
   becomes the default, only after `/external/v2/me` accepts it; if that check fails, nothing is
-  stored and the previous default stays.
+  stored and the previous default stays. A deployment accepts a login only while a sign-in to
+  its web app has confirmed your role in the last 30 days; otherwise it refuses the login and
+  says so, and signing in to the web app, not logging in again, fixes it.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
   came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
   API reports: the API token's name for an API token, and "legacy client <subject>, full
-  access" for a legacy client. It never prints a token.
+  access" for a legacy client. It never prints a token. When the deployment refuses the stored
+  login, it shows the deployment's reason, and suggests `wpvt auth login` only when there is none.
 - `wpvt auth logout [--url URL | --all]` removes stored logins and revokes their refresh
   tokens when the authorization server offers revocation. It removes a login even when its
   tokens cannot be read; when the OS keyring is unavailable, it says the keyring entries were
@@ -416,6 +419,10 @@ codex mcp add wpvt -- wpvt mcp
   a credential the server refuses, or an unreachable deployment, it exits before serving with
   the message on stderr, so the host shows the server as failed. A login that stops working while
   serving turns into a tool error naming `wpvt auth login --url ...`.
+- The MCP endpoint does not say why it refuses a stored login, so `wpvt mcp` then asks
+  `/external/v2/me` with the same token and shows its reason, such as the 30-day web sign-in rule
+  above. It suggests `wpvt auth login` only when the API gives no reason, and says so when the API
+  accepts the login that MCP refuses.
 - The stored login renews itself, is persisted under the store's lock and goes only to its own
   deployment. Every request carries `X-PVT-Client: wpvt/<version>`.
 - stdout carries only MCP messages; diagnostics go to stderr (`--verbose` for more). Tokens are

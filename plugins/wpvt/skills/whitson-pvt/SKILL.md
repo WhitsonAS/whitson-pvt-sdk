@@ -58,7 +58,7 @@ The whitson PVT MCP tools come from `wpvt mcp`, a local stdio server that forwar
 When the tools are missing or the server failed to start, ask the user to run `wpvt mcp` in a terminal and show you its stderr message (or run `wpvt auth status --json` yourself). The usual causes:
 
 - `wpvt` is not installed or not on `PATH`: the user installs it with `uv tool install "whitson-pvt-sdk[mcp]"`; `wpvt mcp` saying the `mcp` extra is missing needs the same command.
-- Not logged in, or the login is no longer valid (`wpvt auth status` exits 2 or 3): ask the user to run `wpvt auth login --url <their deployment>` in their own terminal, then reconnect the server. Never run it yourself.
+- Not logged in, or the login is no longer valid (`wpvt auth status` exits 2 or 3): ask the user to run `wpvt auth login --url <their deployment>` in their own terminal, then reconnect the server. Never run it yourself. When the message gives the deployment's reason instead of suggesting a login, relay that reason: a role not confirmed in the last 30 days needs a sign-in to the deployment's web app, and a new `wpvt auth login` does not help.
 
 Working with the data:
 

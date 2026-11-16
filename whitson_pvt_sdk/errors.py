@@ -30,10 +30,12 @@ class ResponseError(SDKError):
         *,
         response_body: object | None = None,
         request_id: str | None = None,
+        server_message: str | None = None,
     ) -> None:
         self.status_code = status_code
         self.response_body = response_body
         self.request_id = request_id
+        self.server_message = server_message
         super().__init__(message)
 
 
@@ -63,6 +65,7 @@ class RateLimitError(ResponseError):
         *,
         response_body: object | None = None,
         request_id: str | None = None,
+        server_message: str | None = None,
         retry_after_seconds: float | None = None,
     ) -> None:
         self.retry_after_seconds = retry_after_seconds
@@ -71,6 +74,7 @@ class RateLimitError(ResponseError):
             status_code=status_code,
             response_body=response_body,
             request_id=request_id,
+            server_message=server_message,
         )
 
 

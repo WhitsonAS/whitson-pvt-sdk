@@ -96,7 +96,7 @@ class HTTPTransport:
 
         match outcome:
             case httpx2.Response():
-                _raise_for_status(outcome)
+                raise_for_status(outcome)
                 return outcome
             case httpx2.TransportError():
                 logger.warning(
@@ -164,7 +164,7 @@ def external_path(path: str) -> str:
     return "/" + "/".join(segments)
 
 
-def _raise_for_status(response: httpx2.Response) -> None:
+def raise_for_status(response: httpx2.Response) -> None:
     if response.is_success:
         return
     status = response.status_code
@@ -172,39 +172,73 @@ def _raise_for_status(response: httpx2.Response) -> None:
         body: object = response.json()
     except ValueError:
         body = response.text
-    message = _error_message(status, body)
+    server_message = _server_message(body)
+    message = _error_message(status, body, server_message)
     request_id = response.headers.get("x-request-id")
     logger.warning(
         "API request failed: status=%s request_id=%s message=%s", status, request_id, message
     )
     match status:
         case 401 | 403:
-            raise AuthError(message, status, response_body=body, request_id=request_id)
+            raise AuthError(
+                message,
+                status,
+                response_body=body,
+                request_id=request_id,
+                server_message=server_message,
+            )
         case 404:
-            raise NotFoundError(message, status, response_body=body, request_id=request_id)
+            raise NotFoundError(
+                message,
+                status,
+                response_body=body,
+                request_id=request_id,
+                server_message=server_message,
+            )
         case 400 | 422:
-            raise ValidationError(message, status, response_body=body, request_id=request_id)
+            raise ValidationError(
+                message,
+                status,
+                response_body=body,
+                request_id=request_id,
+                server_message=server_message,
+            )
         case 429:
             raise RateLimitError(
                 message,
                 status,
                 response_body=body,
                 request_id=request_id,
+                server_message=server_message,
                 retry_after_seconds=retry_after(response),
             )
         case _:
-            raise APIError(message, status, response_body=body, request_id=request_id)
+            raise APIError(
+                message,
+                status,
+                response_body=body,
+                request_id=request_id,
+                server_message=server_message,
+            )
 
 
-def _error_message(status: int, body: object) -> str:
+def _server_message(body: object) -> str | None:
+    match body:
+        case {"message": str(message)} if message:
+            return message
+        case _:
+            return None
+
+
+def _error_message(status: int, body: object, server_message: str | None) -> str:
     match body:
         case {"errors": [_, *_] as errors} if all(
             isinstance(error, dict) and isinstance(error.get("message"), str) and error["message"]
             for error in errors
         ):
             return f"Validation Error: {errors}"
-        case {"message": str(message)} if message:
-            return message
+        case _ if server_message is not None:
+            return server_message
         case str() if body:
             return body
         case _:

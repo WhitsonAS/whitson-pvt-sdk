@@ -40,6 +40,8 @@ class Backend:
         self.paths: list[str] = []
         self.refreshed_with: list[str] = []
         self.forbidden = False
+        self.me: JSONResponse | None = None
+        self.me_bearers: list[str] = []
         self.url = ""
 
 
@@ -69,6 +71,11 @@ def _backend_app(backend: Backend):
         if backend.renewal is None:
             return JSONResponse({"error": "invalid_grant"}, status_code=403)
         return JSONResponse({**backend.renewal, "token_type": "Bearer", "expires_in": 3600})
+
+    @server.custom_route("/external/v2/me", methods=["GET"])
+    async def me(request: Request) -> JSONResponse:
+        backend.me_bearers.append(request.headers.get("authorization", ""))
+        return backend.me or JSONResponse({"message": "Not Found"}, 404)
 
     inner = server.http_app(path="/mcp")
 
@@ -248,6 +255,46 @@ def test_mcp_renews_an_expiring_login_before_serving_and_keeps_the_rotated_token
         case other:
             pytest.fail(f"expected the rotated login, found {other}")
     assert f"refused the stored login. Run `wpvt auth login --url {backend.url}`" in result.stderr
+
+
+ROLE_NOT_CONFIRMED = (
+    "Your whitsonPVT role has not been confirmed in the last 30 days; sign in to the whitsonPVT "
+    "web app, then try again"
+)
+
+
+@pytest.mark.parametrize(
+    ("me", "message", "login_hint"),
+    [
+        (
+            JSONResponse({"message": ROLE_NOT_CONFIRMED}, 401),
+            f"{{url}} refused the stored login: {ROLE_NOT_CONFIRMED}.",
+            False,
+        ),
+        (
+            JSONResponse({"kind": "user_token"}),
+            "The stored login works for the API of {url}, but {url}/mcp refuses it.",
+            False,
+        ),
+        (JSONResponse({}, 401), "{url}/mcp refused the stored login. Run", True),
+    ],
+    ids=["refused-with-reason", "accepted-by-api", "refused-without-reason"],
+)
+def test_mcp_explains_a_refused_login_with_the_api_reason(
+    backend, store_login, me, message, login_hint
+):
+    _save_login(store_login, backend.url, expired=False)
+    backend.accepted = {}
+    backend.me = me
+
+    result = runner.invoke(app, ["mcp", "--url", backend.url])
+
+    assert result.exit_code == 3
+    assert message.format(url=backend.url) in result.stderr
+    assert ("wpvt auth login" in result.stderr) is login_hint
+    assert backend.me_bearers == ["Bearer fresh-access"]
+    assert backend.refreshed_with == ["refresh-1"]
+    assert result.stdout == ""
 
 
 def test_mcp_with_a_refused_api_token_says_mcp_needs_a_login(backend, monkeypatch):

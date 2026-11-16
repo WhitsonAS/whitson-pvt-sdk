@@ -13,6 +13,7 @@ from whitson_pvt_sdk.auth import (
     FromArgument,
     FromEnvironment,
     FromStore,
+    ResolvedCredential,
     resolve_base_url,
     resolve_credential,
 )
@@ -144,7 +145,7 @@ def login_command(
             confirm=confirm,
             trust_host=trust_host,
         )
-        if os.environ.get(TOKEN_ENV_VAR):
+        if TOKEN_ENV_VAR in os.environ:
             note(
                 f"{TOKEN_ENV_VAR} is set: commands given a URL (--url or {URL_ENV_VAR}) use it "
                 "instead of this login, and commands without one refuse to run. Unset it to use "
@@ -166,15 +167,14 @@ def status_command(url: UrlOption = None, json_output: JsonOption = False) -> No
         match resolved:
             case FromStore():
                 credential = CredentialReport(kind="stored_login", source=resolved.source)
-                action = f"Run `wpvt auth login --url {target}`."
             case FromEnvironment() | FromArgument():
                 credential = CredentialReport(kind="api_token", source=resolved.source)
-                action = f"Check the token in {TOKEN_ENV_VAR}."
         try:
             identity = _identity(resolved.credential, target)
         except AuthError as exc:
             raise AuthError(
-                f"{target} rejected the credential: {exc.message}. {action}", exc.status_code
+                f"{target} rejected the credential: {exc.message}.{_next_step(resolved, exc)}",
+                exc.status_code,
             ) from exc
         emit(
             StatusReport(url=target, credential=credential, identity=identity),
@@ -244,6 +244,16 @@ def _identity(credential: Credential, base_url: str) -> Identity:
         return Me(transport).get()
     finally:
         transport.close()
+
+
+def _next_step(resolved: ResolvedCredential, refusal: AuthError) -> str:
+    match resolved:
+        case FromStore() if refusal.server_message is None:
+            return f" Run `wpvt auth login --url {resolved.url}`."
+        case FromStore():
+            return ""
+        case FromEnvironment() | FromArgument():
+            return f" Check the token in {TOKEN_ENV_VAR}."
 
 
 def _who(identity: Identity) -> str:
