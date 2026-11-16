@@ -7,47 +7,19 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 from sdk_generator.generate import detect_collisions, generate_model_file
-from sdk_generator.models import (
-    Endpoint,
-    EndpointParam,
-)
+from sdk_generator.models import Endpoint, HTTPMethod
 from sdk_generator.naming import singular, to_snake
 from sdk_generator.openapi import (
-    _validate_operation,
-    apply_override,
     infer_endpoint,
     infer_function_name,
     infer_public_method_name,
     infer_resource,
     load_openapi,
-    normalize_schema_titles,
     parse_endpoints,
     parse_params,
     schema_ref_name,
 )
-from sdk_generator.render import (
-    format_python,
-    render_endpoint,
-    render_module,
-    render_resources,
-)
-
-
-def generate_models_source(tmp_path, schemas):
-    target = tmp_path / "models.py"
-    generate_model_file(
-        "v2",
-        {
-            "openapi": "3.1.0",
-            "info": {"title": "test", "version": "1"},
-            "paths": {},
-            "components": {"schemas": schemas},
-        },
-        target,
-        reuse_model=False,
-        collapse_reuse_models=False,
-    )
-    return target.read_text()
+from sdk_generator.render import format_python
 
 
 def import_generated_models(tmp_path, schemas) -> ModuleType:
@@ -127,21 +99,24 @@ def test_parse_params_skips_ref():
 # ── schema ref ──
 
 
-def test_schema_ref_name_from_ref():
-    assert schema_ref_name({"$ref": "#/components/schemas/GetRegionModel"}) == "GetRegionModel"
+@pytest.mark.parametrize(
+    ("schema", "expected"),
+    [
+        ({"$ref": "#/components/schemas/GetRegionModel"}, "GetRegionModel"),
+        (
+            {"type": "array", "items": {"$ref": "#/components/schemas/CreateSampleListModel"}},
+            "CreateSampleListModel",
+        ),
+        (None, None),
+        ({}, None),
+    ],
+    ids=["ref", "array-items", "none", "empty"],
+)
+def test_schema_ref_name(schema, expected):
+    assert schema_ref_name(schema) == expected
 
 
-def test_schema_ref_name_array_items():
-    schema = {"type": "array", "items": {"$ref": "#/components/schemas/CreateSampleListModel"}}
-    assert schema_ref_name(schema) == "CreateSampleListModel"
-
-
-def test_schema_ref_name_none():
-    assert schema_ref_name(None) is None
-    assert schema_ref_name({}) is None
-
-
-def test_normalize_schema_titles_renames_components_and_refs():
+def test_load_openapi_renames_schemas_and_refs_by_their_titles(tmp_path):
     spec = {
         "openapi": "3.1.0",
         "info": {"title": "test", "version": "1"},
@@ -204,8 +179,10 @@ def test_normalize_schema_titles_renames_components_and_refs():
             }
         },
     }
+    openapi_path = tmp_path / "openapi.json"
+    openapi_path.write_text(json.dumps(spec))
 
-    normalized = normalize_schema_titles(spec)
+    normalized = load_openapi("v2", openapi_path, "http://localhost:4000/external")
     schemas = normalized["components"]["schemas"]
 
     assert "ExternalFlashCalculationInputModel" not in schemas
@@ -222,131 +199,40 @@ def test_normalize_schema_titles_renames_components_and_refs():
         schemas["FlashCalculationInputModel"]["properties"]["sample"]["$ref"]
         == "#/components/schemas/CreateSampleModel"
     )
-    assert "ExternalFlashCalculationInputModel" in spec["components"]["schemas"]
-
-
-def test_load_openapi_normalizes_schema_titles(tmp_path):
-    spec = {
-        "openapi": "3.1.0",
-        "info": {"title": "test", "version": "1"},
-        "paths": {},
-        "components": {
-            "schemas": {
-                "ExternalFlashCalculationInputModel": {
-                    "type": "object",
-                    "title": "Flash Calculation Input Model",
-                }
-            }
-        },
-    }
-    openapi_path = tmp_path / "openapi.json"
-    openapi_path.write_text(json.dumps(spec))
-
-    normalized = load_openapi("v2", openapi_path, "http://localhost:4000/external")
-
-    assert "ExternalFlashCalculationInputModel" not in normalized["components"]["schemas"]
-    assert "FlashCalculationInputModel" in normalized["components"]["schemas"]
-
-
-def test_parse_endpoints_uses_normalized_schema_titles():
-    spec = normalize_schema_titles(
-        {
-            "paths": {
-                "/calculations/flash": {
-                    "post": {
-                        "operationId": "run_flash",
-                        "tags": ["calculations"],
-                        "requestBody": {
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "$ref": (
-                                            "#/components/schemas/"
-                                            "ExternalFlashCalculationInputModel"
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        "responses": {
-                            "200": {
-                                "content": {
-                                    "application/json": {
-                                        "schema": {
-                                            "$ref": (
-                                                "#/components/schemas/"
-                                                "ExternalFlashCalculationResponseModel"
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                    }
-                }
-            },
-            "components": {
-                "schemas": {
-                    "ExternalFlashCalculationInputModel": {
-                        "type": "object",
-                        "title": "Flash Calculation Input Model",
-                    },
-                    "ExternalFlashCalculationResponseModel": {
-                        "type": "object",
-                        "title": "Flash Calculation Response Model",
-                    },
-                }
-            },
-        }
-    )
-
-    endpoints = parse_endpoints("v2", spec)
-
-    assert endpoints[0].request_model == "FlashCalculationInputModel"
-    assert endpoints[0].response_model == "FlashCalculationResponseModel"
 
 
 # ── model generation ──
 
 
-def test_generate_model_file_emits_type_alias_for_named_enum(tmp_path):
-    source = generate_models_source(
+def test_generated_named_enum_is_a_string_literal(tmp_path):
+    module = import_generated_models(
         tmp_path,
         {
             "GorUnit": {"type": "string", "enum": ["Sm3/Sm3", "Sm3/m3"], "title": "GorUnit"},
             "SampleModel": {
                 "type": "object",
-                "properties": {
-                    "initial_gor_unit": {"$ref": "#/components/schemas/GorUnit"},
-                    "separator_gor_unit": {"$ref": "#/components/schemas/GorUnit"},
-                },
+                "properties": {"initial_gor_unit": {"$ref": "#/components/schemas/GorUnit"}},
             },
         },
     )
 
-    assert 'GorUnit = TypeAliasType("GorUnit", Literal["Sm3/Sm3", "Sm3/m3"])' in source
-    assert "initial_gor_unit: GorUnit | None = None" in source
-    assert "separator_gor_unit: GorUnit | None = None" in source
+    unit = module.SampleModel(initial_gor_unit="Sm3/Sm3").initial_gor_unit
+    assert type(unit) is str
+    assert unit == "Sm3/Sm3"
+    with pytest.raises(ValidationError):
+        module.SampleModel(initial_gor_unit="bbl/bbl")
 
 
 def test_generated_constrained_scalar_alias_validates_model_fields(tmp_path):
-    schemas = {
-        "MassAmount": {"type": "number", "minimum": 0.0, "title": "MassAmount"},
-        "CompositionModel": {
-            "type": "object",
-            "properties": {"mass_amount": {"$ref": "#/components/schemas/MassAmount"}},
-        },
-    }
-    source = generate_models_source(
-        tmp_path,
-        schemas,
-    )
-
-    assert 'MassAmount = TypeAliasType("MassAmount", Annotated[float, Field(ge=0.0)])' in source
-    assert "mass_amount: MassAmount | None = None" in source
     module = import_generated_models(
         tmp_path,
-        schemas,
+        {
+            "MassAmount": {"type": "number", "minimum": 0.0, "title": "MassAmount"},
+            "CompositionModel": {
+                "type": "object",
+                "properties": {"mass_amount": {"$ref": "#/components/schemas/MassAmount"}},
+            },
+        },
     )
 
     assert module.CompositionModel(mass_amount=1.0).mass_amount == 1.0
@@ -355,23 +241,21 @@ def test_generated_constrained_scalar_alias_validates_model_fields(tmp_path):
 
 
 def test_generated_array_root_model_accepts_root_and_exposes_root(tmp_path):
-    schemas = {
-        "CreateSampleModel": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {"name": {"type": "string"}},
+    module = import_generated_models(
+        tmp_path,
+        {
+            "CreateSampleModel": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}},
+            },
+            "CreateSampleListModel": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/CreateSampleModel"},
+                "title": "CreateSampleListModel",
+            },
         },
-        "CreateSampleListModel": {
-            "type": "array",
-            "items": {"$ref": "#/components/schemas/CreateSampleModel"},
-            "title": "CreateSampleListModel",
-        },
-    }
-    source = generate_models_source(tmp_path, schemas)
-
-    assert "class CreateSampleListModel(RootModel[list[CreateSampleModel]]):" in source
-    assert 'CreateSampleListModel = TypeAliasType("CreateSampleListModel"' not in source
-    module = import_generated_models(tmp_path, schemas)
+    )
 
     sample = module.CreateSampleModel(name="S1")
     data = module.CreateSampleListModel(root=[sample])
@@ -379,104 +263,54 @@ def test_generated_array_root_model_accepts_root_and_exposes_root(tmp_path):
     assert data.model_dump() == [{"name": "S1"}]
 
 
-# ── resource inference ──
+# ── inference ──
 
 
-def test_infer_resource_from_tags():
-    assert infer_resource("/any/path", {"tags": ["regions"]}) == "regions"
+@pytest.mark.parametrize(
+    ("path", "operation", "expected"),
+    [
+        ("/any/path", {"tags": ["regions"]}, "regions"),
+        ("/black-oil-tables/{id}", {}, "black_oil_tables"),
+    ],
+    ids=["tag", "path"],
+)
+def test_infer_resource(path, operation, expected):
+    assert infer_resource(path, operation) == expected
 
 
-def test_infer_resource_from_path():
-    assert infer_resource("/black-oil-tables/{id}", {}) == "black_oil_tables"
+@pytest.mark.parametrize(
+    ("method", "path", "resource", "operation", "expected"),
+    [
+        ("get", "/regions", "regions", {"operationId": "list_regions"}, "list_regions"),
+        ("get", "/regions", "regions", {}, "list_regions"),
+        ("get", "/regions/{id}", "regions", {}, "get_region"),
+        ("post", "/regions", "regions", {}, "create_region"),
+        ("put", "/regions/{id}", "regions", {}, "update_region"),
+        ("post", "/samples/bulk", "samples", {}, "create_samples_bulk"),
+        ("put", "/wells/bulk", "wells", {}, "update_wells_bulk"),
+    ],
+    ids=["operation-id", "list", "get", "create", "update", "post-bulk", "put-bulk"],
+)
+def test_infer_function_name(method, path, resource, operation, expected):
+    assert infer_function_name(method, path, resource, operation) == expected
 
 
-# ── function name inference ──
-
-
-def test_infer_function_name_from_operation_id():
-    op = {"operationId": "list_regions"}
-    assert infer_function_name("get", "/regions", "regions", op) == "list_regions"
-
-
-def test_infer_function_name_fallback_list():
-    assert infer_function_name("get", "/regions", "regions", {}) == "list_regions"
-
-
-def test_infer_function_name_fallback_get():
-    assert infer_function_name("get", "/regions/{id}", "regions", {}) == "get_region"
-
-
-def test_infer_function_name_fallback_create():
-    assert infer_function_name("post", "/regions", "regions", {}) == "create_region"
-
-
-def test_infer_function_name_fallback_update():
-    assert infer_function_name("put", "/regions/{id}", "regions", {}) == "update_region"
-
-
-def test_infer_function_name_fallback_post_bulk():
-    assert infer_function_name("post", "/samples/bulk", "samples", {}) == "create_samples_bulk"
-
-
-def test_infer_function_name_fallback_put_bulk():
-    assert infer_function_name("put", "/wells/bulk", "wells", {}) == "update_wells_bulk"
-
-
-# ── public method name ──
-
-
-def test_infer_public_method_name_standard():
-    assert infer_public_method_name("list_regions", "regions", "get", "/regions", "none") == "list"
-    assert (
-        infer_public_method_name("get_region", "regions", "get", "/regions/{id}", "none") == "get"
-    )
-    assert (
-        infer_public_method_name("create_region", "regions", "post", "/regions", "model")
-        == "create"
-    )
-    assert (
-        infer_public_method_name("update_region", "regions", "put", "/regions/{id}", "model")
-        == "update"
-    )
-    assert (
-        infer_public_method_name("create_samples", "samples", "post", "/samples/bulk", "root_list")
-        == "create_bulk"
-    )
-    assert (
-        infer_public_method_name("update_wells", "wells", "put", "/wells/bulk", "root_list")
-        == "update_bulk"
-    )
-
-
-def test_infer_public_method_name_nested_list():
-    assert (
-        infer_public_method_name(
-            "list_wells_info", "wells", "get", "/regions/{region_id}/wells", "none"
-        )
-        == "list"
-    )
-
-
-def test_infer_public_method_name_non_standard():
-    assert (
-        infer_public_method_name(
-            "run_flash", "calculations", "post", "/calculations/flash", "model"
-        )
-        == "run_flash"
-    )
-
-
-# ── endpoint inference ──
-
-
-def test_infer_endpoint_simple_get():
-    ep = infer_endpoint(
-        "v2", "get", "/regions", {"operationId": "list_regions", "responses": {"200": {}}}, []
-    )
-    assert ep.function_name == "list_regions"
-    assert ep.public_method_name == "list"
-    assert ep.resource == "regions"
-    assert ep.body_kind == "none"
+@pytest.mark.parametrize(
+    ("function_name", "resource", "method", "path", "body_kind", "expected"),
+    [
+        ("list_regions", "regions", "get", "/regions", "none", "list"),
+        ("get_region", "regions", "get", "/regions/{id}", "none", "get"),
+        ("create_region", "regions", "post", "/regions", "model", "create"),
+        ("update_region", "regions", "put", "/regions/{id}", "model", "update"),
+        ("create_samples", "samples", "post", "/samples/bulk", "root_list", "create_bulk"),
+        ("update_wells", "wells", "put", "/wells/bulk", "root_list", "update_bulk"),
+        ("list_wells_info", "wells", "get", "/regions/{region_id}/wells", "none", "list"),
+        ("run_flash", "calculations", "post", "/calculations/flash", "model", "run_flash"),
+    ],
+    ids=["list", "get", "create", "update", "create-bulk", "update-bulk", "nested-list", "other"],
+)
+def test_infer_public_method_name(function_name, resource, method, path, body_kind, expected):
+    assert infer_public_method_name(function_name, resource, method, path, body_kind) == expected
 
 
 def test_infer_endpoint_post_with_body():
@@ -527,138 +361,61 @@ def test_infer_endpoint_post_list_model():
     assert ep.body_kind == "root_list"
 
 
-# ── overrides ──
-
-
-def test_override_reports_export():
-    ep = Endpoint(
-        version="v2",
-        resource="reports",
-        function_name="get_report_export",
-        public_method_name="get_report_export",
-        http_method="get",
-        path="/reports/{report_id}/export",
-        path_params=[
-            EndpointParam(
-                name="report_id", location="path", python_name="report_id", python_type="int"
-            ),
-        ],
-    )
-    result = apply_override(ep)
-    assert result.function_name == "export_report"
-    assert result.public_method_name == "export"
-    assert result.return_kind == "tuple_bytes_filename"
-
-
-def test_override_wells_create_excludes_samples():
-    ep = Endpoint(
-        version="v2",
-        resource="wells",
-        function_name="create_well",
-        public_method_name="create",
-        http_method="post",
-        path="/wells",
-        request_model="CreateWellModel",
-        body_kind="model",
-    )
-    result = apply_override(ep)
-    assert 'exclude={"samples"}' in (result.model_dump_expr or "")
-
-
 # ── collision detection ──
 
 
-def test_detect_collisions_ok():
-    endpoints = [
-        Endpoint(
-            version="v2",
-            resource="r",
-            function_name="list_r",
-            public_method_name="list",
-            http_method="get",
-            path="/r",
-        ),
-    ]
-    detect_collisions(endpoints)
+def _endpoint(
+    function_name: str, public_method_name: str, method: HTTPMethod, path: str
+) -> Endpoint:
+    return Endpoint(
+        version="v2",
+        resource="r",
+        function_name=function_name,
+        public_method_name=public_method_name,
+        http_method=method,
+        path=path,
+    )
 
 
-def test_detect_collisions_function_name():
-    endpoints = [
-        Endpoint(
-            version="v2",
-            resource="r",
-            function_name="foo",
-            public_method_name="list",
-            http_method="get",
-            path="/r",
+@pytest.mark.parametrize(
+    ("endpoints", "error"),
+    [
+        ([_endpoint("list_r", "list", "get", "/r")], None),
+        (
+            [_endpoint("foo", "list", "get", "/r"), _endpoint("foo", "list2", "post", "/r")],
+            "duplicate function_name",
         ),
-        Endpoint(
-            version="v2",
-            resource="r",
-            function_name="foo",
-            public_method_name="list2",
-            http_method="post",
-            path="/r",
+        (
+            [_endpoint("foo", "bar", "get", "/r"), _endpoint("baz", "bar", "post", "/r2")],
+            "duplicate public method",
         ),
-    ]
-    with pytest.raises(SystemExit, match="duplicate function_name"):
+    ],
+    ids=["distinct", "function-name", "public-method"],
+)
+def test_detect_collisions(endpoints, error):
+    if error is None:
         detect_collisions(endpoints)
+    else:
+        with pytest.raises(SystemExit, match=error):
+            detect_collisions(endpoints)
 
 
-def test_detect_collisions_public_method():
-    endpoints = [
-        Endpoint(
-            version="v2",
-            resource="r",
-            function_name="foo",
-            public_method_name="bar",
-            http_method="get",
-            path="/r",
-        ),
-        Endpoint(
-            version="v2",
-            resource="r",
-            function_name="baz",
-            public_method_name="bar",
-            http_method="post",
-            path="/r2",
-        ),
-    ]
-    with pytest.raises(SystemExit, match="duplicate public method"):
-        detect_collisions(endpoints)
+# ── parsing ──
 
 
-# ── validation ──
+@pytest.mark.parametrize(
+    ("operation", "error"),
+    [
+        ({"operationId": "list_widgets", "responses": {}}, "No recognized response status"),
+        ({"$ref": "#/paths/foo"}, "Unsupported \\$ref operation"),
+        ({"operationId": "list_widgets", "responses": {"200": {}}}, "No response schema"),
+    ],
+    ids=["no-response", "ref", "no-response-schema"],
+)
+def test_parse_endpoints_rejects_an_unusable_operation(operation, error):
+    spec = {"paths": {"/widgets": {"get": {"tags": ["widgets"], **operation}}}}
 
-
-def test_validate_operation_ok():
-    _validate_operation("get", "/regions", {"responses": {"200": {}}})
-
-
-def test_validate_operation_no_response():
-    with pytest.raises(SystemExit):
-        _validate_operation("get", "/regions", {"responses": {}})
-
-
-def test_validate_operation_ref():
-    with pytest.raises(SystemExit):
-        _validate_operation("get", "/regions", {"$ref": "#/paths/foo"})
-
-
-def test_parse_endpoints_rejects_missing_response_schema():
-    spec = {
-        "paths": {
-            "/widgets": {
-                "get": {
-                    "operationId": "list_widgets",
-                    "tags": ["widgets"],
-                    "responses": {"200": {}},
-                }
-            }
-        }
-    }
-
-    with pytest.raises(SystemExit, match="No response schema for GET /widgets"):
+    with pytest.raises(SystemExit, match=f"{error}.* /widgets"):
         parse_endpoints("v2", spec)
 
 
@@ -689,181 +446,12 @@ def test_parse_endpoints_allows_bytes_override_without_response_schema():
     assert endpoints[0].response_model is None
 
 
-# ── rendering ──
-
-
-def test_render_endpoint_strips_extra_newlines():
-    ep = Endpoint(
-        version="v2",
-        resource="regions",
-        function_name="get_region",
-        public_method_name="get",
-        http_method="get",
-        path="/regions/{region_id}",
-        path_params=[
-            EndpointParam(
-                name="region_id", location="path", python_name="region_id", python_type="int"
-            ),
-        ],
-        response_model="GetRegionModel",
-    )
-    formatted = format_python(render_endpoint(ep))
-    assert "def get_region" in formatted
-    assert "model_validate" in formatted
-    assert formatted.count("def get_region") == 1
-
-
 def test_format_python_applies_ruff_fixes():
     formatted = format_python("import sys\nimport os\n\nprint(sys.version)\n")
 
     assert isinstance(formatted, str)
     assert "import os" not in formatted
     assert formatted.startswith("import sys\n")
-
-
-def test_render_bytes_endpoint():
-    ep = Endpoint(
-        version="v2",
-        resource="reports",
-        function_name="export_report",
-        public_method_name="export",
-        http_method="get",
-        path="/reports/{report_id}/export",
-        path_params=[
-            EndpointParam(
-                name="report_id", location="path", python_name="report_id", python_type="int"
-            ),
-        ],
-        return_kind="tuple_bytes_filename",
-        filename_expr='f"report_{report_id}_export.zip"',
-    )
-    rendered = render_endpoint(ep)
-    assert "get_bytes" in rendered
-    assert "tuple[bytes, str]" in rendered
-
-
-def test_render_module_imports():
-    ep = Endpoint(
-        version="v2",
-        resource="regions",
-        function_name="list_regions",
-        public_method_name="list",
-        http_method="get",
-        path="/regions",
-        query_params=[
-            EndpointParam(
-                name="cursor",
-                location="query",
-                python_name="cursor",
-                python_type="str",
-                required=False,
-            ),
-            EndpointParam(
-                name="limit",
-                location="query",
-                python_name="limit",
-                python_type="int",
-                required=False,
-            ),
-        ],
-        response_model="PaginatedRegionsModel",
-    )
-    rendered = render_module("v2", "regions", [ep])
-    assert "from ...http import HTTPTransport" in rendered
-    assert "from ...shared.models import PaginationParams" in rendered
-    assert "from ...v2.models import" in rendered
-    assert "PaginatedRegionsModel" in rendered
-
-
-def test_render_resources_output():
-    ep = Endpoint(
-        version="v2",
-        resource="regions",
-        function_name="list_regions",
-        public_method_name="list",
-        http_method="get",
-        path="/regions",
-        response_model="RegionsListModel",
-    )
-    rendered = render_resources("v2", {"regions": [ep]})
-    assert "class Regions:" in rendered
-    assert "    _transport: HTTPTransport" in rendered
-    assert "def list(self" in rendered
-
-
-def test_render_resources_adds_pagination_helpers():
-    ep = Endpoint(
-        version="v2",
-        resource="wells",
-        function_name="list_wells_info",
-        public_method_name="list",
-        http_method="get",
-        path="/regions/{region_id}/wells",
-        path_params=[
-            EndpointParam(
-                name="region_id",
-                location="path",
-                python_name="region_id",
-                python_type="int",
-            )
-        ],
-        query_params=[
-            EndpointParam(
-                name="cursor",
-                location="query",
-                python_name="cursor",
-                python_type="str",
-                required=False,
-            ),
-            EndpointParam(
-                name="limit",
-                location="query",
-                python_name="limit",
-                python_type="int",
-                required=False,
-            ),
-        ],
-        response_model="PaginatedWellsModel",
-        pagination_items_field="wells",
-        pagination_item_model="GetWellSimpleModel",
-    )
-
-    rendered = render_resources("v2", {"wells": [ep]})
-
-    assert "from collections.abc import Iterator" in rendered
-    assert "GetWellSimpleModel" in rendered
-    assert "from whitson_pvt_sdk.shared.pagination import Paginator" in rendered
-    assert "def iterate(" in rendered
-    assert 'Paginator.iterate(self.list, "wells"' in rendered
-    assert "def list_all(" in rendered
-
-
-# ── full parse ──
-
-
-def test_parse_endpoints_basic():
-    spec = {
-        "paths": {
-            "/regions": {
-                "get": {
-                    "operationId": "list_regions",
-                    "tags": ["regions"],
-                    "responses": {
-                        "200": {
-                            "content": {
-                                "application/json": {
-                                    "schema": {"$ref": "#/components/schemas/RegionsListModel"}
-                                }
-                            }
-                        }
-                    },
-                }
-            }
-        }
-    }
-    endpoints = parse_endpoints("v2", spec)
-    assert len(endpoints) == 1
-    assert endpoints[0].function_name == "list_regions"
 
 
 def test_parse_endpoints_infers_pagination_item_field_and_model():
@@ -908,31 +496,6 @@ def test_parse_endpoints_infers_pagination_item_field_and_model():
 
     assert endpoints[0].pagination_items_field == "regions"
     assert endpoints[0].pagination_item_model == "GetRegionModel"
-
-
-def test_parse_endpoints_applies_overrides():
-    spec = {
-        "paths": {
-            "/reports/{report_id}/export": {
-                "get": {
-                    "operationId": "export_report",
-                    "tags": ["reports"],
-                    "parameters": [
-                        {
-                            "name": "report_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "integer"},
-                        }
-                    ],
-                    "responses": {"200": {}},
-                }
-            }
-        }
-    }
-    endpoints = parse_endpoints("v2", spec)
-    assert endpoints[0].return_kind == "tuple_bytes_filename"
-    assert endpoints[0].function_name == "export_report"
 
 
 def test_parse_endpoints_excludes_authentication_resource():

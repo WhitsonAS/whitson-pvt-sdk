@@ -18,7 +18,7 @@ def format_python(content: str | list[str]) -> str | list[str]:
             paths[0].write_text(content)
         else:
             paths = [Path(tmp) / f"{i}.py" for i in range(len(content))]
-            for p, c in zip(paths, content):
+            for p, c in zip(paths, content, strict=True):
                 p.write_text(c)
 
         for command in (
@@ -32,98 +32,6 @@ def format_python(content: str | list[str]) -> str | list[str]:
                 stdout=subprocess.DEVNULL,
             )
         return [p.read_text() for p in paths] if isinstance(content, list) else paths[0].read_text()
-
-
-def render_module(version: str, resource: str, endpoints: list[Endpoint]) -> str:
-    has_multipart = any(endpoint.body_kind == "multipart" for endpoint in endpoints)
-    model_imports = sorted(
-        {
-            model
-            for endpoint in endpoints
-            for model in (endpoint.request_model, endpoint.response_model)
-            if model and model != "ImportArchiveOptions"
-        }
-    )
-    lines = ["from ...http import HTTPTransport\n"]
-    if has_multipart:
-        lines.insert(0, "from io import BytesIO\n\nfrom pydantic import BaseModel\n\n")
-        lines.append("from ...shared.models import ImportArchiveOptions\n")
-    elif needs_pagination(endpoints):
-        lines.append("from ...shared.models import PaginationParams\n")
-    if model_imports:
-        lines.append(f"from ...{version}.models import (\n")
-        lines.extend(f"    {name},\n" for name in model_imports)
-        lines.append(")\n")
-    lines.append("\n")
-    lines.extend(render_endpoint(endpoint) for endpoint in endpoints)
-    if has_multipart:
-        lines.append(render_meta_data_helper())
-    return "".join(lines).rstrip() + "\n"
-
-
-def render_endpoint(endpoint: Endpoint) -> str:
-    if endpoint.return_kind == "tuple_bytes_filename":
-        return render_bytes_endpoint(endpoint)
-    if endpoint.body_kind == "multipart":
-        return render_multipart_endpoint(endpoint)
-
-    signature = render_function_signature(endpoint)
-    path = render_path(endpoint.path)
-    lines = [f"def {endpoint.function_name}({signature}) -> {endpoint.response_model}:\n"]
-    call = f"transport.{endpoint.http_method}({path}"
-    if endpoint.query_params:
-        call += f", params={render_params_expr(endpoint)}"
-    if endpoint.body_kind in {"model", "root_list"}:
-        call += f", body={render_body_expr(endpoint)}"
-    call += ")"
-    if endpoint.return_kind == "none":
-        lines.append(f"    {call}\n")
-    else:
-        lines.append(f"    body = {call}\n")
-        lines.append(f"    return {endpoint.response_model}.model_validate(body)\n")
-    return "".join(lines)
-
-
-def render_bytes_endpoint(endpoint: Endpoint) -> str:
-    signature = render_function_signature(endpoint)
-    path = render_path(endpoint.path)
-    filename = endpoint.filename_expr or '"download.bin"'
-    params = f", params={render_params_expr(endpoint)}" if endpoint.query_params else ""
-    return (
-        f"def {endpoint.function_name}({signature}) -> tuple[bytes, str]:\n"
-        f"    data = transport.get_bytes({path}{params})\n"
-        f"    filename = {filename}\n"
-        "    return data, filename\n"
-    )
-
-
-def render_multipart_endpoint(endpoint: Endpoint) -> str:
-    return_model = endpoint.response_model or "dict"
-    options_model = endpoint.request_model or "ImportArchiveOptions"
-    return (
-        f"def {endpoint.function_name}(\n"
-        "    transport: HTTPTransport,\n"
-        "    archive_data: bytes,\n"
-        f"    options: {options_model} | None = None,\n"
-        f") -> {return_model}:\n"
-        "    if options is None:\n"
-        f"        options = {options_model}()\n\n"
-        "    body = transport.post_multipart(\n"
-        f"        {render_path(endpoint.path)},\n"
-        '        files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},\n'
-        "        data=_meta_data(options),\n"
-        "    )\n"
-        f"    return {return_model}.model_validate(body)\n"
-    )
-
-
-def render_function_signature(endpoint: Endpoint) -> str:
-    args = ["transport: HTTPTransport"]
-    args.extend(f"{param.python_name}: {param.python_type}" for param in endpoint.path_params)
-    if endpoint.request_model and endpoint.body_kind in {"model", "root_list"}:
-        args.append(f"data: {endpoint.request_model}")
-    args.extend(render_query_param(param) for param in endpoint.query_params)
-    return ", ".join(args)
 
 
 def render_query_param(param: EndpointParam) -> str:
@@ -349,11 +257,4 @@ def _render_inline_resource_method(endpoint: Endpoint) -> str:
         f"    def {endpoint.public_method_name}(self"
         f"{', ' if args else ''}{', '.join(args)}) -> {return_type}:\n"
         f"{body}"
-    )
-
-
-def needs_pagination(endpoints: list[Endpoint]) -> bool:
-    return any(
-        {"cursor", "limit"}.issubset({param.python_name for param in endpoint.query_params})
-        for endpoint in endpoints
     )

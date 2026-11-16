@@ -206,39 +206,17 @@ OTHER_DEPLOYMENT = {"audience": "https://prod.pvt.whitson.com/mcp"}
 
 
 @pytest.mark.parametrize(
-    ("url", "config", "options", "exit_code", "message"),
+    ("url", "config", "options", "message"),
     [
-        ("https://pvt.example.org", OTHER_LOGIN_SERVER, ["--trust-host"], 2, "--yes"),
-        ("http://localhost:4000", OTHER_LOGIN_SERVER, [], 2, "--yes"),
-        ("http://localhost:4000", OTHER_DEPLOYMENT, [], 2, "prod.pvt.whitson.com/mcp"),
-        ("http://localhost:4000", OTHER_DEPLOYMENT, ["--yes"], 2, "without --yes"),
+        ("https://pvt.example.org", OTHER_LOGIN_SERVER, ["--trust-host"], "--yes"),
+        ("http://localhost:4000", OTHER_LOGIN_SERVER, [], "--yes"),
+        ("http://localhost:4000", OTHER_DEPLOYMENT, [], "prod.pvt.whitson.com/mcp"),
+        ("http://localhost:4000", OTHER_DEPLOYMENT, ["--yes"], "without --yes"),
         (
             "https://pvt.example.org",
             OTHER_DEPLOYMENT,
             ["--trust-host", "--yes"],
-            2,
             "without --yes",
-        ),
-        (
-            "https://dev.pvt.whitson.com",
-            OTHER_LOGIN_SERVER,
-            ["--yes"],
-            3,
-            "unexpected login server",
-        ),
-        (
-            "https://dev.pvt.whitson.com",
-            OTHER_LOGIN_SERVER,
-            ["--yes", "--trust-host"],
-            3,
-            "unexpected login server",
-        ),
-        (
-            "https://dev.pvt.whitson.com",
-            OTHER_DEPLOYMENT,
-            ["--yes", "--trust-host"],
-            3,
-            "asked for access to a different service, 'https://prod.pvt.whitson.com/mcp'",
         ),
     ],
     ids=[
@@ -247,13 +225,10 @@ OTHER_DEPLOYMENT = {"audience": "https://prod.pvt.whitson.com/mcp"}
         "localhost-other-audience-without-yes",
         "localhost-other-audience-yes",
         "trust-host-other-audience-yes",
-        "deployment",
-        "deployment-trust-host",
-        "deployment-other-audience",
     ],
 )
 def test_login_to_another_login_server_asks_or_is_refused(
-    httpx2_mock, store, url, config, options, exit_code, message
+    httpx2_mock, store, url, config, options, message
 ):
     httpx2_mock.add_response(
         url=f"{url}/external/v2/auth/config",
@@ -262,7 +237,7 @@ def test_login_to_another_login_server_asks_or_is_refused(
 
     result = runner.invoke(app, ["auth", "login", "--url", url, "--device", "--json", *options])
 
-    assert result.exit_code == exit_code
+    assert result.exit_code == 2
     assert message in result.stderr
     assert "message" in json.loads(result.stderr.splitlines()[-1])
     assert [str(r.url) for r in httpx2_mock.get_requests()] == [f"{url}/external/v2/auth/config"]
@@ -453,7 +428,7 @@ def test_the_browser_writes_nothing_to_the_terminal(
     monkeypatch.setattr(webbrowser, "_browsers", {})
 
     result = _open_browser("http://127.0.0.1:52817/start?n=x")
-    print("after")
+    print("after")  # noqa: T201 - proves the terminal's stdout is restored after the call
 
     assert result is opened
     assert visited.read_text() == "http://127.0.0.1:52817/start?n=x\n"

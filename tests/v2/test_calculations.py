@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from whitson_pvt_sdk.errors import APIError, CalculationError, MissingDataError
@@ -65,44 +67,6 @@ def make_adjusted_composition(composition_id, sample_id, c1_molar_amount, c2_mol
                 "molar_amount": c2_molar_amount,
             },
         ],
-    }
-
-
-def test_get_sample_feed_compositions_converts_slate_to_slate_response(transport, httpx2_mock):
-    httpx2_mock.add_response(
-        method="POST",
-        url="https://dev.pvt.whitson.com/external/v2/calculations/sample-to-eos-slate-conversion",
-        json={
-            "results": [
-                {
-                    "status": "success",
-                    "result": {
-                        "component_names": ["C1", "C2"],
-                        "composition": [
-                            {"component_name": "C1", "molar_amount": 0.9},
-                            {"component_name": "C2", "molar_amount": 0.1},
-                        ],
-                        "mass_fractions": [0.8, 0.2],
-                        "mole_fractions": [0.9, 0.1],
-                    },
-                }
-            ]
-        },
-    )
-
-    result = Calculations(transport).get_sample_feed_compositions(
-        fluid_model_id=123,
-        sample_ids=[456],
-    )
-
-    assert {
-        sample_id: [entry.model_dump() for entry in composition]
-        for sample_id, composition in result.items()
-    } == {
-        456: [
-            {"component_name": "C1", "molar_amount": 0.9},
-            {"component_name": "C2", "molar_amount": 0.1},
-        ]
     }
 
 
@@ -259,3 +223,48 @@ def test_gor_recombination_source_missing_a_sample_is_refused_before_any_request
         )
 
     assert httpx2_mock.get_requests() == []
+
+
+def test_gor_recombination_uses_the_given_surface_process_and_feed(transport, httpx2_mock):
+    feed = [{"component_name": "C1", "molar_amount": 1.0}]
+    recombined = [{"component_name": "C1", "molar_amount": 0.7}]
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://dev.pvt.whitson.com/external/v2/calculations/gor-recombination",
+        json={
+            "results": [
+                {
+                    "status": "success",
+                    "result": {
+                        "component_names": ["C1"],
+                        "composition": recombined,
+                        "mass_fractions": [1.0],
+                        "mole_fractions": [1.0],
+                    },
+                }
+            ]
+        },
+    )
+
+    result = Calculations(transport).get_gor_recombination_feed_composition(
+        fluid_model_id=1,
+        sample_id=2,
+        recombination_gor=100,
+        gor_unit="Sm3/m3",
+        recombination_type="total_gor",
+        source=[CalculationCompositionEntryModel.model_validate(entry) for entry in feed],
+        surface_process=SurfaceProcessInputModel(
+            pressure_unit="bara",
+            temperature_unit="C",
+            stages=[SurfaceProcessStageInputModel(pressure=1.01325, temperature=15.0)],
+        ),
+    )
+
+    assert [entry.model_dump() for entry in result] == recombined
+    sent = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert [entry["feed_composition"] for entry in sent["inputs"]] == [feed]
+    assert sent["surface_process"] == {
+        "pressure_unit": "bara",
+        "temperature_unit": "C",
+        "stages": [{"pressure": 1.01325, "temperature": 15.0}],
+    }

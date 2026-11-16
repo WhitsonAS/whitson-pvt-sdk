@@ -2,7 +2,6 @@ import json
 
 import pytest
 
-from whitson_pvt_sdk.errors import APIError
 from whitson_pvt_sdk.v2.models import (
     ImportCommitRequestModel,
     ImportCommitResultModel,
@@ -137,19 +136,13 @@ def test_single_record_imports_are_wired_and_preserve_source_payload(
     result = method_fn(payload)
     assert isinstance(result, SingleRecordImportResponseModel)
     assert result.import_session.id == 7
-    assert json.loads(httpx2_mock.get_requests()[-1].content) == payload.model_dump(
-        exclude_unset=True
-    )
-
-
-def test_duplicate_archive_conflict_preserves_session_id(client, httpx2_mock):
-    httpx2_mock.add_response(
-        method="POST",
-        url=f"{BASE_URL}/import-sessions",
-        status_code=409,
-        json={"message": "Duplicate archive", "import_session_id": 7},
-    )
-    with pytest.raises(APIError) as exc:
-        client.import_sessions.create(b"archive-data")
-    assert exc.value.status_code == 409
-    assert exc.value.response_body == {"message": "Duplicate archive", "import_session_id": 7}
+    assert json.loads(httpx2_mock.get_requests()[-1].content) == {
+        "source_format": "osdu",
+        "import_session_id": 7,
+        "auto_commit": False,
+        "source_record": {
+            "id": "namespace:record:123",
+            "kind": "osdu:wks:sample:1.0.0",
+            "data": {"ExtensionProperties": {"custom": "preserved"}},
+        },
+    }

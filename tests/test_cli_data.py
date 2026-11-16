@@ -3,7 +3,6 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from tests.v2.test_calculation_contracts import ERROR_ROW, OUTPUT_UNITS
 from tests.v2.test_calculations import make_fluid_model_json
 from whitson_pvt_sdk.cli._app import app
 
@@ -483,6 +482,32 @@ def test_api_lists_and_describes_routes_from_the_openapi_document(httpx2_mock):
     assert "wpvt api --list" in missing.stderr
 
 
+OUTPUT_UNITS = {
+    "pressure": "bara",
+    "temperature": "C",
+    "density": "kg/m3",
+    "viscosity": "cP",
+    "oil_volume": "m3",
+    "gas_volume": "Sm3",
+    "solution_gas_oil_ratio": "Sm3/m3",
+    "solution_oil_gas_ratio": "m3/Sm3",
+    "oil_formation_volume_factor": "m3/Sm3",
+    "gas_formation_volume_factor": "m3/Sm3",
+    "viscosibility": "1/bar",
+    "compressibility": "1/bar",
+    "thermal_expansion_coefficient": "1/K",
+    "bulk_modulus": "bar",
+    "molar_enthalpy": "J/mol",
+    "specific_enthalpy": "J/kg",
+    "molar_entropy": "J/(mol*K)",
+    "specific_entropy": "J/(kg*K)",
+    "molar_heat_capacity": "J/(mol*K)",
+    "specific_heat_capacity": "J/(kg*K)",
+    "joule_thomson_coefficient": "K/bar",
+    "speed_of_sound": "m/s",
+    "thermal_conductivity": "W/(m*K)",
+}
+ERROR_ROW = {"status": "error", "error": {"code": "calculation_failed", "message": "bad row"}}
 FLASH_RESPONSE = {"output_unit_system": "SI", "output_units": OUTPUT_UNITS, "results": [ERROR_ROW]}
 FEED = [
     {"component_name": "C1", "molar_amount": 0.9},

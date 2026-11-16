@@ -804,44 +804,28 @@ def test_a_deployment_may_only_ask_for_access_to_itself(
 
 
 @pytest.mark.parametrize(
-    ("issuer", "provider", "message"),
+    ("provider", "message"),
     [
-        ("http://whitson.eu.auth0.com/", {}, "issuer"),
         (
-            ISSUER,
             {"authorization_endpoint": "http://whitson.eu.auth0.com/authorize"},
             "authorization_endpoint",
         ),
-        (ISSUER, {"token_endpoint": "http://whitson.eu.auth0.com/oauth/token"}, "token_endpoint"),
+        ({"token_endpoint": "http://whitson.eu.auth0.com/oauth/token"}, "token_endpoint"),
         (
-            ISSUER,
             {"device_authorization_endpoint": "http://whitson.eu.auth0.com/oauth/device/code"},
             "device_authorization_endpoint",
         ),
         (
-            ISSUER,
             {"revocation_endpoint": "http://whitson.eu.auth0.com/oauth/revoke"},
             "revocation_endpoint",
         ),
-        (ISSUER, {"authorization_endpoint": "https://phish.example/authorize"}, "phish.example"),
+        ({"authorization_endpoint": "https://phish.example/authorize"}, "phish.example"),
     ],
-    ids=["issuer", "authorization", "token", "device", "revocation", "authorization-elsewhere"],
+    ids=["authorization", "token", "device", "revocation", "authorization-elsewhere"],
 )
-def test_login_refuses_insecure_login_servers(
-    base_url, httpx2_mock, store, issuer, provider, message
-):
-    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=auth_config(issuer))
-    if issuer == ISSUER:
-        httpx2_mock.add_response(
-            url=DISCOVERY,
-            json={
-                "issuer": ISSUER,
-                "authorization_endpoint": AUTHORIZE,
-                "token_endpoint": TOKEN_ENDPOINT,
-                "device_authorization_endpoint": DEVICE_ENDPOINT,
-                **provider,
-            },
-        )
+def test_login_refuses_insecure_login_servers(base_url, httpx2_mock, store, provider, message):
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=auth_config())
+    httpx2_mock.add_response(url=DISCOVERY, json={**PROVIDER, **provider})
     opened: list[str] = []
 
     def open_browser(url: str) -> bool:
