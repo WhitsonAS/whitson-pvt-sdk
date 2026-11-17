@@ -233,8 +233,9 @@ def _list_command(resource: Resource) -> Callable[..., None]:
 def _get_command(resource: Resource) -> Callable[..., None]:
     def get(
         id: Annotated[int, typer.Argument(metavar="ID", help=f"The {resource.noun}'s id.")],
+        json_output: JsonOption = False,
     ) -> None:
-        with reporting(json_output=False), WhitsonPVTClient() as client:
+        with reporting(json_output=json_output), WhitsonPVTClient() as client:
             emit_data(resource.get(client, id))
 
     return get

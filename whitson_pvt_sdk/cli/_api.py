@@ -153,7 +153,10 @@ def api_command(
         typer.Option("--describe", help="Show the parameters and schemas of [METHOD] PATH."),
     ] = False,
     json_output: Annotated[
-        bool, typer.Option("--json", help="With --list or --describe: one JSON document.")
+        bool,
+        typer.Option(
+            "--json", help="One JSON document from --list or --describe; errors as JSON on stderr."
+        ),
     ] = False,
 ) -> None:
     """Call any external v2 route, PATH relative to /external/v2 (like gh api).

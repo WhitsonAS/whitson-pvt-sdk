@@ -1,6 +1,6 @@
 ---
 name: whitson-pvt
-description: Install and use the Whitson PVT Python SDK and its wpvt command from external Python projects and agent shells. Use when configuring WhitsonPVTClient, connecting an agent to whitson PVT with wpvt mcp, fetching full data that an MCP tool result paged, downsampled or omitted (wpvt api, wpvt samples export), authenticating with an API token (WHITSON_PVT_TOKEN) or a stored wpvt login, checking who is logged in with wpvt auth status, using the API resources, calling regions/wells/samples/projects/fluid models/black-oil tables (BOT)/reports, or working with the SDK's Pydantic request and response models.
+description: Install and use the Whitson PVT Python SDK and its wpvt command from external Python projects and agent shells. Use when configuring WhitsonPVTClient, connecting an agent to whitson PVT with wpvt mcp, fetching full data that an MCP tool result paged, downsampled or omitted (wpvt api, wpvt samples export), answering aggregate questions (counts, averages, summaries or exports across a region, project or many wells) with one script instead of many tool calls, authenticating with an API token (WHITSON_PVT_TOKEN) or a stored wpvt login, checking who is logged in with wpvt auth status, using the API resources, calling regions/wells/samples/projects/fluid models/black-oil tables (BOT)/reports, or working with the SDK's Pydantic request and response models.
 ---
 
 # Whitson PVT SDK
@@ -62,13 +62,13 @@ When the tools are missing or the server failed to start, ask the user to run `w
 
 Working with the data:
 
-- Prefer the MCP tools for lookups and small answers.
+- Prefer the MCP tools for lookups and small answers; for counts, averages and summaries over many records, see Aggregate Questions.
 - Bulk or full data goes to files through the command line, not through repeated tool calls. When a tool result says the data was paged, downsampled or omitted and carries `full_data` (`{"available_through": "whitsonpvt_cli_and_python_sdk", "method": ..., "path": ...}`), fetch it to a file and work on the file (grep, page, script): `wpvt api METHOD PATH --out FILE` with that exact method and path, or the matching command: `wpvt samples export ID --out DIR` (one directory per sample: `index.json` first, then `sample.json`, `compositions/`, `experiments/`), `wpvt bot export ID --out FILE [--format csv]` for a black-oil table.
 - Discover routes with `wpvt api --list --json` and `wpvt api --describe METHOD PATH --json` instead of guessing paths; `--describe` also lists the scopes the route requires. PATH is relative to `/external/v2`. Add `--paginate` on a paged GET to get every page in one document, `-q KEY=VALUE` for query parameters and `-d @FILE` (or inline JSON, or `-`) for a body; METHOD defaults to GET, or POST with `-d`. Use `jq` on the output; there is no built-in query flag.
-- Lists: `wpvt regions list`, `wpvt wells list --region ID`, `wpvt samples list --well ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt bot list --fluid-model ID` (`bot` is black-oil tables; `black-oil-tables` is an alias), each with `--all --json`; `wpvt <resource> get ID` prints one as JSON.
+- Lists: `wpvt regions list`, `wpvt wells list --region ID`, `wpvt samples list --well ID`, `wpvt projects list --region ID`, `wpvt fluid-models list --project ID`, `wpvt bot list --fluid-model ID` (`bot` is black-oil tables; `black-oil-tables` is an alias), each with `--all --json` (one document: `items` and `next_cursor`); `wpvt <resource> get ID` prints one as JSON. With `--json`, errors are JSON on stderr as well (also on `wpvt api`).
 - Calculations: `wpvt calc flash|saturation-pressure|phase-envelope --input request.json --out result.json`; with `--sample ID --fluid-model ID` the feed comes from the stored sample and the input file leaves out `fluid_model_id` and `feed_composition`.
 - Never print, log or paste tokens, and never read the credentials file. Never run `wpvt auth login` yourself, and never pass `--trust-host` or `--yes` on your own.
-- Exit codes: 1 other errors (a busy credential store: try again), 2 usage or configuration, 3 authentication, 4 network or server; errors are on stderr.
+- Exit codes: 1 other errors (a busy credential store: try again), 2 usage or configuration, 3 authentication, 4 network or any other HTTP error (404 included); errors are on stderr, data alone on stdout.
 
 In Python, `client.request(method, path, params=..., body=...)` calls any route the same way and returns `status_code`, `headers` and `content`.
 
@@ -76,17 +76,62 @@ SDK 2.x has no client credentials, no `version=` argument and no v1 API. Code th
 
 Do not use `client.authentication`; auth is not exposed as a resource.
 
+## Aggregate Questions
+
+Counts, averages, per-well summaries and exports across a region or project touch many records. Answer them with one script against the SDK, or one `wpvt api ... | jq` pipeline, not with one MCP tool call per record: the script reads every page, aggregates, and prints only the answer, so the records never enter your context. A question that a few tool calls answer stays with MCP.
+
+- No route lists a region's samples: page through the wells, then read each well once; `GET /wells/{id}` (`client.samples.list(well_id)`) returns its samples with their experiments.
+- A number's unit is a sibling field: `reservoir_pressure` with `reservoir_pressure_unit`, a CCE stage's `pressure` with the experiment's `pressure_unit`. Convert to one unit before comparing or averaging, and name the unit in the answer.
+- Print the answer, not the data. To look at records, write them to a file and inspect a few.
+- A non-zero exit means the answer is incomplete: report the error on stderr, not the partial output.
+
+Average CCE saturation pressure per well in region 12, in bara. Run the script with `uv run --with whitson-pvt-sdk python psat.py`; it uses the same `WHITSON_PVT_URL` and `WHITSON_PVT_TOKEN` (or stored login) as `wpvt`.
+
+```python
+from collections import defaultdict
+from statistics import mean
+
+from whitson_pvt_sdk import WhitsonPVTClient
+from whitson_pvt_sdk.v2.models import CCEExperimentModel
+
+TO_BARA = {"bara": (1, 0), "barg": (1, 1.01325), "psia": (0.0689476, 0),
+           "psig": (0.0689476, 1.01325), "kPaa": (0.01, 0), "kPag": (0.01, 1.01325),
+           "atm": (1.01325, 0), "atmg": (1.01325, 1.01325)}
+
+psat = defaultdict(list)
+with WhitsonPVTClient() as client:
+    for well in client.wells.iterate(region_id=12, limit=250):
+        for sample in client.samples.list(well.id).samples:
+            for experiment in sample.experiments or []:
+                if isinstance(experiment, CCEExperimentModel):
+                    factor, offset = TO_BARA[experiment.pressure_unit or "bara"]
+                    psat[well.id, well.name] += [
+                        stage.pressure * factor + offset
+                        for stage in experiment.stages if stage.is_saturation_pressure
+                    ]
+for (well_id, name), values in sorted(psat.items()):
+    if values:
+        print(f"{well_id} {name}: {mean(values):.1f} bara from {len(values)} CCE")
+```
+
+The same with the command line:
+
+```bash
+set -o pipefail
+wpvt api /regions/12/wells -q limit=250 --paginate | jq -r '.wells[].id' |
+  while read -r id; do wpvt api "/wells/$id" || exit; done |
+  jq -rs '{bara: [1, 0], barg: [1, 1.01325], psia: [0.0689476, 0], psig: [0.0689476, 1.01325],
+           kPaa: [0.01, 0], kPag: [0.01, 1.01325], atm: [1.01325, 0], atmg: [1.01325, 1.01325]} as $to_bara
+    | .[] | {id, name, psat: [.samples[]?.experiments[]? | select(.type == "CCE")
+        | $to_bara[.pressure_unit // "bara"] as [$factor, $offset]
+        | .stages[] | select(.is_saturation_pressure) | .pressure * $factor + $offset]}
+    | select(.psat != [])
+    | "\(.id) \(.name): \(.psat | add / length * 10 | round / 10) bara from \(.psat | length) CCE"'
+```
+
 ## Retries And Timeouts
 
-The SDK retries transient read failures by default. `GET` requests and downloads
-retry `408`, `429`, `500`, `502`, `503`, and `504`. Mutating requests (`POST`,
-`PUT`, `PATCH`, `DELETE`, and multipart uploads) are not retried by default, except for HTTP `429`
-rate-limit responses.
-
-Retry timing honors `Retry-After`, `retry-after-ms`, and `X-RateLimit-Reset`
-headers when present.
-
-Configure retries and timeouts on `WhitsonPVTClient`:
+`GET` requests and downloads retry `408`, `429`, `500`, `502`, `503` and `504`; other methods (`POST`, `PUT`, `PATCH`, `DELETE`, uploads) retry only `429`. Waits honour `Retry-After`, `retry-after-ms` and `X-RateLimit-Reset`. Configure retries and timeouts on the client:
 
 ```python
 from whitson_pvt_sdk import WhitsonPVTClient
@@ -100,11 +145,7 @@ client = WhitsonPVTClient(
 )
 ```
 
-Use `RetryConfig(max_attempts=1)` to disable retries. `max_attempts` includes
-the first request. `RetryConfig.methods` controls non-429 retries only; remove
-`429` from `RetryConfig.statuses` to disable all-method rate-limit retries. If
-all retries are exhausted on HTTP `429`, the SDK raises `RateLimitError` with
-`retry_after_seconds` when retry timing headers are present.
+`max_attempts` includes the first request, so `RetryConfig(max_attempts=1)` disables retries. `RetryConfig.methods` controls non-429 retries only; remove `429` from `RetryConfig.statuses` to stop rate-limit retries. When retries run out on `429`, the SDK raises `RateLimitError`, with `retry_after_seconds` when the headers gave a delay.
 
 ## Errors
 
@@ -143,14 +184,11 @@ black_oil_tables = client.black_oil_tables.list(fluid_model_id=654, limit=100)
 black_oil_table = client.black_oil_tables.get(black_oil_table_id=987)
 ```
 
-For paginated list endpoints, use `iterate()` for lazy traversal or
-`list_all()` for eager collection. Pass `limit=<int>` to control page size.
-
 ## Pagination
 
 List endpoints (regions, wells, projects, fluid models, black oil tables)
 return a `pagination: PaginationMeta` field with `next_cursor` and `prev_cursor`.
-Use the generated helpers for most callers:
+Use `iterate()` for lazy traversal or `list_all()` for eager collection:
 
 ```python
 for region in client.regions.iterate(limit=50):
