@@ -14,13 +14,14 @@ from whitson_pvt_sdk.errors import (
     ConfigurationError,
     LoginError,
     NoResponseError,
+    RequestRefusedError,
     ResponseError,
     SDKError,
 )
 
 JsonOption = Annotated[bool, typer.Option("--json", help="Print one JSON document on stdout.")]
 
-ErrorKind = Literal["configuration", "authentication", "network", "server", "error"]
+ErrorKind = Literal["configuration", "authentication", "network", "server", "refused", "error"]
 
 
 class FileReport(BaseModel):
@@ -72,41 +73,52 @@ def reporting(*, json_output: bool) -> Iterator[None]:
     _SDK_LOGGER.addHandler(log_handler)
     try:
         yield
-    except ConfigurationError as exc:
-        _fail(ErrorReport(error="configuration", message=exc.message), ExitCode.USAGE, json_output)
-    except LoginError as exc:
-        _fail(
-            ErrorReport(error="authentication", message=exc.message),
-            ExitCode.AUTHENTICATION,
-            json_output,
+    except (SDKError, PydanticValidationError) as exc:
+        report = _report(exc)
+        typer.echo(
+            report.model_dump_json() if json_output else _printable(f"Error: {report.message}"),
+            err=True,
         )
-    except AuthError as exc:
-        _fail(_response_report("authentication", exc), ExitCode.AUTHENTICATION, json_output)
-    except NoResponseError as exc:
-        _fail(ErrorReport(error="network", message=exc.message), ExitCode.SERVER, json_output)
-    except ResponseError as exc:
-        _fail(_response_report("server", exc), ExitCode.SERVER, json_output)
-    except SDKError as exc:
-        _fail(ErrorReport(error="error", message=exc.message), ExitCode.ERROR, json_output)
-    except PydanticValidationError as exc:
-        _fail(
-            ErrorReport(error="server", message=f"Unexpected response from the API: {exc}"),
-            ExitCode.SERVER,
-            json_output,
-        )
+        raise typer.Exit(_exit_code(report.error)) from None
     finally:
         _SDK_LOGGER.removeHandler(log_handler)
+
+
+def _report(exc: SDKError | PydanticValidationError) -> ErrorReport:
+    match exc:
+        case ConfigurationError():
+            return ErrorReport(error="configuration", message=exc.message)
+        case LoginError():
+            return ErrorReport(error="authentication", message=exc.message)
+        case NoResponseError():
+            return ErrorReport(error="network", message=exc.message)
+        case AuthError():
+            return _response_report("authentication", exc)
+        case RequestRefusedError():
+            return _response_report("refused", exc)
+        case ResponseError():
+            return _response_report("server", exc)
+        case SDKError():
+            return ErrorReport(error="error", message=exc.message)
+        case PydanticValidationError():
+            return ErrorReport(error="server", message=f"Unexpected response from the API: {exc}")
+
+
+def _exit_code(kind: ErrorKind) -> ExitCode:
+    match kind:
+        case "configuration":
+            return ExitCode.USAGE
+        case "authentication":
+            return ExitCode.AUTHENTICATION
+        case "network" | "server":
+            return ExitCode.SERVER
+        case "refused":
+            return ExitCode.REFUSED
+        case "error":
+            return ExitCode.ERROR
 
 
 def _response_report(kind: ErrorKind, exc: ResponseError) -> ResponseErrorReport:
     return ResponseErrorReport(
         error=kind, message=exc.message, status=exc.status_code, request_id=exc.request_id
     )
-
-
-def _fail(report: ErrorReport, code: ExitCode, json_output: bool) -> None:
-    typer.echo(
-        report.model_dump_json() if json_output else _printable(f"Error: {report.message}"),
-        err=True,
-    )
-    raise typer.Exit(code)

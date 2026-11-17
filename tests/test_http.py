@@ -9,6 +9,7 @@ from whitson_pvt_sdk.errors import (
     NoResponseError,
     NotFoundError,
     RateLimitError,
+    RequestRefusedError,
     ValidationError,
 )
 from whitson_pvt_sdk.http import HTTPTransport
@@ -36,7 +37,7 @@ def test_strips_trailing_slash_from_base_url(credential, httpx2_mock):
         (401, AuthError),
         (403, AuthError),
         (404, NotFoundError),
-        (409, APIError),
+        (409, RequestRefusedError),
         (422, ValidationError),
     ],
 )

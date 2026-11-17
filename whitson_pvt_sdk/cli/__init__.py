@@ -14,6 +14,7 @@ class ExitCode(IntEnum):
     USAGE = 2
     AUTHENTICATION = 3
     SERVER = 4
+    REFUSED = 5
 
 
 def main() -> None:

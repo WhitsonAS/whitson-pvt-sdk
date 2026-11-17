@@ -39,7 +39,12 @@ class ResponseError(SDKError):
         super().__init__(message)
 
 
-class NotFoundError(ResponseError):
+class RequestRefusedError(ResponseError):
+    """The API understood the request and refused it: a 4xx status other than 401, 403, 408
+    and 429."""
+
+
+class NotFoundError(RequestRefusedError):
     """A requested resource was not found."""
 
 
@@ -47,7 +52,7 @@ class AuthError(ResponseError):
     """The API rejected the credential (HTTP 401 or 403)."""
 
 
-class ValidationError(ResponseError):
+class ValidationError(RequestRefusedError):
     """Request validation failed."""
 
 

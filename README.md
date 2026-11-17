@@ -92,6 +92,8 @@ and talks only to external API v2.
   `NoResponseError` instead of `APIError` with `status_code=None`. Every
   `ResponseError` (`AuthError`, `NotFoundError`, `ValidationError`, `RateLimitError`,
   `APIError`) now carries an integer `status_code`.
+- A 4xx response other than 401, 403, 408 and 429 raises `RequestRefusedError`, which is now
+  also the base of `NotFoundError` and `ValidationError`; a 409, for example, was `APIError`.
 - `WhitsonPVTClient` has `close()` and works as a context manager; replace any
   `client._transport.close()` with `client.close()` or a `with` block.
 - `RetryConfig` is immutable and its `methods` must be upper-case HTTP methods.
@@ -172,12 +174,13 @@ Everything the SDK raises derives from `SDKError` in `whitson_pvt_sdk.errors`:
 | `ConfigurationError` | the client is created without a usable URL or credential | `message` |
 | `LoginError` | a login did not complete, or the stored login is no longer valid | `message` |
 | `NoResponseError` | a request gets no response (connection error, timeout) after retries | `message` |
-| `ResponseError` | the API answers with an error status; base of the five below | `status_code`, `response_body`, `request_id`, `server_message` (the `message` of the JSON error body, `None` without one) |
+| `ResponseError` | the API answers with an error status; base of the six below | `status_code`, `response_body`, `request_id`, `server_message` (the `message` of the JSON error body, `None` without one) |
 | `AuthError` | HTTP 401 or 403 | as `ResponseError` |
+| `RequestRefusedError` | any other 4xx except 408 and 429: the API understood the request and refused it; base of the two below | as `ResponseError` |
 | `NotFoundError` | HTTP 404 | as `ResponseError` |
 | `ValidationError` | HTTP 400 or 422 | as `ResponseError` |
 | `RateLimitError` | HTTP 429 after retries | also `retry_after_seconds` |
-| `APIError` | any other error status | as `ResponseError` |
+| `APIError` | any other error status (408, 5xx) | as `ResponseError` |
 | `CalculationError` | a calculation returns a failed result | `code`, `sample_id`, `input_index`, `error` |
 | `MissingDataError` | the input names data that does not exist, such as a sample without an adjusted composition in the fluid model | `message` |
 
@@ -335,7 +338,7 @@ The URL comes from `--url`, else `WHITSON_PVT_URL`, else the default login; with
 take `--json`: one JSON document on stdout; errors go to stderr, as one JSON document (`error`,
 `message`) with `--json`. An error the API answered also carries `status` (the HTTP status code)
 and `request_id` (the response's `X-Request-ID`, `null` without one; quote it to support), so a
-script can tell a 404 from a 500; a network failure has neither. Without `--json` the request id
+script can tell a 404 from a 422; a network failure has neither. Without `--json` the request id
 is on the line before `Error:`. Progress messages (the login URL, the device code) go to stderr.
 
 ### Data commands
@@ -442,7 +445,11 @@ codex mcp add wpvt -- wpvt mcp
 | 1 | Any other error, such as another process holding the credential store's lock for longer than a login renewal can take (try again) |
 | 2 | Usage or configuration: a bad option, no URL or credential configured, an API token without an explicit URL, login not enabled on the deployment, a credentials file with loose permissions or that cannot be replaced, an OS keyring that cannot be read, the `cli` extra (or for `wpvt mcp`, the `mcp` extra) missing |
 | 3 | Authentication: the login was refused or is no longer valid, or the API rejected the credential |
-| 4 | Network or server: no response, or an unexpected status or response shape from the API, the deployment's login configuration or the authorization server |
+| 4 | Network or server: no response, a server error (5xx), a timeout (408) or rate limit (429) that outlasted the retries, or an unexpected status or response shape from the API, the deployment's login configuration or the authorization server |
+| 5 | Refused: the API understood the request and refused it with any other 4xx, such as a record that does not exist (404), invalid input (400, 422) or a conflict (409); a script can skip that item and carry on |
+
+With `--json`, the error's `error` field names the same kind: `error` (1), `configuration` (2),
+`authentication` (3), `network` or `server` (4), `refused` (5).
 
 ### Use with Claude Code and Codex
 

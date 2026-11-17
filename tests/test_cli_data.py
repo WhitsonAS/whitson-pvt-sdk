@@ -126,22 +126,37 @@ def test_get_prints_the_resource(httpx2_mock, resource, route, body):
     assert httpx2_mock.get_requests()[0].headers["Authorization"] == f"Bearer {TOKEN}"
 
 
-def test_get_with_json_reports_a_failure_as_json(httpx2_mock):
+@pytest.mark.parametrize(
+    ("status", "exit_code", "kind"),
+    [
+        (400, 5, "refused"),
+        (404, 5, "refused"),
+        (409, 5, "refused"),
+        (422, 5, "refused"),
+        (401, 3, "authentication"),
+        (408, 4, "server"),
+        (429, 4, "server"),
+        (500, 4, "server"),
+    ],
+)
+@pytest.mark.usefixtures("no_retry_sleep")
+def test_get_with_json_reports_a_failure_as_json(httpx2_mock, status, exit_code, kind):
     httpx2_mock.add_response(
         url=f"{API}/wells/9",
-        status_code=404,
-        json={"message": "Well with ID 9 not found"},
+        status_code=status,
+        json={"message": "Well 9 failed"},
         headers={"x-request-id": "req-9"},
+        is_reusable=True,
     )
 
     result = runner.invoke(app, ["wells", "get", "9", "--json"])
 
-    assert result.exit_code == 4
+    assert result.exit_code == exit_code
     assert result.stdout == ""
     assert json.loads(result.stderr) == {
-        "error": "server",
-        "message": "Well with ID 9 not found",
-        "status": 404,
+        "error": kind,
+        "message": "Well 9 failed",
+        "status": status,
         "request_id": "req-9",
     }
 

@@ -16,6 +16,7 @@ from whitson_pvt_sdk.errors import (
     NoResponseError,
     NotFoundError,
     RateLimitError,
+    RequestRefusedError,
     ValidationError,
 )
 from whitson_pvt_sdk.shared.models import ApiResponse, HTTPMethod, RetryConfig
@@ -211,6 +212,14 @@ def raise_for_status(response: httpx2.Response) -> None:
                 request_id=request_id,
                 server_message=server_message,
                 retry_after_seconds=retry_after(response),
+            )
+        case _ if response.is_client_error and status != 408:
+            raise RequestRefusedError(
+                message,
+                status,
+                response_body=body,
+                request_id=request_id,
+                server_message=server_message,
             )
         case _:
             raise APIError(

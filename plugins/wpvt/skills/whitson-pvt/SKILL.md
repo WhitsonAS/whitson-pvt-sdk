@@ -65,9 +65,11 @@ This SDK has no client credentials, no `version=` argument and no v1 API; code t
 
 ## Exit Codes And Errors
 
-`wpvt` prints data alone on stdout and errors on stderr. Exit codes: 0 success, 1 any other error (such as a busy credential store: try again), 2 usage or configuration (nothing configured, a token without a URL), 3 authentication (the login is no longer valid or the API rejected the credential), 4 network or server (including any other HTTP error, 404 too).
+`wpvt` prints data alone on stdout and errors on stderr. Exit codes: 0 success, 1 any other error (such as a busy credential store: try again), 2 usage or configuration (nothing configured, a token without a URL), 3 authentication (the login is no longer valid or the API rejected the credential), 4 network or server (no response, a server error, or a timeout or rate limit that outlasted the retries: try again later), 5 refused (the API understood the request and refused it, such as a missing record (404), invalid input (400, 422) or a conflict (409): retrying will not help).
 
-With `--json`, the error is one JSON object on stderr with `error` (`configuration`, `authentication`, `network`, `server` or `error`) and `message`. When the API answered, it also has `status`, the HTTP status code, and `request_id` (`null` if the server sent none); a network failure has neither. Use `status` to tell a missing record (404) from a rejected request (422) or a server fault (5xx), and give the user the `request_id` when they need to contact support.
+With `--json`, the error is one JSON object on stderr with `error` (`configuration`, `authentication`, `network`, `server`, `refused` or `error`, matching the exit code) and `message`. When the API answered, it also has `status`, the HTTP status code, and `request_id` (`null` if the server sent none); a network failure has neither. Use `status` to tell a missing record (404) from invalid input (422), and give the user the `request_id` when they need to contact support.
+
+A typed read (a resource command such as `wpvt wells get`, or `client.wells.get` in Python) fails as a whole when the API returns a value newer than this SDK's models, such as a new enum value: `wpvt` exits 4 with `server` and "Unexpected response from the API" but no `status`, and Python raises Pydantic's `ValidationError`, not an `SDKError`; read the record through the raw route instead (`wpvt api <path>` or `client.request`), which does not validate.
 
 ## Aggregate Questions
 
@@ -76,7 +78,7 @@ Counts, averages and per-record summaries across a region or project touch many 
 - Find the routes first (`wpvt api --list`). When no route lists what you need across a parent, page through the parents and read each one once.
 - Every number's unit is a sibling field, `<value>_unit` (an experiment's values share the experiment's units). Stored values come back in the unit they were entered in; no read route converts them. Group by unit and carry it into the answer. If the units differ, say so and either report per unit or ask the user how to convert; do not convert with constants you assume. Calculation requests are different: they take `output_unit_system` for their results (see `wpvt api --describe`).
 - Print the answer, not the data. To look at records, write them to a file and inspect a few.
-- A non-zero exit means the answer is incomplete: report the error, not the partial output.
+- A non-zero exit means the answer is incomplete: report the error, not the partial output; only a refused item (exit 5, such as a record that no longer exists) may be skipped, and then say which items were skipped.
 
 For example, the mean `reservoir_pressure` of each well's samples in one region, per unit. Run it with the Python that has the SDK installed; it uses the same `WHITSON_PVT_URL` and `WHITSON_PVT_TOKEN` (or stored login) as `wpvt`.
 
@@ -129,7 +131,7 @@ Everything the SDK raises derives from `SDKError`; import the classes from `whit
 - `ConfigurationError`: no usable deployment URL or token when the client is created. No HTTP fields.
 - `LoginError`: the stored login is no longer valid; ask the user to run `wpvt auth login`.
 - `NoResponseError`: the request got no response (connection error, timeout) after retries. No HTTP fields.
-- `ResponseError`: the API answered with an error status; always has `status_code`, plus `response_body` and `request_id`. Subclasses: `AuthError` (401/403), `NotFoundError` (404), `ValidationError` (400/422), `RateLimitError` (429) and `APIError` (any other status).
+- `ResponseError`: the API answered with an error status; always has `status_code`, plus `response_body` and `request_id`. Subclasses: `AuthError` (401/403), `RequestRefusedError` (any other 4xx except 408 and 429; its subclasses are `NotFoundError` (404) and `ValidationError` (400/422)), `RateLimitError` (429) and `APIError` (any other status).
 - `CalculationError`: a calculation returned a failed result (`code`, `sample_id`, `input_index`, `error`).
 - `MissingDataError`: the input names data that does not exist, such as a sample without an adjusted composition in the fluid model.
 
