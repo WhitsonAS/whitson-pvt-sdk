@@ -128,14 +128,22 @@ def test_get_prints_the_resource(httpx2_mock, resource, route, body):
 
 def test_get_with_json_reports_a_failure_as_json(httpx2_mock):
     httpx2_mock.add_response(
-        url=f"{API}/wells/9", status_code=404, json={"message": "Well with ID 9 not found"}
+        url=f"{API}/wells/9",
+        status_code=404,
+        json={"message": "Well with ID 9 not found"},
+        headers={"x-request-id": "req-9"},
     )
 
     result = runner.invoke(app, ["wells", "get", "9", "--json"])
 
     assert result.exit_code == 4
     assert result.stdout == ""
-    assert json.loads(result.stderr) == {"error": "server", "message": "Well with ID 9 not found"}
+    assert json.loads(result.stderr) == {
+        "error": "server",
+        "message": "Well with ID 9 not found",
+        "status": 404,
+        "request_id": "req-9",
+    }
 
 
 COMPOSITION = {

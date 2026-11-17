@@ -32,6 +32,11 @@ class ErrorReport(BaseModel):
     message: str
 
 
+class ResponseErrorReport(ErrorReport):
+    status: int
+    request_id: str | None
+
+
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
 
@@ -68,24 +73,40 @@ def reporting(*, json_output: bool) -> Iterator[None]:
     try:
         yield
     except ConfigurationError as exc:
-        _fail("configuration", exc.message, ExitCode.USAGE, json_output)
-    except (LoginError, AuthError) as exc:
-        _fail("authentication", exc.message, ExitCode.AUTHENTICATION, json_output)
+        _fail(ErrorReport(error="configuration", message=exc.message), ExitCode.USAGE, json_output)
+    except LoginError as exc:
+        _fail(
+            ErrorReport(error="authentication", message=exc.message),
+            ExitCode.AUTHENTICATION,
+            json_output,
+        )
+    except AuthError as exc:
+        _fail(_response_report("authentication", exc), ExitCode.AUTHENTICATION, json_output)
     except NoResponseError as exc:
-        _fail("network", exc.message, ExitCode.SERVER, json_output)
+        _fail(ErrorReport(error="network", message=exc.message), ExitCode.SERVER, json_output)
     except ResponseError as exc:
-        _fail("server", exc.message, ExitCode.SERVER, json_output)
+        _fail(_response_report("server", exc), ExitCode.SERVER, json_output)
     except SDKError as exc:
-        _fail("error", exc.message, ExitCode.ERROR, json_output)
+        _fail(ErrorReport(error="error", message=exc.message), ExitCode.ERROR, json_output)
     except PydanticValidationError as exc:
-        _fail("server", f"Unexpected response from the API: {exc}", ExitCode.SERVER, json_output)
+        _fail(
+            ErrorReport(error="server", message=f"Unexpected response from the API: {exc}"),
+            ExitCode.SERVER,
+            json_output,
+        )
     finally:
         _SDK_LOGGER.removeHandler(log_handler)
 
 
-def _fail(kind: ErrorKind, message: str, code: ExitCode, json_output: bool) -> None:
-    report = ErrorReport(error=kind, message=message)
+def _response_report(kind: ErrorKind, exc: ResponseError) -> ResponseErrorReport:
+    return ResponseErrorReport(
+        error=kind, message=exc.message, status=exc.status_code, request_id=exc.request_id
+    )
+
+
+def _fail(report: ErrorReport, code: ExitCode, json_output: bool) -> None:
     typer.echo(
-        report.model_dump_json() if json_output else _printable(f"Error: {message}"), err=True
+        report.model_dump_json() if json_output else _printable(f"Error: {report.message}"),
+        err=True,
     )
     raise typer.Exit(code)

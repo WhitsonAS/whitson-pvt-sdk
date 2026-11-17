@@ -333,7 +333,10 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
 The URL comes from `--url`, else `WHITSON_PVT_URL`, else the default login; with
 `WHITSON_PVT_TOKEN` set, a URL from the default login is refused (see Quick start). Commands that report
 take `--json`: one JSON document on stdout; errors go to stderr, as one JSON document (`error`,
-`message`) with `--json`. Progress messages (the login URL, the device code) go to stderr.
+`message`) with `--json`. An error the API answered also carries `status` (the HTTP status code)
+and `request_id` (the response's `X-Request-ID`, `null` without one; quote it to support), so a
+script can tell a 404 from a 500; a network failure has neither. Without `--json` the request id
+is on the line before `Error:`. Progress messages (the login URL, the device code) go to stderr.
 
 ### Data commands
 

@@ -175,6 +175,7 @@ def status_command(url: UrlOption = None, json_output: JsonOption = False) -> No
             raise AuthError(
                 f"{target} rejected the credential: {exc.message}.{_next_step(resolved, exc)}",
                 exc.status_code,
+                request_id=exc.request_id,
             ) from exc
         emit(
             StatusReport(url=target, credential=credential, identity=identity),
