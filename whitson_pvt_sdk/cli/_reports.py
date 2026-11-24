@@ -2,17 +2,15 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from pydantic import BaseModel
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk.cli._output import JsonOption, emit, emit_data, reporting
+from whitson_pvt_sdk.cli._output import FileReport, JsonOption, emit, emit_data, reporting
 from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 
 reports_app = typer.Typer(help="Export and import report archives.", no_args_is_help=True)
 
 
-class ArchiveReport(BaseModel):
-    path: str
+class ArchiveReport(FileReport):
     bytes: int
 
 

@@ -10,7 +10,6 @@ from whitson_pvt_sdk._refresh import (
     RefreshOutcome,
     Usable,
     replace_access_token,
-    usable_login,
 )
 from whitson_pvt_sdk._store import ActiveLogin, CredentialStore, InvalidLogin
 from whitson_pvt_sdk._trust import is_secure_url
@@ -184,7 +183,9 @@ class BearerSource:
                     raise ConfigurationError(
                         f"Refusing to send the stored login for {login.base_url} to {origin(url)}."
                     )
-                return self._adopt(usable_login(login, self._store)).access_token
+                if login.expiring():
+                    login = self._adopt(replace_access_token(login, self._store))
+                return login.access_token
 
     def renewed_after_rejection(self) -> SecretStr | None:
         match self._credential:
@@ -203,10 +204,9 @@ class BearerSource:
 
 
 class CredentialAuth(httpx2.Auth):
-    requires_request_body = True
-
     def __init__(self, credential: Credential) -> None:
         self._bearer = BearerSource(credential)
+        self.requires_request_body = isinstance(credential, StoredLogin)
 
     def auth_flow(
         self, request: httpx2.Request

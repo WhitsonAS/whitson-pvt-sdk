@@ -358,7 +358,7 @@ def _routes(client: WhitsonPVTClient) -> list[RouteDetail]:
             routes.append(
                 RouteDetail(
                     method=parsed_method,
-                    path="/" + path.removeprefix(API_PREFIX).lstrip("/"),
+                    path="/" + "/".join(route_segments(path)),
                     summary=parsed.summary,
                     scopes=list(
                         dict.fromkeys(

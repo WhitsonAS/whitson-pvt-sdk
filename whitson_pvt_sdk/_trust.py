@@ -1,5 +1,5 @@
 import ipaddress
-from collections.abc import Callable, Sequence
+import socket
 from typing import Annotated
 
 import httpx2
@@ -38,21 +38,8 @@ ALLOWLIST = HostAllowlist(
 )
 
 
-class KnownIssuers(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    hosts: frozenset[str]
-
-    def includes(self, issuer: str) -> bool:
-        try:
-            url = httpx2.URL(normalise_url(issuer))
-        except ValueError:
-            return False
-        return url.scheme == "https" and url.port is None and host_name(url) in self.hosts
-
-
 # A new login domain needs an SDK release before deployments switch to it.
-KNOWN_ISSUERS = KnownIssuers(hosts=frozenset({"whitson.eu.auth0.com"}))
+KNOWN_ISSUERS = frozenset({"whitson.eu.auth0.com"})
 
 
 def _strictly_under(host: str, domain: str) -> bool:
@@ -81,10 +68,7 @@ class TrustedByOverride(BaseModel):
 TrustedHost = TrustedDeployment | TrustedLoopback | TrustedByOverride
 
 
-Resolver = Callable[[str], Sequence[str]]
-
-
-def host_trust(base_url: str, *, trust_host: bool, resolve: Resolver) -> TrustedHost:
+def host_trust(base_url: str, *, trust_host: bool) -> TrustedHost:
     try:
         url = normalise_url(base_url)
     except ValueError:
@@ -101,7 +85,7 @@ def host_trust(base_url: str, *, trust_host: bool, resolve: Resolver) -> Trusted
             "logins are only started for plain ASCII host names."
         )
     if ALLOWLIST.is_loopback(host):
-        _require_loopback_resolution(host, resolve)
+        _require_loopback_resolution(host)
         return TrustedLoopback(url=url)
     if parsed.scheme != "https":
         raise ConfigurationError(f"Refusing to log in over plain HTTP to {url}; use https://.")
@@ -118,10 +102,14 @@ def host_trust(base_url: str, *, trust_host: bool, resolve: Resolver) -> Trusted
     )
 
 
-def _require_loopback_resolution(host: str, resolve: Resolver) -> None:
+def _require_loopback_resolution(host: str) -> None:
     if host in ALLOWLIST.loopback_addresses or host in ALLOWLIST.loopback_names:
         return
-    addresses = sorted(set(resolve(host)))
+    try:
+        found = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        found = []
+    addresses = sorted({str(address[0]) for *_, address in found})
     if not addresses:
         raise ConfigurationError(
             f"{host} does not resolve to an address on this machine, so the login was not "
@@ -224,7 +212,16 @@ class Remembered(BaseModel):
 def login_decision(
     host: TrustedHost, issuer: str, audience: str, remembered: Remembered | None
 ) -> Proceed | Confirmation:
-    pinned = KNOWN_ISSUERS.includes(issuer)
+    try:
+        issuer_url = httpx2.URL(normalise_url(issuer))
+    except ValueError:
+        pinned = False
+    else:
+        pinned = (
+            issuer_url.scheme == "https"
+            and issuer_url.port is None
+            and host_name(issuer_url) in KNOWN_ISSUERS
+        )
     own_audience = _is_own_audience(host.url, audience)
     match host:
         case TrustedDeployment(url=url):

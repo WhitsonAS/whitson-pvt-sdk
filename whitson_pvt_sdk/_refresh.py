@@ -22,12 +22,6 @@ class NoLongerValid(BaseModel):
 RefreshOutcome = Usable | NoLongerValid
 
 
-def usable_login(login: StoredLogin, store: CredentialStore) -> RefreshOutcome:
-    if not login.expiring():
-        return Usable(login=login)
-    return replace_access_token(login, store)
-
-
 def replace_access_token(login: StoredLogin, store: CredentialStore) -> RefreshOutcome:
     with store.transaction() as transaction:
         match transaction.get(login.base_url):

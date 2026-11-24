@@ -2,7 +2,6 @@ import os
 import re
 import sys
 import webbrowser
-from collections.abc import Callable
 from functools import partial
 from typing import Annotated, Literal
 
@@ -233,12 +232,7 @@ def status_command(url: UrlOption = None, json_output: JsonOption = False) -> No
         resolved = resolve_credential(url, token=None)
         target = resolved.url
         credential = CredentialReport(source=resolved.source)
-        identity = _identity(
-            resolved.credential,
-            target,
-            rejected="the credential",
-            next_step=partial(_next_step, resolved),
-        )
+        identity = _identity(resolved.credential, target, resolved)
         emit(
             StatusReport(url=target, credential=credential, identity=identity),
             "\n".join(
@@ -329,7 +323,7 @@ def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:
 
 
 def _login_report(new: NewLogin, *, email: str | None) -> LoginReport:
-    identity = _identity(new.credential, new.url, rejected="the new login")
+    identity = _identity(new.credential, new.url, None)
     match identity:
         case ApiTokenIdentity() | UserTokenIdentity():
             by_role = [scope for scope in new.granted if scope not in identity.scopes]
@@ -370,33 +364,28 @@ def _narrower(report: LoginReport) -> str:
 
 
 def _identity(
-    credential: Credential,
-    base_url: str,
-    *,
-    rejected: str,
-    next_step: Callable[[AuthError], str] = lambda _: "",
+    credential: Credential, base_url: str, resolved: ResolvedCredential | None
 ) -> Identity:
     transport = HTTPTransport(credential, base_url)
     try:
         return Me(transport).get()
     except AuthError as exc:
+        match resolved:
+            case None:
+                rejected, next_step = "the new login", ""
+            case FromStore() if exc.server_message is None:
+                rejected, next_step = "the credential", f" Run `wpvt auth login --url {base_url}`."
+            case FromStore():
+                rejected, next_step = "the credential", ""
+            case FromEnvironment() | FromArgument():
+                rejected, next_step = "the credential", f" Check the token in {TOKEN_ENV_VAR}."
         raise AuthError(
-            f"{base_url} rejected {rejected}: {exc.message.rstrip('.')}.{next_step(exc)}",
+            f"{base_url} rejected {rejected}: {exc.message.rstrip('.')}.{next_step}",
             exc.status_code,
             request_id=exc.request_id,
         ) from exc
     finally:
         transport.close()
-
-
-def _next_step(resolved: ResolvedCredential, refusal: AuthError) -> str:
-    match resolved:
-        case FromStore() if refusal.server_message is None:
-            return f" Run `wpvt auth login --url {resolved.url}`."
-        case FromStore():
-            return ""
-        case FromEnvironment() | FromArgument():
-            return f" Check the token in {TOKEN_ENV_VAR}."
 
 
 def _who(identity: Identity) -> str:

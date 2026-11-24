@@ -47,7 +47,6 @@ class InvalidLogin(BaseModel):
 
     login: StoredLogin
     reason: str
-    since: AwareDatetime
 
 
 StoreEntry = ActiveLogin | InvalidLogin
@@ -112,7 +111,23 @@ class _Document(BaseModel):
 
     def entry(self, base_url: str) -> StoreEntry | None:
         profile = self.profile(base_url)
-        return None if profile is None else _load_entry(profile)
+        if profile is None:
+            return None
+        match profile.secrets:
+            case _FileSecrets(access_token=access_token, refresh_token=refresh_token):
+                pass
+            case _KeyringSecrets():
+                access_token, refresh_token = _read_keyring(profile.base_url)
+        login = StoredLogin(
+            **profile.model_dump(include=_FACT_FIELDS),
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )
+        match profile.status:
+            case _Active():
+                return ActiveLogin(login=login)
+            case _Invalid(reason=reason):
+                return InvalidLogin(login=login, reason=reason)
 
 
 def config_directory() -> Path:
@@ -177,7 +192,7 @@ class StoreTransaction:
     def document_to_write(self) -> _Document | None:
         if not self._written and self._document.model_dump_json() == self._unchanged:
             return None
-        backend = _keyring()
+        backend = _keyring() if self._written else None
         for key in self._written:
             profile = self._document.profiles[key]
             if isinstance(profile.secrets, _FileSecrets):
@@ -295,28 +310,6 @@ def _check_private(path: Path, status: os.stat_result) -> None:
             f"{path} can be read by other users (mode {stat.filemode(status.st_mode)}). "
             f"Run `chmod 600 {path}` and try again."
         )
-
-
-def _load_entry(profile: _Profile) -> StoreEntry:
-    match profile.secrets:
-        case _FileSecrets(access_token=access_token, refresh_token=refresh_token):
-            return _entry(profile, access_token, refresh_token)
-        case _KeyringSecrets():
-            access_token, refresh_token = _read_keyring(profile.base_url)
-            return _entry(profile, access_token, refresh_token)
-
-
-def _entry(profile: _Profile, access_token: SecretStr, refresh_token: SecretStr) -> StoreEntry:
-    login = StoredLogin(
-        **profile.model_dump(include=_FACT_FIELDS),
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
-    match profile.status:
-        case _Active():
-            return ActiveLogin(login=login)
-        case _Invalid(reason=reason, since=since):
-            return InvalidLogin(login=login, reason=reason, since=since)
 
 
 def _keyring() -> "KeyringBackend | None":

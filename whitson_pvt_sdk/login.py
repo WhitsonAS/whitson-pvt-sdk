@@ -4,7 +4,6 @@ import hmac
 import logging
 import math
 import secrets
-import socket
 import socketserver
 import sys
 import time
@@ -191,7 +190,7 @@ def login(
     confirm: Callable[[Confirmation], bool] | None = None,
     trust_host: bool = False,
 ) -> _Verified:
-    trusted = host_trust(base_url, trust_host=trust_host, resolve=_addresses)
+    trusted = host_trust(base_url, trust_host=trust_host)
     url = trusted.url
     with oauth_client() as http:
         config = fetch_auth_config(http, url)
@@ -274,25 +273,6 @@ def logout_all() -> list[LoggedOut]:
     return _revoke([entry for entry in removed if entry is not None])
 
 
-def _addresses(host: str) -> list[str]:
-    try:
-        found = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
-        return []
-    return [str(address[0]) for *_, address in found]
-
-
-class _Picker(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    url: str
-    offered: tuple[str, ...]
-    ask: _Ask
-
-    def choose(self, names: Collection[str]) -> tuple[str, ...]:
-        return _chosen_scopes(frozenset(names), self.offered, self.url)
-
-
 class _AwaitingStart(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -302,7 +282,12 @@ class _AwaitingStart(BaseModel):
 class _AwaitingPick(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    picker: _Picker
+    url: str
+    offered: tuple[str, ...]
+    ask: _Ask
+
+    def choose(self, names: Collection[str]) -> tuple[str, ...]:
+        return _chosen_scopes(frozenset(names), self.offered, self.url)
 
 
 _Unstarted = _AwaitingStart | _AwaitingPick
@@ -315,7 +300,7 @@ def _first_phase(choice: ScopeChoice, config: AuthConfig, url: str) -> _Unstarte
         case ChosenScopes(names=names):
             return _AwaitingStart(scopes=_chosen_scopes(names, config.scopes, url))
         case PickScopes(ask=ask):
-            return _AwaitingPick(picker=_Picker(url=url, offered=config.scopes, ask=ask))
+            return _AwaitingPick(url=url, offered=config.scopes, ask=ask)
 
 
 def _chosen_scopes(names: frozenset[str], offered: tuple[str, ...], url: str) -> tuple[str, ...]:
@@ -349,7 +334,7 @@ class _Authorized(BaseModel):
 class _Picking(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    picker: _Picker
+    pick: _AwaitingPick
     nonce: str
 
 
@@ -504,15 +489,14 @@ class _CallbackServer(HTTPServer):
         super().__init__(("127.0.0.1", port), _CallbackHandler)
         origin = f"http://127.0.0.1:{self.server_address[1]}"
         nonce = secrets.token_urlsafe(32)
-        self.expected_state = authorize.state
         self.expected_nonce = nonce
         self.redirect_uri = f"{origin}/callback"
         self.start_url = f"{origin}/start?n={nonce}"
-        self._authorize = authorize
+        self.authorize = authorize
         self.phase: _Listening | _Finished = first
 
     def authorize_url(self, scopes: tuple[str, ...]) -> str:
-        return self._authorize.url(self.redirect_uri, scopes)
+        return self.authorize.url(self.redirect_uri, scopes)
 
     def server_bind(self) -> None:
         socketserver.TCPServer.server_bind(self)
@@ -554,10 +538,10 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             case ("/start", _AwaitingStart(scopes=scopes)) if self._nonce_matches(query):
                 self.server.phase = _Started(scopes=scopes)
                 self._redirect(302, self.server.authorize_url(scopes))
-            case ("/start", _AwaitingPick(picker=picker)) if self._nonce_matches(query):
+            case ("/start", _AwaitingPick() as pick) if self._nonce_matches(query):
                 nonce = secrets.token_urlsafe(32)
-                self.server.phase = _Picking(picker=picker, nonce=nonce)
-                self._page(ScopeForm(nonce=nonce, offered=picker.offered, refused=False))
+                self.server.phase = _Picking(pick=pick, nonce=nonce)
+                self._page(ScopeForm(nonce=nonce, offered=pick.offered, refused=False))
             case ("/start", _Picking() | _Started()) if self._nonce_matches(query):
                 self.server.phase = _StartedTwice()
                 self._page("link_used")
@@ -569,13 +553,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         form = self._form()
         match (urlsplit(self.path).path, self.server.phase):
-            case (_login_page.SCOPES_PATH, _Picking(picker=picker, nonce=nonce)) if (
+            case (_login_page.SCOPES_PATH, _Picking(pick=pick, nonce=nonce)) if (
                 form is not None and _matches(_single(form, "n"), nonce)
             ):
                 try:
-                    scopes = picker.choose(form.get("scope", []))
+                    scopes = pick.choose(form.get("scope", []))
                 except ConfigurationError:
-                    self._page(ScopeForm(nonce=nonce, offered=picker.offered, refused=True))
+                    self._page(ScopeForm(nonce=nonce, offered=pick.offered, refused=True))
                     return
                 self.server.phase = _Started(scopes=scopes)
                 self._redirect(303, self.server.authorize_url(scopes))
@@ -605,7 +589,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         return _matches(_single(query, "n"), self.server.expected_nonce)
 
     def _callback(self, query: dict[str, list[str]], scopes: tuple[str, ...]) -> None:
-        match _parse_callback(query, self.server.expected_state):
+        match _parse_callback(query, self.server.authorize.state):
             case _StateMismatch():
                 self._page("other_login")
             case SecretStr() as code:
@@ -677,8 +661,8 @@ def _device_flow(
     match first:
         case _AwaitingStart(scopes=scopes):
             pass
-        case _AwaitingPick(picker=picker):
-            scopes = picker.choose(picker.ask(picker.offered))
+        case _AwaitingPick() as pick:
+            scopes = pick.choose(pick.ask(pick.offered))
     authorization = post_oauth(
         http,
         endpoint,
