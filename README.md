@@ -304,7 +304,7 @@ $ wpvt auth logout
 Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
 ```
 
-- `wpvt auth login [--url URL] [--device] [--scope SCOPE... | --choose] [--trust-host] [--yes]` logs in with the
+- `wpvt auth login [--url URL] [--device] [--email ADDRESS] [--scope SCOPE... | --choose] [--trust-host] [--yes]` logs in with the
   authorization code flow and PKCE through a one-off listener on `127.0.0.1`, on the first free
   port of 52817, 54631, 57493 and 61287 (the redirect URI must match exactly, so these are the
   ports registered on the login server; the login fails with a message naming them when all are
@@ -314,10 +314,25 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   the login stops, since another program may have used it first. Only a callback carrying this
   login's `state` ends the wait; any other request to the listener is answered 400 or 404 and
   ignored. The listener's pages are fixed text with no external resources, served with
-  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`. It opens a browser
-  only when attached to a terminal, with the browser's own output kept off the terminal;
-  otherwise it prints the link, which must be opened on the same machine. `--device` logs in
-  with a code entered on another device, for SSH sessions, containers and sandboxes, on deployments that enable it. The login is stored, and
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`. The browser's own
+  output is kept off the terminal.
+  `--device` logs in with a code instead: open the link it prints on any device, confirm the
+  code and sign in there; the command waits until you do or the code expires. Without
+  `--device` the login uses a code by itself, saying why in one line, when no browser can be
+  used: there is no display (`DISPLAY` and `WAYLAND_DISPLAY` unset on Linux, or an SSH session
+  without one; setting `BROWSER` names a browser to use anyway), the browser cannot be started,
+  or the browser has not opened the one-time link 60 s after it was started. Without a
+  terminal (stdin or stderr not a TTY, such as a script or an AI agent running `wpvt`), it
+  always uses a code and prints a prompt meant to be passed on to the person who logs in:
+  "Open <link> and confirm the code <code> to log in. The code expires in <n> minutes, at
+  <time> UTC.", with the link that carries the code where the login server gives one. With
+  `--json` that prompt is one JSON line on stderr: `kind` (`"device_code"`),
+  `verification_uri`, `verification_uri_complete` (or `null`), `user_code`, `expires_in`
+  (seconds), `expires_at` and `message`. `--email` keeps the login only when the account
+  `/external/v2/me` reports has that email address (compared ignoring case and surrounding
+  space); for any other account, or one without an email address, the login fails (exit 3)
+  naming the account that signed in and the one expected, its refresh token is revoked, and
+  nothing is stored. The login is stored, and
   becomes the default, only after `/external/v2/me` accepts it; if that check fails, nothing is
   stored and the previous default stays. A deployment accepts a login only while a sign-in to
   its web app has confirmed your role in the last 30 days; otherwise it refuses the login and
@@ -337,9 +352,9 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   button. The page posts back to the listener with a one-time value only that page carries (a
   wrong, missing or reused one is refused, as is a choice with no scope or a scope the
   deployment does not offer), and the listener then sends the browser to the login server with
-  the scopes chosen; the usual timeout covers the page. With `--device` the scopes are fixed
+  the scopes chosen; the usual timeout covers the page. With a code the scopes are fixed
   before the code is requested, so `--choose` lists them at the terminal (numbers or names,
-  Enter for all) and needs one; without a terminal use `--scope`.
+  Enter for all). `--choose` needs a terminal; without one use `--scope`.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
   came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
   API reports: the API token's name for an API token, and "legacy client <subject>, full
@@ -551,8 +566,18 @@ starts. With `PickScopes`, a `BrowserLogin` shows the scope page described above
 `DeviceLogin` calls `ask` with the offered scopes before requesting the code; it returns the
 names to request (an empty answer raises `ConfigurationError`).
 
+The method is `DeviceLogin()` or `BrowserLogin(open_browser=...)`, where `open_browser` gets
+the one-time link and returns `BrowserOpened()` or `NoBrowser(reason=...)`; on `NoBrowser`, or
+when the browser has not opened the link after `start_timeout` (60 s), the login continues with
+a code and passes `"<reason>, so logging in with a code instead."` to `output`. `output=`
+receives progress as `Notice`: a line of text, or a `DeviceCode` (`verification_uri`,
+`verification_uri_complete`, `user_code`, `expires_in`, `expires_at` and `message`, the
+sentence to show or pass on).
+
 `login()` also takes `verify=`, a function called with the new login before it is stored;
-`login()` returns its result. If it raises, nothing is stored and the previous default stays.
+`login()` returns its result. If it raises, nothing is stored, the new login's refresh token is
+revoked where the login server offers revocation (a warning on the `whitson_pvt_sdk` logger
+says when it could not be), and the previous default stays.
 `wpvt auth login` passes a check of `/external/v2/me`; a caller that wants no check passes
 `verify=lambda new_login: new_login`.
 
@@ -560,18 +585,17 @@ The issuer, and the authorization, token, device and revocation endpoints it pub
 HTTPS (http only on this machine). The browser, and the page where a device code is entered, are
 only ever on the issuer's own scheme, host and port.
 
-Device login (`--device`) is available only on deployments that enable it (`device_login` in
-`/external/v2/auth/config`), since a device code can be phished. Elsewhere, log in from a
-machine with a browser or use an API token in `WHITSON_PVT_TOKEN`.
+Device login is available on every deployment. A device code can be phished: confirm only a
+code you started yourself, or that someone you trust passed on, on the login server's own page.
 
 These checks apply to logging in. An API token (`token=` or `WHITSON_PVT_TOKEN`) is sent to
 the URL you give in `base_url=`, `--url` or `WHITSON_PVT_URL`, over HTTPS (plain HTTP only to
 this machine), never to one taken from the default login, and a stored login only ever to its
 own deployment.
 
-Library code never starts a login. Scripts and agents should use `WHITSON_PVT_TOKEN`; a login
-made with `wpvt auth login` is for people at a terminal, and every SDK client on the machine then
-uses it for that deployment.
+Library code never starts a login. Scripts should use `WHITSON_PVT_TOKEN`. A login made with
+`wpvt auth login` belongs to a person, and every SDK client on the machine then uses it for that
+deployment; an agent may start one without a terminal, but a person confirms the code.
 
 ### Where logins are stored
 
