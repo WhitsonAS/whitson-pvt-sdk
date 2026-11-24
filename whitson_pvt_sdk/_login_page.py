@@ -102,7 +102,7 @@ def login_page(view: Outcome | ScopeForm) -> Page:
     match view:
         case ScopeForm():
             return Page(status=400 if view.refused else 200, body=_scope_form(view))
-        case _:
+        case str():
             text = _TEXTS[view]
             mark = (
                 '<div class="mark ok" aria-hidden="true">&#10003;</div>'
@@ -117,13 +117,14 @@ def login_page(view: Outcome | ScopeForm) -> Page:
 
 def _scope_form(form: ScopeForm) -> bytes:
     nonce = f'<input type="hidden" name="n" value="{escape(form.nonce)}">'
+    members = {group: [s for s in form.offered if _group(s) == group] for group, _ in _GROUPS}
     groups = "".join(
-        f"<fieldset><legend>{legend}</legend>{''.join(_checkbox(scope) for scope in members)}"
-        "</fieldset>"
+        f"<fieldset><legend>{legend}</legend>"
+        f"{''.join(_checkbox(scope) for scope in members[group])}</fieldset>"
         for group, legend in _GROUPS
-        if (members := [scope for scope in form.offered if _group(scope) == group])
+        if members[group]
     )
-    read = [scope for scope in form.offered if _group(scope) == "read"]
+    read = members["read"]
     read_only = (
         f'<form method="post" action="{escape(form.action)}">{nonce}'
         + "".join(f'<input type="hidden" name="scope" value="{escape(scope)}">' for scope in read)
@@ -148,8 +149,7 @@ def _checkbox(scope: str) -> str:
 
 
 def _group(scope: str) -> str:
-    action = scope.rpartition(":")[2]
-    return action if action in {"read", "write"} else "run"
+    return next((group for group in ("read", "write") if scope.endswith(f":{group}")), "run")
 
 
 def _document(title: str, content: str) -> bytes:

@@ -333,7 +333,7 @@ PICKER_SCOPES = ["regions:read", HOSTILE, "calculations:run", "regions:write"]
 def picker_server(base_url, httpx2_mock):
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config",
-        json={**auth_config(), "scopes": PICKER_SCOPES},
+        json=auth_config(scopes=PICKER_SCOPES),
     )
     httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
 

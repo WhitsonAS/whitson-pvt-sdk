@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, TypedDict, Unpack
@@ -40,12 +40,13 @@ def auth_config(
     issuer: str = ISSUER,
     device_login: bool | None = True,
     audience: str = "https://dev.pvt.whitson.com/mcp",
+    scopes: Sequence[str] = ("read:data",),
 ) -> dict[str, Any]:
     config = {
         "issuer": issuer,
         "client_id": "cli-client",
         "audience": audience,
-        "scopes": ["read:data"],
+        "scopes": list(scopes),
     }
     return config if device_login is None else {**config, "device_login": device_login}
 

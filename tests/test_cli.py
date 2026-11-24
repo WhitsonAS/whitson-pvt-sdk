@@ -259,10 +259,11 @@ DEVICE_AUTHORIZATION = f"{ISSUER}oauth/device/code"
 OFFERED_SCOPES = ["regions:read", "regions:write", "samples:read", "calculations:run"]
 
 
-def _device_login_server(base_url, httpx2_mock, monkeypatch, scopes=None) -> None:
+def _device_login_server(base_url, httpx2_mock, monkeypatch, scopes=("read:data",)) -> None:
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
-    config = auth_config() if scopes is None else {**auth_config(), "scopes": scopes}
-    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=config)
+    httpx2_mock.add_response(
+        url=f"{base_url}/external/v2/auth/config", json=auth_config(scopes=scopes)
+    )
     httpx2_mock.add_response(
         url=DISCOVERY,
         json={
@@ -396,7 +397,7 @@ def test_login_refuses_scopes_the_deployment_does_not_offer_before_signing_in(
     base_url, httpx2_mock, store, offered, options, message
 ):
     config_url = f"{base_url}/external/v2/auth/config"
-    httpx2_mock.add_response(url=config_url, json={**auth_config(), "scopes": offered})
+    httpx2_mock.add_response(url=config_url, json=auth_config(scopes=offered))
 
     result = runner.invoke(
         app, ["auth", "login", "--url", base_url, "--device", "--json", *options]
@@ -428,38 +429,21 @@ def test_login_reports_scopes_the_role_did_not_grant(
 
 
 @pytest.mark.parametrize(
-    ("options", "message", "requested"),
+    ("options", "message"),
     [
-        (
-            ["--device", "--choose"],
-            "needs a terminal. Name them with --scope",
-            ["config", "discovery"],
-        ),
-        (["--choose", "--scope", "read"], "Pass either --scope or --choose, not both.", []),
+        (["--device", "--choose"], "needs a terminal. Name them with --scope"),
+        (["--choose", "--scope", "read"], "Pass either --scope or --choose, not both."),
     ],
     ids=["device-without-terminal", "with-scope"],
 )
 def test_choose_needs_a_terminal_for_device_login_and_excludes_scope(
-    base_url, httpx2_mock, store, options, message, requested
+    base_url, httpx2_mock, store, options, message
 ):
-    urls = {"config": f"{base_url}/external/v2/auth/config", "discovery": DISCOVERY}
-    httpx2_mock.add_response(url=urls["config"], json=auth_config(), is_optional=True)
-    httpx2_mock.add_response(
-        url=DISCOVERY,
-        json={
-            "issuer": ISSUER,
-            "authorization_endpoint": f"{ISSUER}authorize",
-            "token_endpoint": TOKEN_ENDPOINT,
-            "device_authorization_endpoint": DEVICE_AUTHORIZATION,
-        },
-        is_optional=True,
-    )
-
     result = runner.invoke(app, ["auth", "login", "--url", base_url, "--json", *options])
 
     assert result.exit_code == 2
     assert message in json.loads(result.stderr.splitlines()[-1])["message"]
-    assert [str(r.url) for r in httpx2_mock.get_requests()] == [urls[name] for name in requested]
+    assert httpx2_mock.get_requests() == []
     assert store.get(base_url) is None
 
 

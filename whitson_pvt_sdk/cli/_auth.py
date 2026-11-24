@@ -164,7 +164,9 @@ def login_command(
             method,
             output=note,
             verify=_login_report,
-            scopes=_scope_choice(scope or [], choose=choose, interactive=interactive),
+            scopes=_scope_choice(
+                scope or [], choose=choose, device=device, interactive=interactive
+            ),
             confirm=confirm,
             trust_host=trust_host,
         )
@@ -263,14 +265,21 @@ def _open_browser(url: str) -> bool:
         os.close(devnull)
 
 
-def _scope_choice(scope: list[str], *, choose: bool, interactive: bool) -> ScopeChoice:
+def _scope_choice(
+    scope: list[str], *, choose: bool, device: bool, interactive: bool
+) -> ScopeChoice:
     match scope, choose:
         case [_, *_], True:
             raise ConfigurationError("Pass either --scope or --choose, not both.")
         case [_, *_], False:
             return ChosenScopes(names=frozenset(scope))
+        case [], True if device and not interactive:
+            raise ConfigurationError(
+                "Choosing scopes with --device needs a terminal. Name them with --scope instead, "
+                f"for example --scope {READ_SCOPES}."
+            )
         case [], True:
-            return PickScopes(ask=_ask_at_terminal if interactive else _no_terminal)
+            return PickScopes(ask=_ask_at_terminal)
         case _:
             return AllScopes()
 
@@ -291,13 +300,6 @@ def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:
         offered[int(word) - 1] if word.isdecimal() and 1 <= int(word) <= len(offered) else word
         for word in words
     ]
-
-
-def _no_terminal(_: tuple[str, ...]) -> list[str]:
-    raise ConfigurationError(
-        "Choosing scopes with --device needs a terminal. Name them with --scope instead, "
-        f"for example --scope {READ_SCOPES}."
-    )
 
 
 def _login_report(stored: StoredLogin) -> LoginReport:
