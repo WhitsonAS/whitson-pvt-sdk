@@ -143,18 +143,12 @@ def login_command(
         typer.Option(
             "--scope",
             help=f'Request only this scope; repeat for more. "{READ_SCOPES}" stands for every '
-            "*:read scope. Defaults to every scope the deployment offers; offline_access is "
-            "always requested. Your role can still narrow what is granted.",
+            "*:read scope. Without it, the scopes are chosen before signing in, all of them "
+            "ticked: on a page in the browser, or at the terminal when logging in with a code; "
+            "without a terminal every scope the deployment offers is requested. offline_access "
+            "is always requested. Your role can still narrow what is granted.",
         ),
     ] = None,
-    choose: Annotated[
-        bool,
-        typer.Option(
-            "--choose",
-            help="Choose the scopes yourself: on a page in the browser, or at the terminal when "
-            "logging in with a code. Needs a terminal; use --scope instead in scripts.",
-        ),
-    ] = False,
     json_output: JsonOption = False,
 ) -> None:
     """Log in through the browser (or with a code) and make this login the default."""
@@ -163,7 +157,12 @@ def login_command(
             raise ConfigurationError("--trust-host applies only to a URL given with --url.")
         target = resolve_base_url(url).url
         interactive = sys.stdin.isatty() and sys.stderr.isatty()
-        scopes = _scope_choice(scope or [], choose=choose, interactive=interactive)
+        if scope:
+            scopes: ScopeChoice = ChosenScopes(names=frozenset(scope))
+        elif interactive:
+            scopes = PickScopes(ask=_ask_at_terminal)
+        else:
+            scopes = AllScopes()
 
         def confirm(confirmation: Confirmation) -> bool:
             note(confirmation.describe())
@@ -309,23 +308,6 @@ def _open_browser(url: str) -> BrowserOpened | NoBrowser:
             os.close(copy)
         os.close(devnull)
     return BrowserOpened() if opened else NoBrowser(reason="No browser could be started")
-
-
-def _scope_choice(scope: list[str], *, choose: bool, interactive: bool) -> ScopeChoice:
-    match scope, choose:
-        case [_, *_], True:
-            raise ConfigurationError("Pass either --scope or --choose, not both.")
-        case [_, *_], False:
-            return ChosenScopes(names=frozenset(scope))
-        case [], True if not interactive:
-            raise ConfigurationError(
-                "Choosing scopes needs a terminal. Name them with --scope instead, "
-                f"for example --scope {READ_SCOPES}."
-            )
-        case [], True:
-            return PickScopes(ask=_ask_at_terminal)
-        case _:
-            return AllScopes()
 
 
 def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:

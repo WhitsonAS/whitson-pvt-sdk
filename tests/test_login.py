@@ -5,11 +5,8 @@ import itertools
 import re
 import socket
 import threading
-import urllib.error
-import urllib.request
-from email.message import Message
 from typing import Literal
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import pytest
 from pydantic import BaseModel, ConfigDict
@@ -21,10 +18,14 @@ from tests.conftest import (
     ISSUER,
     PROVIDER,
     TOKEN_ENDPOINT,
+    PageResponse,
     active_login,
     auth_config,
     form,
     make_login,
+    open_page,
+    post_form,
+    query_params,
 )
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, SDKError
 from whitson_pvt_sdk.login import (
@@ -76,66 +77,14 @@ def _keep(new: NewLogin) -> NewLogin:
     return new
 
 
-class _NoRedirects(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *_args, **_kwargs):
-        return None
-
-
-_BROWSER = urllib.request.build_opener(_NoRedirects)
-
-
-class _Response(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    status: int
-    location: str | None
-    headers: dict[str, str]
-    body: str
-
-    @property
-    def outcome(self) -> tuple[int, str | None]:
-        heading = re.search(r"<h1>(.*?)</h1>", self.body)
-        return self.status, None if heading is None else heading[1]
-
-
-def _get(url: str) -> _Response:
-    return _open(url)
-
-
-def _post(url: str, fields: list[tuple[str, str]]) -> _Response:
-    return _open(urllib.request.Request(url, data=urlencode(fields).encode(), method="POST"))
-
-
-def _open(request: str | urllib.request.Request) -> _Response:
-    try:
-        with _BROWSER.open(request, timeout=5) as response:
-            return _response(response.status, response.headers, response.read())
-    except urllib.error.HTTPError as error:
-        with error:
-            return _response(error.code, error.headers, error.read())
-
-
-def _response(status: int, headers: Message, body: bytes) -> _Response:
-    return _Response(
-        status=status,
-        location=headers.get("Location"),
-        headers=dict(headers),
-        body=body.decode(),
-    )
-
-
-def _query(url: str) -> dict[str, str]:
-    return {key: value[0] for key, value in parse_qs(urlsplit(url).query).items()}
-
-
 def _browser_later(start_url: str, responses, then) -> threading.Thread:
     def browse():
         if urlsplit(start_url).hostname != "127.0.0.1":
             return
-        start = _get(start_url)
+        start = open_page(start_url)
         responses.append(start)
         for url in then(start.location or ""):
-            responses.append(_get(url))
+            responses.append(open_page(url))
 
     thread = threading.Thread(target=browse)
     thread.start()
@@ -149,7 +98,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
 
     def sign_in(authorize: str) -> list[str]:
         authorized.append(authorize)
-        query = _query(authorize)
+        query = query_params(authorize)
         redirect = query["redirect_uri"]
         stray = redirect.replace("/callback", "/favicon.ico")
         return [stray, f"{redirect}?code=the-code&state={query['state']}"]
@@ -166,7 +115,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
     )
     visits.pop().join()
 
-    authorize = _query(authorized[0])
+    authorize = query_params(authorized[0])
     assert authorized[0].startswith(f"{AUTHORIZE}?")
     assert {key: value for key, value in authorize.items() if key != "state"} == {
         "response_type": "code",
@@ -218,7 +167,7 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
     responses, visits = [], []
 
     def sign_in(authorize: str) -> list[str]:
-        query = _query(authorize)
+        query = query_params(authorize)
         redirect = query["redirect_uri"]
         forged = [f"{redirect}?code=forged-code&state=forged-state", f"{redirect}?code=forged-code"]
         valid = [f"{redirect}?code=the-code&state={query['state']}"] if then_valid else []
@@ -272,14 +221,14 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
 
     def browse(start_url: str) -> None:
         for suffix in suffixes:
-            response = _get(f"{start_url}{suffix}")
+            response = open_page(f"{start_url}{suffix}")
             seen.append(response.outcome)
             if response.location is not None:
                 authorized.append(response.location)
         if failure is None:
-            query = _query(authorized[0])
+            query = query_params(authorized[0])
             callback = f"{query['redirect_uri']}?code=the-code&state={query['state']}"
-            seen.append(_get(callback).outcome)
+            seen.append(open_page(callback).outcome)
 
     def open_browser(url: str) -> BrowserOpened:
         opened.append(url)
@@ -301,7 +250,7 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
         visit.join()
 
     start = urlsplit(opened[0])
-    assert (start.scheme, start.hostname, start.path, set(_query(opened[0]))) == (
+    assert (start.scheme, start.hostname, start.path, set(query_params(opened[0]))) == (
         "http",
         "127.0.0.1",
         "/start",
@@ -349,7 +298,7 @@ class _Picker(BaseModel):
     read_only: list[str]
 
 
-def _picker(page: _Response) -> _Picker:
+def _picker(page: PageResponse) -> _Picker:
     def values(kind: str, part: str) -> list[str]:
         found = re.findall(rf'type="{kind}" name="scope" value="([^"]*)"', part)
         return [html.unescape(value) for value in found]
@@ -368,25 +317,25 @@ class _Submit(BaseModel):
     fields: list[tuple[str, str]]
     method: Literal["GET", "POST"] = "POST"
 
-    def send(self, url: str) -> _Response:
+    def send(self, url: str) -> PageResponse:
         match self.method:
             case "GET":
-                return _get(f"{url}?{urlencode(self.fields)}")
+                return open_page(f"{url}?{urlencode(self.fields)}")
             case "POST":
-                return _post(url, self.fields)
+                return post_form(url, self.fields)
 
 
 def _browse_picker(base_url, choose):
     pages, visits = [], []
 
     def browse(start_url: str) -> None:
-        picker = _get(start_url)
+        picker = open_page(start_url)
         pages.append(picker)
         scopes_url = start_url.split("/start")[0] + "/scopes"
         for submit in choose(_picker(picker)):
             pages.append(submit.send(scopes_url))
-        query = _query(next(page.location for page in pages if page.location))
-        pages.append(_get(f"{query['redirect_uri']}?code=the-code&state={query['state']}"))
+        query = query_params(next(page.location for page in pages if page.location))
+        pages.append(open_page(f"{query['redirect_uri']}?code=the-code&state={query['state']}"))
 
     def open_browser(url: str) -> BrowserOpened:
         if urlsplit(url).hostname == "127.0.0.1":
@@ -446,7 +395,7 @@ def test_the_browser_picker_signs_in_with_only_the_scopes_kept(
     ) == ("default-src 'none'; style-src 'unsafe-inline'", "no-store", "no-referrer")
     assert chosen.status == 303
     assert (chosen.location or "").startswith(f"{AUTHORIZE}?")
-    assert _query(chosen.location or "")["scope"] == " ".join([*requested, "offline_access"])
+    assert query_params(chosen.location or "")["scope"] == " ".join([*requested, "offline_access"])
     assert callback.outcome == LOGGED_IN
     assert new.scopes == active_login(store, base_url).scopes == requested
 
@@ -492,7 +441,7 @@ def test_the_picker_accepts_one_post_with_this_logins_nonce_and_a_scope(
         assert "Choose at least one scope." in refused.body
         assert _picker(refused).nonce == nonces[0]
     assert chosen.status == 303
-    assert _query(chosen.location or "")["scope"] == "regions:write offline_access"
+    assert query_params(chosen.location or "")["scope"] == "regions:write offline_access"
     assert reused.outcome == (400, "Link already used")
     assert callback.outcome == LOGGED_IN
     assert new.scopes == active_login(store, base_url).scopes == ("regions:write",)

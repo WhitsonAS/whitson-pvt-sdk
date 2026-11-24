@@ -304,7 +304,7 @@ $ wpvt auth logout
 Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
 ```
 
-- `wpvt auth login [--url URL] [--device] [--email ADDRESS] [--scope SCOPE... | --choose] [--trust-host] [--yes]` logs in with the
+- `wpvt auth login [--url URL] [--device] [--email ADDRESS] [--scope SCOPE...] [--trust-host] [--yes]` logs in with the
   authorization code flow and PKCE through a one-off listener on `127.0.0.1`, on the first free
   port of 52817, 54631, 57493 and 61287 (the redirect URI must match exactly, so these are the
   ports registered on the login server; the login fails with a message naming them when all are
@@ -337,24 +337,24 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   stored and the previous default stays. A deployment accepts a login only while a sign-in to
   its web app has confirmed your role in the last 30 days; otherwise it refuses the login and
   says so, and signing in to the web app, not logging in again, fixes it.
-  The login requests every scope the deployment offers (`/external/v2/auth/config`), plus
-  `offline_access` for the refresh token. `--scope` (repeatable) requests only the scopes named,
-  and `--scope read` every `*:read` scope, for example a read-only login for `wpvt mcp`:
-  `wpvt auth login --scope read`. A scope the deployment does not offer is refused before the
-  browser opens, with the list of valid ones. The login server can leave scopes out of the
-  token, and your role can still narrow what the token holds (write scopes need an editor role);
-  the login then names the scopes not granted, each group under its cause (`not_granted.by_server`
-  and `not_granted.by_role` with `--json`). Renewing the login keeps its scopes; to change them,
-  log in again.
-  `--choose` lets you pick the scopes instead of naming them (not together with `--scope`): the
-  one-time link first shows a page on the listener with a checkbox for each offered scope,
-  grouped into read, calculations and other actions, and write, all checked, plus a "Read only"
-  button. The page posts back to the listener with a one-time value only that page carries (a
-  wrong, missing or reused one is refused, as is a choice with no scope or a scope the
+  Before signing in, the login asks which of the scopes the deployment offers
+  (`/external/v2/auth/config`) to request, all of them ticked, so continuing requests them all.
+  In the browser the one-time link first shows a page on the listener with a checkbox for each
+  offered scope, grouped into read, calculations and other actions, and write, plus a "Read
+  only" button. The page posts back to the listener with a one-time value only that page carries
+  (a wrong, missing or reused one is refused, as is a choice with no scope or a scope the
   deployment does not offer), and the listener then sends the browser to the login server with
-  the scopes chosen; the usual timeout covers the page. With a code the scopes are fixed
-  before the code is requested, so `--choose` lists them at the terminal (numbers or names,
-  Enter for all). `--choose` needs a terminal; without one use `--scope`.
+  the scopes kept; the usual timeout covers the page. With a code the scopes are fixed before
+  the code is requested, so at a terminal they are listed there instead (numbers or names, Enter
+  for all). Without a terminal nothing is asked and every offered scope is requested.
+  `offline_access` is always requested too, for the refresh token. `--scope` (repeatable)
+  requests only the scopes named and asks nothing, and `--scope read` every `*:read` scope, for
+  example a read-only login for `wpvt mcp` in a script: `wpvt auth login --scope read`. A scope
+  the deployment does not offer is refused before the browser opens, with the list of valid
+  ones. The login server can leave scopes out of the token, and your role can still narrow what
+  the token holds (write scopes need an editor role); the login then names the scopes not
+  granted, each group under its cause (`not_granted.by_server` and `not_granted.by_role` with
+  `--json`). Renewing the login keeps its scopes; to change them, log in again.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
   came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
   API reports: the API token's name for an API token, and "legacy client <subject>, full
@@ -562,9 +562,11 @@ that needs no question needs no `confirm=`.
 `login()` takes `scopes=`, `AllScopes()` (the default), `ChosenScopes(names={...})` or
 `PickScopes(ask=...)` from `whitson_pvt_sdk.login`, where the name `READ_SCOPES` (`"read"`)
 stands for every `*:read` scope; an unknown name raises `ConfigurationError` before any sign-in
-starts. With `PickScopes`, a `BrowserLogin` shows the scope page described above, and a
-`DeviceLogin` calls `ask` with the offered scopes before requesting the code; it returns the
-names to request (an empty answer raises `ConfigurationError`).
+starts. `wpvt auth login` passes `PickScopes` at a terminal, `AllScopes` without one and
+`ChosenScopes` for `--scope`. With `PickScopes`, a `BrowserLogin` shows the scope page described
+above, and a `DeviceLogin` (also the one a `BrowserLogin` falls back to) calls `ask` with the
+offered scopes before requesting the code; it returns the names to request (an empty answer
+raises `ConfigurationError`).
 
 The method is `DeviceLogin()` or `BrowserLogin(open_browser=...)`, where `open_browser` gets
 the one-time link and returns `BrowserOpened()` or `NoBrowser(reason=...)`; on `NoBrowser`, or

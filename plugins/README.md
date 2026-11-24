@@ -25,8 +25,8 @@ wpvt auth status                                # check the login
 ```
 
 `wpvt` must be on the `PATH` that Claude Code or Codex starts with. For a read-only connection,
-log in with `wpvt auth login --url https://<your deployment> --scope read`, or pick the scopes on
-a page with `--choose`; the server then offers only the tools those scopes allow.
+press "Read only" on the scope page `wpvt auth login --url https://<your deployment>` shows, or
+pass `--scope read`; the server then offers only the tools those scopes allow.
 
 ## Claude Code
 
@@ -78,7 +78,7 @@ codex mcp add wpvt -- wpvt mcp
   `wpvt auth login --url https://<your deployment>` in your own terminal, then restart the server
   (`/mcp` in Claude Code, a new session in Codex). An agent never runs the login for you.
 - **A tool is refused with "sign in again and approve the scope".** The login was made with
-  `--scope` or `--choose`; run `wpvt auth login` again without them, or with that scope added,
-  then restart the server.
+  fewer scopes; run `wpvt auth login` again and keep that scope ticked (or name it with
+  `--scope`), then restart the server.
 - **The server refuses an API token.** MCP needs a `wpvt auth login`; unset `WHITSON_PVT_TOKEN`
   in the host's environment.

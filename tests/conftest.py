@@ -1,14 +1,17 @@
+import re
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, TypedDict, Unpack
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx2
 import keyring
 import pytest
 from keyring.backends import fail
-from pydantic import SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
 
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk._store import ActiveLogin, CredentialStore
@@ -51,6 +54,48 @@ class LoginFields(TypedDict, total=False):
 
 def form(request: httpx2.Request) -> dict[str, str]:
     return {key: value[0] for key, value in parse_qs(request.content.decode()).items()}
+
+
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None
+
+
+_BROWSER = urllib.request.build_opener(_NoRedirects)
+
+
+class PageResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    status: int
+    location: str | None
+    headers: dict[str, str]
+    body: str
+
+    @property
+    def outcome(self) -> tuple[int, str | None]:
+        heading = re.search(r"<h1>(.*?)</h1>", self.body)
+        return self.status, None if heading is None else heading[1]
+
+
+def open_page(request: str | urllib.request.Request) -> PageResponse:
+    try:
+        with _BROWSER.open(request, timeout=5) as response:
+            status, headers, body = response.status, response.headers, response.read()
+    except urllib.error.HTTPError as error:
+        with error:
+            status, headers, body = error.code, error.headers, error.read()
+    return PageResponse(
+        status=status, location=headers.get("Location"), headers=dict(headers), body=body.decode()
+    )
+
+
+def post_form(url: str, fields: list[tuple[str, str]]) -> PageResponse:
+    return open_page(urllib.request.Request(url, data=urlencode(fields).encode(), method="POST"))
+
+
+def query_params(url: str) -> dict[str, str]:
+    return {key: value[0] for key, value in parse_qs(urlsplit(url).query).items()}
 
 
 def auth_config(

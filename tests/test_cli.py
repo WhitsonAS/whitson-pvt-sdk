@@ -1,10 +1,13 @@
 import json
+import re
 import subprocess
 import sys
+import threading
 import webbrowser
 
 import httpx2
 import pytest
+import typer.testing
 from typer.testing import CliRunner
 
 from tests.conftest import (
@@ -17,6 +20,9 @@ from tests.conftest import (
     active_login,
     auth_config,
     form,
+    open_page,
+    post_form,
+    query_params,
 )
 from whitson_pvt_sdk.cli._app import app
 from whitson_pvt_sdk.cli._auth import _open_browser
@@ -476,7 +482,7 @@ def test_login_rejected_by_the_deployment_reports_its_reason_and_leaves_the_old_
             "regions:read samples:read calculations:run offline_access",
         ),
     ],
-    ids=["default-all", "one", "read-shorthand-and-one"],
+    ids=["all-without-terminal", "one", "read-shorthand-and-one"],
 )
 def test_login_requests_the_chosen_scopes_and_offline_access(
     base_url, httpx2_mock, monkeypatch, store, options, requested
@@ -572,22 +578,81 @@ def test_login_reports_whether_the_server_or_the_role_did_not_grant_a_scope(
         assert line.startswith(start)
 
 
-@pytest.mark.parametrize(
-    ("options", "message"),
-    [
-        (["--device", "--choose"], "needs a terminal. Name them with --scope"),
-        (["--choose"], "needs a terminal. Name them with --scope"),
-        (["--choose", "--scope", "read"], "Pass either --scope or --choose, not both."),
-    ],
-    ids=["device-without-terminal", "without-terminal", "with-scope"],
-)
-def test_choose_needs_a_terminal_and_excludes_scope(base_url, httpx2_mock, store, options, message):
-    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--json", *options])
+@pytest.fixture
+def terminal(monkeypatch):
+    monkeypatch.setattr(typer.testing._NamedTextIOWrapper, "isatty", lambda _: True)
 
-    assert result.exit_code == 2
-    assert message in json.loads(result.stderr.splitlines()[-1])["message"]
-    assert httpx2_mock.get_requests() == []
-    assert store.get(base_url) is None
+
+@pytest.mark.usefixtures("terminal")
+@pytest.mark.parametrize(
+    ("answer", "requested"),
+    [("\n", OFFERED_SCOPES), ("1 samples:read\n", ["regions:read", "samples:read"])],
+    ids=["enter-for-all", "numbers-and-names"],
+)
+def test_device_login_at_a_terminal_asks_for_the_scopes(
+    base_url, httpx2_mock, monkeypatch, store, answer, requested
+):
+    _device_login_server(base_url, httpx2_mock, monkeypatch, OFFERED_SCOPES)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json={**ME, "scopes": requested})
+
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device"], input=answer)
+
+    assert result.exit_code == 0, result.stderr
+    assert "  1. regions:read" in result.stderr
+    scope = form(httpx2_mock.get_requests(url=DEVICE_ENDPOINT)[0])["scope"]
+    assert scope == " ".join([*requested, "offline_access"])
+    assert list(active_login(store, base_url).scopes) == requested
+
+
+@pytest.mark.usefixtures("terminal")
+def test_browser_login_at_a_terminal_shows_the_scope_page_with_every_scope_ticked(
+    base_url, httpx2_mock, monkeypatch, store
+):
+    httpx2_mock.add_response(
+        url=f"{base_url}/external/v2/auth/config", json=auth_config(scopes=OFFERED_SCOPES)
+    )
+    httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
+    httpx2_mock.add_response(
+        method="POST",
+        url=TOKEN_ENDPOINT,
+        json={
+            "access_token": "stored-access",
+            "refresh_token": "stored-refresh",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        },
+    )
+    httpx2_mock.add_response(
+        url=f"{base_url}/external/v2/me", json={**ME, "scopes": OFFERED_SCOPES}
+    )
+    monkeypatch.setenv("DISPLAY", ":0")
+    ticked: list[str] = []
+    visits: list[threading.Thread] = []
+
+    def sign_in(start_url: str) -> None:
+        page = open_page(start_url).body
+        ticked.extend(re.findall(r'name="scope" value="([^"]*)" checked', page))
+        fields = [("n", re.findall(r'name="n" value="([^"]*)"', page)[0])]
+        chosen = post_form(
+            start_url.split("/start")[0] + "/scopes", fields + [("scope", s) for s in ticked]
+        )
+        authorize = query_params(chosen.location or "")
+        open_page(f"{authorize['redirect_uri']}?code=the-code&state={authorize['state']}")
+
+    def open_browser(url: str) -> bool:
+        visits.append(threading.Thread(target=sign_in, args=(url,)))
+        visits[-1].start()
+        return True
+
+    monkeypatch.setattr(webbrowser, "open", open_browser)
+
+    result = runner.invoke(app, ["auth", "login", "--url", base_url])
+    for visit in visits:
+        visit.join()
+
+    assert result.exit_code == 0, result.stderr
+    assert sorted(ticked) == sorted(OFFERED_SCOPES)
+    assert list(active_login(store, base_url).scopes) == OFFERED_SCOPES
 
 
 TERMINAL_TITLE = "\x1b]0;x\x07"
