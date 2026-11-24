@@ -69,7 +69,10 @@ select = [
 "tests/integration/**" = ["T201"]
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["whitson_pvt_sdk.shared.models.RetryConfig"]
+extend-immutable-calls = [
+    "whitson_pvt_sdk.login.AllScopes",
+    "whitson_pvt_sdk.shared.models.RetryConfig",
+]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "whitson_pvt_sdk._generated.v2.models".msg = "Import models from whitson_pvt_sdk.v2.models instead."

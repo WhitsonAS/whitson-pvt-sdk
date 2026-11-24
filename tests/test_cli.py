@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form
+from whitson_pvt_sdk._store import ActiveLogin
 from whitson_pvt_sdk.cli._app import app
 from whitson_pvt_sdk.cli._auth import _open_browser
 
@@ -254,21 +255,26 @@ def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx2_mock, mo
     assert httpx2_mock.get_requests() == []
 
 
-def _device_login_server(base_url, httpx2_mock, monkeypatch) -> None:
+DEVICE_AUTHORIZATION = f"{ISSUER}oauth/device/code"
+OFFERED_SCOPES = ["regions:read", "regions:write", "samples:read", "calculations:run"]
+
+
+def _device_login_server(base_url, httpx2_mock, monkeypatch, scopes=None) -> None:
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
-    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=auth_config())
+    config = auth_config() if scopes is None else {**auth_config(), "scopes": scopes}
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/auth/config", json=config)
     httpx2_mock.add_response(
         url=DISCOVERY,
         json={
             "issuer": ISSUER,
             "authorization_endpoint": f"{ISSUER}authorize",
             "token_endpoint": TOKEN_ENDPOINT,
-            "device_authorization_endpoint": f"{ISSUER}oauth/device/code",
+            "device_authorization_endpoint": DEVICE_AUTHORIZATION,
         },
     )
     httpx2_mock.add_response(
         method="POST",
-        url=f"{ISSUER}oauth/device/code",
+        url=DEVICE_AUTHORIZATION,
         json={
             "device_code": "device-secret",
             "user_code": "WXYZ-1234",
@@ -302,7 +308,7 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
     result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
 
     assert result.exit_code == 0, result.stderr
-    assert json.loads(result.stdout) == {"url": base_url, "identity": IDENTITY}
+    assert json.loads(result.stdout) == {"url": base_url, "identity": IDENTITY, "not_granted": []}
     assert "WXYZ-1234" in result.stderr
     assert [
         r.headers["Authorization"]
@@ -341,6 +347,84 @@ def test_login_whose_identity_check_fails_keeps_the_previous_default(
     assert store.get(base_url) is None
     assert store.default_url() == previous
     _no_secrets(result)
+
+
+@pytest.mark.parametrize(
+    ("options", "requested"),
+    [
+        ([], "regions:read regions:write samples:read calculations:run offline_access"),
+        (["--scope", "samples:read"], "samples:read offline_access"),
+        (
+            ["--scope", "calculations:run", "--scope", "read"],
+            "regions:read samples:read calculations:run offline_access",
+        ),
+    ],
+    ids=["default-all", "one", "read-shorthand-and-one"],
+)
+def test_login_requests_the_chosen_scopes_and_offline_access(
+    base_url, httpx2_mock, monkeypatch, store, options, requested
+):
+    _device_login_server(base_url, httpx2_mock, monkeypatch, OFFERED_SCOPES)
+    granted = requested.removesuffix(" offline_access").split()
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json={**ME, "scopes": granted})
+
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", *options])
+
+    assert result.exit_code == 0, result.stderr
+    assert form(httpx2_mock.get_requests(url=DEVICE_AUTHORIZATION)[0])["scope"] == requested
+    assert "Not granted" not in result.stdout
+    entry = store.get(base_url)
+    assert isinstance(entry, ActiveLogin)
+    assert list(entry.login.scopes) == granted
+
+
+@pytest.mark.parametrize(
+    ("offered", "options", "message"),
+    [
+        (
+            OFFERED_SCOPES,
+            ["--scope", "samples:read", "--scope", "samples:write"],
+            "does not offer the scope samples:write. Choose from regions:read, regions:write, "
+            "samples:read, calculations:run, or read for every *:read scope.",
+        ),
+        (OFFERED_SCOPES, ["--scope", "offline_access"], "does not offer the scope offline_access"),
+        (["calculations:run"], ["--scope", "read"], "offers no *:read scope"),
+    ],
+    ids=["unknown", "offline-access", "read-with-none-offered"],
+)
+def test_login_refuses_scopes_the_deployment_does_not_offer_before_signing_in(
+    base_url, httpx2_mock, store, offered, options, message
+):
+    config_url = f"{base_url}/external/v2/auth/config"
+    httpx2_mock.add_response(url=config_url, json={**auth_config(), "scopes": offered})
+
+    result = runner.invoke(
+        app, ["auth", "login", "--url", base_url, "--device", "--json", *options]
+    )
+
+    assert result.exit_code == 2
+    assert message in json.loads(result.stderr.splitlines()[-1])["message"]
+    assert [str(r.url) for r in httpx2_mock.get_requests()] == [config_url]
+    assert store.get(base_url) is None
+
+
+@pytest.mark.parametrize("json_output", [False, True], ids=["text", "json"])
+def test_login_reports_scopes_the_role_did_not_grant(
+    base_url, httpx2_mock, monkeypatch, json_output
+):
+    _device_login_server(base_url, httpx2_mock, monkeypatch, OFFERED_SCOPES)
+    granted = ["regions:read", "samples:read"]
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json={**ME, "scopes": granted})
+
+    scopes = ["--scope", "read", "--scope", "regions:write"]
+    output = ["--json"] if json_output else []
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", *scopes, *output])
+
+    assert result.exit_code == 0, result.stderr
+    if json_output:
+        assert json.loads(result.stdout)["not_granted"] == ["regions:write"]
+    else:
+        assert "Not granted: regions:write. Your role on" in result.stdout
 
 
 TERMINAL_TITLE = "\x1b]0;x\x07"

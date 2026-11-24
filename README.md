@@ -304,7 +304,7 @@ $ wpvt auth logout
 Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
 ```
 
-- `wpvt auth login [--url URL] [--device] [--trust-host] [--yes]` logs in with the
+- `wpvt auth login [--url URL] [--device] [--scope SCOPE]... [--trust-host] [--yes]` logs in with the
   authorization code flow and PKCE through a one-off listener on `127.0.0.1`, on the first free
   port of 52817, 54631, 57493 and 61287 (the redirect URI must match exactly, so these are the
   ports registered on the login server; the login fails with a message naming them when all are
@@ -322,6 +322,13 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   stored and the previous default stays. A deployment accepts a login only while a sign-in to
   its web app has confirmed your role in the last 30 days; otherwise it refuses the login and
   says so, and signing in to the web app, not logging in again, fixes it.
+  The login requests every scope the deployment offers (`/external/v2/auth/config`), plus
+  `offline_access` for the refresh token. `--scope` (repeatable) requests only the scopes named,
+  and `--scope read` every `*:read` scope, for example a read-only login for `wpvt mcp`:
+  `wpvt auth login --scope read`. A scope the deployment does not offer is refused before the
+  browser opens, with the list of valid ones. Your role can still narrow the grant (write scopes
+  need an editor role); the login then names the scopes not granted (`not_granted` with
+  `--json`). Renewing the login keeps its scopes; to change them, log in again.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
   came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
   API reports: the API token's name for an API token, and "legacy client <subject>, full
@@ -525,6 +532,10 @@ confirmed at a terminal. In Python, pass `confirm=`, a function that receives a 
 `AudienceChanged` adds `previous_audience`) and returns whether to continue; ask a person
 whenever `foreign_audience` is set. Without it, such a login raises `ConfigurationError`. A login
 that needs no question needs no `confirm=`.
+
+`login()` takes `scopes=`, `AllScopes()` (the default) or `ChosenScopes(names={...})` from
+`whitson_pvt_sdk.login`, where the name `READ_SCOPES` (`"read"`) stands for every `*:read`
+scope; an unknown name raises `ConfigurationError` before any sign-in starts.
 
 `login()` also takes `verify=`, a function called with the new login before it is stored;
 `login()` returns its result. If it raises, nothing is stored and the previous default stays.

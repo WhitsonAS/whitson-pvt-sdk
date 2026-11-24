@@ -18,11 +18,14 @@ from whitson_pvt_sdk.auth import (
     resolve_credential,
 )
 from whitson_pvt_sdk.cli._output import JsonOption, emit, note, reporting
-from whitson_pvt_sdk.credentials import Credential
+from whitson_pvt_sdk.credentials import Credential, StoredLogin
 from whitson_pvt_sdk.errors import AuthError, ConfigurationError
 from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.login import (
+    READ_SCOPES,
+    AllScopes,
     BrowserLogin,
+    ChosenScopes,
     Confirmation,
     DeviceLogin,
     LoggedOut,
@@ -56,6 +59,7 @@ UrlOption = Annotated[
 class LoginReport(BaseModel):
     url: str
     identity: Identity
+    not_granted: list[str]
 
 
 class CredentialReport(BaseModel):
@@ -100,6 +104,15 @@ def login_command(
             "answers a question about access to another service: that needs a terminal.",
         ),
     ] = False,
+    scope: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--scope",
+            help=f'Request only this scope; repeat for more. "{READ_SCOPES}" stands for every '
+            "*:read scope. Defaults to every scope the deployment offers; offline_access is "
+            "always requested. Your role can still narrow what is granted.",
+        ),
+    ] = None,
     json_output: JsonOption = False,
 ) -> None:
     """Log in through the browser (or --device) and make this login the default."""
@@ -139,9 +152,8 @@ def login_command(
             target,
             method,
             output=note,
-            verify=lambda stored: LoginReport(
-                url=stored.base_url, identity=_identity(stored, stored.base_url)
-            ),
+            verify=_login_report,
+            scopes=ChosenScopes(names=frozenset(scope)) if scope else AllScopes(),
             confirm=confirm,
             trust_host=trust_host,
         )
@@ -153,7 +165,8 @@ def login_command(
             )
         emit(
             report,
-            f"Logged in to {report.url} as {_who(report.identity)}. This login is now the default.",
+            f"Logged in to {report.url} as {_who(report.identity)}. This login is now the default."
+            + _narrower(report),
             json_output=json_output,
         )
 
@@ -237,6 +250,25 @@ def _open_browser(url: str) -> bool:
             os.dup2(copy, descriptor)
             os.close(copy)
         os.close(devnull)
+
+
+def _login_report(stored: StoredLogin) -> LoginReport:
+    identity = _identity(stored, stored.base_url)
+    match identity:
+        case ApiTokenIdentity() | UserTokenIdentity():
+            not_granted = [scope for scope in stored.scopes if scope not in identity.scopes]
+        case LegacyClientIdentity():
+            not_granted = []
+    return LoginReport(url=stored.base_url, identity=identity, not_granted=not_granted)
+
+
+def _narrower(report: LoginReport) -> str:
+    if not report.not_granted:
+        return ""
+    return (
+        f"\nNot granted: {', '.join(report.not_granted)}. Your role on {report.url} does not "
+        "allow them, so logging in again does not add them."
+    )
 
 
 def _identity(credential: Credential, base_url: str) -> Identity:

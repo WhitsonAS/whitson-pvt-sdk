@@ -46,14 +46,18 @@ from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
 __all__ = [
     "CALLBACK_PORTS",
+    "READ_SCOPES",
+    "AllScopes",
     "AudienceChanged",
     "BrowserLogin",
+    "ChosenScopes",
     "Confirmation",
     "DeviceLogin",
     "FirstUse",
     "IssuerChanged",
     "LoggedOut",
     "LoginMethod",
+    "ScopeChoice",
     "login",
     "logout",
     "logout_all",
@@ -80,6 +84,21 @@ class DeviceLogin(BaseModel):
 
 LoginMethod = BrowserLogin | DeviceLogin
 
+READ_SCOPES = "read"
+
+
+class AllScopes(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
+class ChosenScopes(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    names: frozenset[str] = Field(min_length=1)
+
+
+ScopeChoice = AllScopes | ChosenScopes
+
 
 Revocation = Literal["revoked", "not_offered", "failed", "skipped"]
 
@@ -98,6 +117,7 @@ def login(
     *,
     output: Callable[[str], None],
     verify: Callable[[StoredLogin], _Verified],
+    scopes: ScopeChoice = AllScopes(),
     confirm: Callable[[Confirmation], bool] | None = None,
     trust_host: bool = False,
 ) -> _Verified:
@@ -116,6 +136,8 @@ def login(
                 f"Device login is not enabled on {url}. Log in with a browser from a machine "
                 f"that has one, or use an API token in {TOKEN_ENV_VAR}."
             )
+        requested = _requested_scopes(scopes, config, url)
+        scope = " ".join([*requested, "offline_access"])
         match decision:
             case Proceed():
                 pass
@@ -129,9 +151,9 @@ def login(
         provider = discover(http, config.issuer)
         match method:
             case BrowserLogin():
-                token = _browser_flow(http, config, provider, method, output)
+                token = _browser_flow(http, config, provider, scope, method, output)
             case DeviceLogin():
-                token = _device_flow(http, config, provider, output)
+                token = _device_flow(http, config, provider, scope, output)
     if token.refresh_token is None:
         raise LoginError(
             f"{config.issuer} returned no refresh token; the login cannot be kept. "
@@ -142,7 +164,7 @@ def login(
         issuer=config.issuer,
         client_id=config.client_id,
         audience=config.audience,
-        scopes=config.scopes,
+        scopes=requested,
         token_endpoint=provider.token_endpoint,
         access_token=token.access_token,
         refresh_token=token.refresh_token,
@@ -184,8 +206,27 @@ def _without_a_browser(config: AuthConfig) -> str:
     return f"Without a browser on this machine, use an API token in {TOKEN_ENV_VAR} instead."
 
 
-def _scope(config: AuthConfig) -> str:
-    return " ".join([*config.scopes, "offline_access"])
+def _requested_scopes(choice: ScopeChoice, config: AuthConfig, url: str) -> tuple[str, ...]:
+    match choice:
+        case AllScopes():
+            return config.scopes
+        case ChosenScopes(names=names):
+            offered = (
+                f"Choose from {', '.join(config.scopes)}, or {READ_SCOPES} for every *:read scope."
+            )
+            unknown = sorted(names - {READ_SCOPES, *config.scopes})
+            if unknown:
+                raise ConfigurationError(
+                    f"{url} does not offer the scope {', '.join(unknown)}. {offered}"
+                )
+            requested = tuple(
+                scope
+                for scope in config.scopes
+                if scope in names or (READ_SCOPES in names and scope.endswith(":read"))
+            )
+            if not requested:
+                raise ConfigurationError(f"{url} offers no *:read scope. {offered}")
+            return requested
 
 
 class _AwaitingStart(BaseModel):
@@ -231,6 +272,7 @@ def _browser_flow(
     http: httpx2.Client,
     config: AuthConfig,
     provider: ProviderMetadata,
+    scope: str,
     method: BrowserLogin,
     output: Callable[[str], None],
 ) -> TokenResponse:
@@ -243,7 +285,7 @@ def _browser_flow(
             "response_type": "code",
             "client_id": config.client_id,
             "redirect_uri": redirect_uri,
-            "scope": _scope(config),
+            "scope": scope,
             "audience": config.audience,
             "state": state,
             "code_challenge": challenge.decode().rstrip("="),
@@ -431,6 +473,7 @@ def _device_flow(
     http: httpx2.Client,
     config: AuthConfig,
     provider: ProviderMetadata,
+    scope: str,
     output: Callable[[str], None],
 ) -> TokenResponse:
     endpoint = provider.device_authorization_endpoint
@@ -439,7 +482,7 @@ def _device_flow(
     authorization = post_oauth(
         http,
         endpoint,
-        {"client_id": config.client_id, "scope": _scope(config), "audience": config.audience},
+        {"client_id": config.client_id, "scope": scope, "audience": config.audience},
         DeviceAuthorization,
     )
     if isinstance(authorization, OAuthError):
