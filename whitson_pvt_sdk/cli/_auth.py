@@ -22,17 +22,22 @@ from whitson_pvt_sdk.auth import (
 )
 from whitson_pvt_sdk.cli._output import JsonOption, emit, note, reporting
 from whitson_pvt_sdk.credentials import Credential
-from whitson_pvt_sdk.errors import AuthError, ConfigurationError
+from whitson_pvt_sdk.errors import AuthError, ConfigurationError, LoginError
 from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.login import (
     READ_SCOPES,
     AllScopes,
     BrowserLogin,
+    BrowserOpened,
     ChosenScopes,
     Confirmation,
+    DeviceCode,
     DeviceLogin,
     LoggedOut,
+    LoginMethod,
     NewLogin,
+    NoBrowser,
+    Notice,
     PickScopes,
     ScopeChoice,
     login,
@@ -102,9 +107,19 @@ def login_command(
     device: Annotated[
         bool,
         typer.Option(
-            "--device", help="Log in with a code on another device, for machines without a browser."
+            "--device",
+            help="Log in with a code confirmed in a browser on any device. Used without this "
+            "option too when no browser can be opened here or no terminal is attached.",
         ),
     ] = False,
+    email: Annotated[
+        str | None,
+        typer.Option(
+            "--email",
+            help="Keep the login only if it is for this account; otherwise discard it, revoke "
+            "it and store nothing.",
+        ),
+    ] = None,
     trust_host: Annotated[
         bool,
         typer.Option(
@@ -136,25 +151,19 @@ def login_command(
         bool,
         typer.Option(
             "--choose",
-            help="Choose the scopes yourself: on a page in the browser, or at the terminal with "
-            "--device. Use --scope instead in scripts.",
+            help="Choose the scopes yourself: on a page in the browser, or at the terminal when "
+            "logging in with a code. Needs a terminal; use --scope instead in scripts.",
         ),
     ] = False,
     json_output: JsonOption = False,
 ) -> None:
-    """Log in through the browser (or --device) and make this login the default."""
+    """Log in through the browser (or with a code) and make this login the default."""
     with reporting(json_output=json_output):
         if trust_host and url is None:
             raise ConfigurationError("--trust-host applies only to a URL given with --url.")
         target = resolve_base_url(url).url
         interactive = sys.stdin.isatty() and sys.stderr.isatty()
-        if device:
-            method: BrowserLogin | DeviceLogin = DeviceLogin()
-        elif interactive:
-            method = BrowserLogin(open_browser=_open_browser)
-        else:
-            note("No terminal is attached, so no browser is opened.")
-            method = BrowserLogin()
+        scopes = _scope_choice(scope or [], choose=choose, interactive=interactive)
 
         def confirm(confirmation: Confirmation) -> bool:
             note(confirmation.describe())
@@ -175,14 +184,32 @@ def login_command(
                 )
             return typer.confirm("Continue?", default=False, err=True)
 
+        if device:
+            method: LoginMethod = DeviceLogin()
+        elif interactive:
+            method = BrowserLogin(open_browser=_open_browser)
+        else:
+            note(
+                "No terminal is attached, so logging in with a code: pass the link and code "
+                "below to the person who logs in."
+            )
+            method = DeviceLogin()
+
+        def show(notice: Notice) -> None:
+            match notice:
+                case DeviceCode() if json_output:
+                    note(notice.model_dump_json())
+                case DeviceCode():
+                    note(notice.message)
+                case str():
+                    note(notice)
+
         report = login(
             target,
             method,
-            output=note,
-            verify=_login_report,
-            scopes=_scope_choice(
-                scope or [], choose=choose, device=device, interactive=interactive
-            ),
+            output=show,
+            verify=partial(_login_report, email=None if email is None else email.strip()),
+            scopes=scopes,
             confirm=confirm,
             trust_host=trust_host,
         )
@@ -253,7 +280,13 @@ def logout_command(
         )
 
 
-def _open_browser(url: str) -> bool:
+def _open_browser(url: str) -> BrowserOpened | NoBrowser:
+    environ = os.environ
+    if not (environ.get("DISPLAY") or environ.get("WAYLAND_DISPLAY") or environ.get("BROWSER")):
+        if environ.get("SSH_CONNECTION") or environ.get("SSH_TTY"):
+            return NoBrowser(reason="This SSH session has no display")
+        if sys.platform not in ("win32", "darwin"):
+            return NoBrowser(reason="There is no display (DISPLAY and WAYLAND_DISPLAY are unset)")
     # A browser started on Linux inherits descriptors 1 and 2 and logs to the terminal through them.
     for stream in (sys.stdout, sys.stderr):
         if stream is not None:
@@ -267,25 +300,26 @@ def _open_browser(url: str) -> bool:
             except OSError:
                 continue
             os.dup2(devnull, descriptor)
-        return webbrowser.open(url)
+        opened = webbrowser.open(url)
+    except (webbrowser.Error, OSError) as exc:
+        return NoBrowser(reason=f"No browser could be started ({exc})")
     finally:
         for descriptor, copy in saved:
             os.dup2(copy, descriptor)
             os.close(copy)
         os.close(devnull)
+    return BrowserOpened() if opened else NoBrowser(reason="No browser could be started")
 
 
-def _scope_choice(
-    scope: list[str], *, choose: bool, device: bool, interactive: bool
-) -> ScopeChoice:
+def _scope_choice(scope: list[str], *, choose: bool, interactive: bool) -> ScopeChoice:
     match scope, choose:
         case [_, *_], True:
             raise ConfigurationError("Pass either --scope or --choose, not both.")
         case [_, *_], False:
             return ChosenScopes(names=frozenset(scope))
-        case [], True if device and not interactive:
+        case [], True if not interactive:
             raise ConfigurationError(
-                "Choosing scopes with --device needs a terminal. Name them with --scope instead, "
+                "Choosing scopes needs a terminal. Name them with --scope instead, "
                 f"for example --scope {READ_SCOPES}."
             )
         case [], True:
@@ -312,13 +346,20 @@ def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:
     ]
 
 
-def _login_report(new: NewLogin) -> LoginReport:
+def _login_report(new: NewLogin, *, email: str | None) -> LoginReport:
     identity = _identity(new.credential, new.url, rejected="the new login")
     match identity:
         case ApiTokenIdentity() | UserTokenIdentity():
             by_role = [scope for scope in new.granted if scope not in identity.scopes]
+            account = (identity.email or "").strip().casefold()
         case LegacyClientIdentity():
             by_role = []
+            account = None
+    if email is not None and account != email.casefold():
+        raise LoginError(
+            f"Signed in as {_who(identity)}, not {email} as --email expects. The login was "
+            f"discarded and nothing was stored; log in again with the account {email}."
+        )
     return LoginReport(
         url=new.url,
         identity=identity,

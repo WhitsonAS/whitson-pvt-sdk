@@ -55,7 +55,6 @@ def form(request: httpx2.Request) -> dict[str, str]:
 
 def auth_config(
     issuer: str = ISSUER,
-    device_login: bool | None = True,
     audience: str = "https://dev.pvt.whitson.com/mcp",
     scopes: Sequence[str] = ("read:data",),
     connection: str | None = None,
@@ -68,7 +67,7 @@ def auth_config(
     }
     if connection is not None:
         config["connection"] = connection
-    return config if device_login is None else {**config, "device_login": device_login}
+    return config
 
 
 @pytest.fixture(autouse=True)

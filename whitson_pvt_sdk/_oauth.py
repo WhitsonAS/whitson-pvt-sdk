@@ -24,7 +24,6 @@ class AuthConfig(BaseModel):
     audience: str
     scopes: tuple[str, ...]
     connection: str | None = None
-    device_login: bool = False
 
 
 class ProviderMetadata(BaseModel):

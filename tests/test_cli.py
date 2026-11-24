@@ -20,6 +20,7 @@ from tests.conftest import (
 )
 from whitson_pvt_sdk.cli._app import app
 from whitson_pvt_sdk.cli._auth import _open_browser
+from whitson_pvt_sdk.login import BrowserOpened, NoBrowser
 
 REVOKE = f"{ISSUER}oauth/revoke"
 IDENTITY = {
@@ -253,13 +254,18 @@ OFFERED_SCOPES = ["regions:read", "regions:write", "samples:read", "calculations
 
 
 def _device_login_server(
-    base_url, httpx2_mock, monkeypatch, scopes=("read:data",), issued: str | None = None
+    base_url,
+    httpx2_mock,
+    monkeypatch,
+    scopes=("read:data",),
+    issued: str | None = None,
+    provider=PROVIDER,
 ) -> None:
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config", json=auth_config(scopes=scopes)
     )
-    httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
+    httpx2_mock.add_response(url=DISCOVERY, json=provider)
     httpx2_mock.add_response(
         method="POST",
         url=DEVICE_ENDPOINT,
@@ -267,6 +273,7 @@ def _device_login_server(
             "device_code": "device-secret",
             "user_code": "WXYZ-1234",
             "verification_uri": f"{ISSUER}activate",
+            "verification_uri_complete": f"{ISSUER}activate?user_code=WXYZ-1234",
             "expires_in": 600,
         },
     )
@@ -281,6 +288,93 @@ def _device_login_server(
             **({} if issued is None else {"scope": issued}),
         },
     )
+
+
+RELAY = (
+    f"Open {ISSUER}activate?user_code=WXYZ-1234 and confirm the code WXYZ-1234 to log in. "
+    "The code expires in 10 minutes, at "
+)
+
+
+@pytest.mark.parametrize("json_output", [False, True], ids=["text", "json"])
+def test_login_without_a_terminal_prints_a_code_prompt_a_person_can_be_sent(
+    base_url, httpx2_mock, monkeypatch, store, json_output
+):
+    _device_login_server(base_url, httpx2_mock, monkeypatch)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
+
+    output = ["--json"] if json_output else []
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, *output])
+
+    assert result.exit_code == 0, result.stderr
+    lines = result.stderr.splitlines()
+    assert lines[0].startswith("No terminal is attached, so logging in with a code")
+    if json_output:
+        prompt = json.loads(lines[1])
+        assert {key: prompt[key] for key in ("kind", "user_code", "expires_in")} == {
+            "kind": "device_code",
+            "user_code": "WXYZ-1234",
+            "expires_in": 600,
+        }
+        assert prompt["verification_uri_complete"] == f"{ISSUER}activate?user_code=WXYZ-1234"
+        assert prompt["message"].startswith(RELAY)
+    else:
+        assert lines[1].startswith(RELAY)
+    assert store.default_url() == base_url
+    _no_secrets(result)
+
+
+REVOCABLE = {**PROVIDER, "revocation_endpoint": REVOKE}
+
+
+@pytest.mark.parametrize(
+    ("email", "identity", "who"),
+    [
+        ("grace@example.com", ME, "Ada Lovelace <ada@example.com> (role: project_editor)"),
+        ("ada@example.com", {**ME, "email": None}, "Ada Lovelace (role: project_editor)"),
+        ("ada@example.com", LEGACY_IDENTITY, "legacy client abc@clients, full access"),
+    ],
+    ids=["other-account", "no-email", "legacy-client"],
+)
+def test_login_for_another_account_than_email_is_revoked_and_not_stored(
+    base_url, httpx2_mock, monkeypatch, store, store_login, email, identity, who
+):
+    previous = "https://other.pvt.whitson.com"
+    store_login(previous)
+    _device_login_server(base_url, httpx2_mock, monkeypatch, provider=REVOCABLE)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json=identity)
+    httpx2_mock.add_response(method="POST", url=REVOKE)
+
+    result = runner.invoke(
+        app, ["auth", "login", "--url", base_url, "--device", "--email", email, "--json"]
+    )
+
+    assert result.exit_code == 3
+    assert json.loads(result.stderr.splitlines()[-1])["message"].startswith(
+        f"Signed in as {who}, not {email} as --email expects. The login was discarded"
+    )
+    assert form(httpx2_mock.get_requests(url=REVOKE)[0]) == {
+        "token": "stored-refresh",
+        "token_type_hint": "refresh_token",
+        "client_id": "cli-client",
+    }
+    assert store.get(base_url) is None
+    assert store.default_url() == previous
+    _no_secrets(result)
+
+
+def test_login_for_the_account_named_by_email_is_stored(base_url, httpx2_mock, monkeypatch, store):
+    _device_login_server(base_url, httpx2_mock, monkeypatch, provider=REVOCABLE)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json=ME)
+
+    result = runner.invoke(
+        app, ["auth", "login", "--url", base_url, "--device", "--email", " ADA@Example.com "]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert httpx2_mock.get_requests(url=REVOKE) == []
+    assert active_login(store, base_url).refresh_token.get_secret_value() == "stored-refresh"
+    assert store.default_url() == base_url
 
 
 @pytest.mark.parametrize(
@@ -482,13 +576,12 @@ def test_login_reports_whether_the_server_or_the_role_did_not_grant_a_scope(
     ("options", "message"),
     [
         (["--device", "--choose"], "needs a terminal. Name them with --scope"),
+        (["--choose"], "needs a terminal. Name them with --scope"),
         (["--choose", "--scope", "read"], "Pass either --scope or --choose, not both."),
     ],
-    ids=["device-without-terminal", "with-scope"],
+    ids=["device-without-terminal", "without-terminal", "with-scope"],
 )
-def test_choose_needs_a_terminal_for_device_login_and_excludes_scope(
-    base_url, httpx2_mock, store, options, message
-):
+def test_choose_needs_a_terminal_and_excludes_scope(base_url, httpx2_mock, store, options, message):
     result = runner.invoke(app, ["auth", "login", "--url", base_url, "--json", *options])
 
     assert result.exit_code == 2
@@ -560,6 +653,27 @@ def test_wpvt_without_an_extra_prints_the_install_command(missing, argv, extra):
     assert "Traceback" not in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("environment", "reason"),
+    [
+        ({}, "There is no display (DISPLAY and WAYLAND_DISPLAY are unset)"),
+        ({"SSH_CONNECTION": "10.0.0.2 50000 10.0.0.1 22"}, "This SSH session has no display"),
+    ],
+    ids=["no-display", "ssh"],
+)
+def test_no_browser_is_started_without_a_display(monkeypatch, environment, reason):
+    for name in ("DISPLAY", "WAYLAND_DISPLAY", "BROWSER", "SSH_CONNECTION", "SSH_TTY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(sys, "platform", "linux")
+    started: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", lambda url: started.append(url) or True)
+
+    assert _open_browser("http://127.0.0.1:52817/start?n=x") == NoBrowser(reason=reason)
+    assert started == []
+
+
 @pytest.mark.skipif(
     sys.platform in ("win32", "darwin"),
     reason="a shell script stands in for the browser, and macOS would fall back to a real one",
@@ -584,6 +698,6 @@ def test_the_browser_writes_nothing_to_the_terminal(
     result = _open_browser("http://127.0.0.1:52817/start?n=x")
     print("after")  # noqa: T201 - proves the terminal's stdout is restored after the call
 
-    assert result is opened
+    assert isinstance(result, BrowserOpened) is opened
     assert visited.read_text() == "http://127.0.0.1:52817/start?n=x\n"
     assert capfd.readouterr() == ("after\n", "")

@@ -1,19 +1,22 @@
 import base64
 import hashlib
 import hmac
+import logging
+import math
 import secrets
 import socket
 import socketserver
 import sys
 import time
 from collections.abc import Callable, Collection
+from datetime import UTC, datetime, timedelta
 from functools import cache
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Literal, TypeVar
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, SecretStr, computed_field
 
 from whitson_pvt_sdk import _login_page
 from whitson_pvt_sdk._login_page import (
@@ -45,7 +48,6 @@ from whitson_pvt_sdk._trust import (
     host_trust,
     login_decision,
 )
-from whitson_pvt_sdk.auth import TOKEN_ENV_VAR
 from whitson_pvt_sdk.credentials import ApiToken, StoredLogin, host_name, same_origin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
@@ -55,14 +57,18 @@ __all__ = [
     "AllScopes",
     "AudienceChanged",
     "BrowserLogin",
+    "BrowserOpened",
     "ChosenScopes",
     "Confirmation",
+    "DeviceCode",
     "DeviceLogin",
     "FirstUse",
     "IssuerChanged",
     "LoggedOut",
     "LoginMethod",
     "NewLogin",
+    "NoBrowser",
+    "Notice",
     "PickScopes",
     "ScopeChoice",
     "login",
@@ -77,12 +83,25 @@ CALLBACK_PORTS = (52817, 54631, 57493, 61287)
 
 _Verified = TypeVar("_Verified")
 
+_logger = logging.getLogger(__name__)
+
+
+class BrowserOpened(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
+class NoBrowser(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    reason: str
+
 
 class BrowserLogin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    open_browser: Callable[[str], bool] | None = None
+    open_browser: Callable[[str], BrowserOpened | NoBrowser]
     timeout: float = Field(default=300.0, gt=0)
+    start_timeout: float = Field(default=60.0, gt=0)
 
 
 class DeviceLogin(BaseModel):
@@ -90,6 +109,34 @@ class DeviceLogin(BaseModel):
 
 
 LoginMethod = BrowserLogin | DeviceLogin
+
+
+class DeviceCode(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["device_code"] = "device_code"
+    verification_uri: str
+    verification_uri_complete: str | None
+    user_code: str
+    expires_in: int
+    expires_at: AwareDatetime
+
+    @computed_field
+    @property
+    def message(self) -> str:
+        minutes = math.ceil(self.expires_in / 60)
+        action = (
+            f"Open {self.verification_uri_complete} and confirm the code"
+            if self.verification_uri_complete
+            else f"Open {self.verification_uri} and enter the code"
+        )
+        return (
+            f"{action} {self.user_code} to log in. The code expires in {minutes} "
+            f"minute{'s' if minutes != 1 else ''}, at {self.expires_at:%H:%M} UTC."
+        )
+
+
+Notice = str | DeviceCode
 
 
 class AllScopes(BaseModel):
@@ -138,7 +185,7 @@ def login(
     base_url: str,
     method: LoginMethod,
     *,
-    output: Callable[[str], None],
+    output: Callable[[Notice], None],
     verify: Callable[[NewLogin], _Verified],
     scopes: ScopeChoice = AllScopes(),
     confirm: Callable[[Confirmation], bool] | None = None,
@@ -154,11 +201,6 @@ def login(
             config.audience,
             CredentialStore.from_environment().remembered(url),
         )
-        if isinstance(method, DeviceLogin) and not config.device_login:
-            raise ConfigurationError(
-                f"Device login is not enabled on {url}. Log in with a browser from a machine "
-                f"that has one, or use an API token in {TOKEN_ENV_VAR}."
-            )
         first = _first_phase(scopes, config, url)
         match decision:
             case Proceed():
@@ -172,35 +214,48 @@ def login(
                     raise LoginError(f"The login to {url} was cancelled; nothing was stored.")
         provider = discover(http, config.issuer)
         match method:
-            case BrowserLogin():
-                authorized = _browser_flow(http, config, provider, first, method, output)
             case DeviceLogin():
                 authorized = _device_flow(http, config, provider, first, output)
-    token = authorized.token
-    if token.refresh_token is None:
-        raise LoginError(
-            f"{config.issuer} returned no refresh token; the login cannot be kept. "
-            "Ask the deployment's administrator to allow offline access for the CLI."
-        )
-    stored = StoredLogin(
-        base_url=url,
-        issuer=config.issuer,
-        client_id=config.client_id,
-        audience=config.audience,
-        scopes=authorized.scopes,
-        token_endpoint=provider.token_endpoint,
-        access_token=token.access_token,
-        refresh_token=token.refresh_token,
-        expires_at=token.expires_at(),
-    )
-    verified = verify(
-        NewLogin(
-            url=url,
-            credential=ApiToken(token=token.access_token),
+            case BrowserLogin():
+                match _browser_flow(http, config, provider, first, method, output):
+                    case _Authorized() as authorized:
+                        pass
+                    case NoBrowser(reason=reason):
+                        output(f"{reason}, so logging in with a code instead.")
+                        authorized = _device_flow(http, config, provider, first, output)
+        token = authorized.token
+        if token.refresh_token is None:
+            raise LoginError(
+                f"{config.issuer} returned no refresh token; the login cannot be kept. "
+                "Ask the deployment's administrator to allow offline access for the CLI."
+            )
+        stored = StoredLogin(
+            base_url=url,
+            issuer=config.issuer,
+            client_id=config.client_id,
+            audience=config.audience,
             scopes=authorized.scopes,
-            granted=token.granted(authorized.scopes),
+            token_endpoint=provider.token_endpoint,
+            access_token=token.access_token,
+            refresh_token=token.refresh_token,
+            expires_at=token.expires_at(),
         )
-    )
+        try:
+            verified = verify(
+                NewLogin(
+                    url=url,
+                    credential=ApiToken(token=token.access_token),
+                    scopes=authorized.scopes,
+                    granted=token.granted(authorized.scopes),
+                )
+            )
+        except Exception:
+            if _revocation(http, lambda _: provider, stored) != "revoked":
+                _logger.warning(
+                    "The refresh token of the login that was not kept could not be revoked; "
+                    "it stays valid until it expires."
+                )
+            raise
     with CredentialStore.from_environment().transaction() as transaction:
         transaction.put(stored)
         transaction.set_default(stored.base_url)
@@ -225,15 +280,6 @@ def _addresses(host: str) -> list[str]:
     except socket.gaierror:
         return []
     return [str(address[0]) for *_, address in found]
-
-
-def _without_a_browser(config: AuthConfig) -> str:
-    if config.device_login:
-        return (
-            "Without a browser on this machine, log in with a code instead "
-            "(wpvt auth login --device)."
-        )
-    return f"Without a browser on this machine, use an API token in {TOKEN_ENV_VAR} instead."
 
 
 class _Picker(BaseModel):
@@ -338,6 +384,10 @@ class _CallbackTimedOut(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class _BrowserNotReached(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
 _Listening = _Unstarted | _Picking | _Started
 _Finished = _CodeReceived | _AuthorizationRefused | _StartedTwice
 
@@ -348,8 +398,8 @@ def _browser_flow(
     provider: ProviderMetadata,
     first: _Unstarted,
     method: BrowserLogin,
-    output: Callable[[str], None],
-) -> _Authorized:
+    output: Callable[[Notice], None],
+) -> _Authorized | NoBrowser:
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
     authorize = _Authorize(
@@ -359,14 +409,14 @@ def _browser_flow(
         challenge=challenge.decode().rstrip("="),
     )
     with _callback_server(authorize, first) as server:
-        if method.open_browser is not None and method.open_browser(server.start_url):
-            output(f"Opened a browser to log in. If it did not open, visit:\n{server.start_url}")
-        else:
-            output(
-                f"Open this URL in a browser on this machine to log in:\n{server.start_url}\n"
-                + _without_a_browser(config)
-            )
-        outcome = server.wait(method.timeout)
+        match method.open_browser(server.start_url):
+            case NoBrowser() as unavailable:
+                return unavailable
+            case BrowserOpened():
+                output(
+                    f"Opened a browser to log in. If it did not open, visit:\n{server.start_url}"
+                )
+        outcome = server.wait(method)
     match outcome:
         case _CodeReceived(code=code, scopes=scopes):
             exchanged = post_oauth(
@@ -396,6 +446,11 @@ def _browser_flow(
         case _CallbackTimedOut():
             raise LoginError(
                 f"Timed out after {method.timeout:.0f} s waiting for the browser login."
+            )
+        case _BrowserNotReached():
+            return NoBrowser(
+                reason=f"The browser did not open the login link within "
+                f"{method.start_timeout:.0f} s"
             )
 
 
@@ -437,8 +492,7 @@ def _callback_server(authorize: _Authorize, first: _Unstarted) -> "_CallbackServ
     raise LoginError(
         "Could not listen for the browser login on 127.0.0.1 port "
         f"{', '.join(map(str, CALLBACK_PORTS))} ({failure.strerror if failure else 'no port'}). "
-        "Stop the program using one of these ports and log in again, or log in with --device "
-        "where the deployment allows it."
+        "Stop the program using one of these ports and log in again, or log in with --device."
     )
 
 
@@ -465,18 +519,25 @@ class _CallbackServer(HTTPServer):
         self.server_name = "127.0.0.1"
         self.server_port = self.server_address[1]
 
-    def wait(self, timeout: float) -> _Finished | _CallbackTimedOut:
-        deadline = time.monotonic() + timeout
+    def wait(self, method: BrowserLogin) -> _Finished | _CallbackTimedOut | _BrowserNotReached:
+        opened = time.monotonic()
+        deadline = opened + method.timeout
+        start_deadline = opened + method.start_timeout
         while True:
+            now = time.monotonic()
             match self.phase:
-                case _AwaitingStart() | _AwaitingPick() | _Picking() | _Started():
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        return _CallbackTimedOut()
-                    self.timeout = remaining
-                    self.handle_request()
+                case _AwaitingStart() | _AwaitingPick() if now >= start_deadline:
+                    return _BrowserNotReached()
+                case _AwaitingStart() | _AwaitingPick():
+                    until = min(deadline, start_deadline)
+                case _Picking() | _Started():
+                    until = deadline
                 case _CodeReceived() | _AuthorizationRefused() | _StartedTwice() as finished:
                     return finished
+            if now >= deadline:
+                return _CallbackTimedOut()
+            self.timeout = until - now
+            self.handle_request()
 
 
 _MAX_FORM_BYTES = 16384
@@ -608,7 +669,7 @@ def _device_flow(
     config: AuthConfig,
     provider: ProviderMetadata,
     first: _Unstarted,
-    output: Callable[[str], None],
+    output: Callable[[Notice], None],
 ) -> _Authorized:
     endpoint = provider.device_authorization_endpoint
     if endpoint is None:
@@ -637,12 +698,12 @@ def _device_flow(
                 f"login server {host_name(config.issuer)}; refusing to log in."
             )
     output(
-        f"To log in, open {authorization.verification_uri} and enter the code "
-        f"{authorization.user_code}"
-        + (
-            f"\nor open {authorization.verification_uri_complete}"
-            if authorization.verification_uri_complete
-            else ""
+        DeviceCode(
+            verification_uri=authorization.verification_uri,
+            verification_uri_complete=authorization.verification_uri_complete,
+            user_code=authorization.user_code,
+            expires_in=authorization.expires_in,
+            expires_at=datetime.now(UTC) + timedelta(seconds=authorization.expires_in),
         )
     )
     deadline = time.monotonic() + authorization.expires_in

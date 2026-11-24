@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import html
+import itertools
 import re
 import socket
 import threading
@@ -31,11 +32,15 @@ from whitson_pvt_sdk.login import (
     READ_SCOPES,
     AudienceChanged,
     BrowserLogin,
+    BrowserOpened,
     Confirmation,
+    DeviceCode,
     DeviceLogin,
     FirstUse,
     IssuerChanged,
     NewLogin,
+    NoBrowser,
+    Notice,
     PickScopes,
     login,
 )
@@ -149,9 +154,9 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         stray = redirect.replace("/callback", "/favicon.ico")
         return [stray, f"{redirect}?code=the-code&state={query['state']}"]
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         visits.append(_browser_later(url, responses, sign_in))
-        return True
+        return BrowserOpened()
 
     new = login(
         base_url,
@@ -219,9 +224,9 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
         valid = [f"{redirect}?code=the-code&state={query['state']}"] if then_valid else []
         return forged + valid
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         visits.append(_browser_later(url, responses, sign_in))
-        return True
+        return BrowserOpened()
 
     def attempt():
         return login(
@@ -276,12 +281,12 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
             callback = f"{query['redirect_uri']}?code=the-code&state={query['state']}"
             seen.append(_get(callback).outcome)
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         opened.append(url)
         if urlsplit(url).hostname == "127.0.0.1":
             visits.append(threading.Thread(target=browse, args=(url,)))
             visits[-1].start()
-        return True
+        return BrowserOpened()
 
     try:
         outcome: NewLogin | LoginError = login(
@@ -383,11 +388,11 @@ def _browse_picker(base_url, choose):
         query = _query(next(page.location for page in pages if page.location))
         pages.append(_get(f"{query['redirect_uri']}?code=the-code&state={query['state']}"))
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         if urlsplit(url).hostname == "127.0.0.1":
             visits.append(threading.Thread(target=browse, args=(url,)))
             visits[-1].start()
-        return True
+        return BrowserOpened()
 
     new = login(
         base_url,
@@ -915,9 +920,9 @@ def test_login_decides_by_deployment_issuer_and_audience(
         questions.append(question)
         return bool(answer)
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         opened.append(url)
-        return True
+        return BrowserOpened()
 
     with pytest.raises(SDKError, match=re.escape(error)):
         login(
@@ -1001,9 +1006,9 @@ def test_a_deployment_may_only_ask_for_access_to_itself(
         httpx2_mock.add_response(url=DISCOVERY, status_code=503)
     opened: list[str] = []
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         opened.append(url)
-        return True
+        return BrowserOpened()
 
     with pytest.raises(SDKError, match=re.escape(error)):
         login(
@@ -1047,9 +1052,9 @@ def test_login_refuses_insecure_login_servers(base_url, httpx2_mock, store, prov
     httpx2_mock.add_response(url=DISCOVERY, json={**PROVIDER, **provider})
     opened: list[str] = []
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         opened.append(url)
-        return True
+        return BrowserOpened()
 
     with pytest.raises(LoginError, match=message):
         login(
@@ -1063,47 +1068,61 @@ def test_login_refuses_insecure_login_servers(base_url, httpx2_mock, store, prov
     assert store.get(base_url) is None
 
 
-DEVICE_DISABLED = "Device login is not enabled"
+@pytest.mark.parametrize("device_login", [None, False, True], ids=["absent", "false", "true"])
+def test_device_login_does_not_depend_on_the_deployment_advertising_it(
+    base_url, httpx2_mock, monkeypatch, store, device_login
+):
+    monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
+    config = auth_config()
+    httpx2_mock.add_response(
+        url=f"{base_url}/external/v2/auth/config",
+        json=config if device_login is None else {**config, "device_login": device_login},
+    )
+    httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
+    httpx2_mock.add_response(method="POST", url=DEVICE_ENDPOINT, json=DEVICE_AUTHORIZATION)
+    httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
+
+    login(base_url, DeviceLogin(), output=print, verify=_keep)
+
+    assert active_login(store, base_url).refresh_token.get_secret_value() == "fresh-refresh"
 
 
 @pytest.mark.parametrize(
-    ("deployment", "config", "error"),
+    ("opened", "switch"),
     [
-        pytest.param(BASE, auth_config(device_login=False), DEVICE_DISABLED, id="disabled"),
-        pytest.param(BASE, auth_config(device_login=None), DEVICE_DISABLED, id="absent"),
-        pytest.param(
-            BASE,
-            auth_config(OTHER_ISSUER, device_login=False),
-            REFUSED,
-            id="unexpected-issuer-first",
-        ),
-        pytest.param(
-            BASE,
-            auth_config(device_login=False, audience=OTHER_DEPLOYMENT),
-            OTHER_SERVICE,
-            id="unexpected-audience-first",
-        ),
-        pytest.param(
-            LOOPBACK,
-            auth_config(OTHER_ISSUER, device_login=False),
-            DEVICE_DISABLED,
-            id="before-the-question",
-        ),
+        (NoBrowser(reason="There is no display"), "There is no display"),
+        (BrowserOpened(), "The browser did not open the login link within 60 s"),
     ],
+    ids=["no-browser", "start-link-not-opened"],
 )
-def test_device_login_needs_the_deployment_to_enable_it(httpx2_mock, deployment, config, error):
-    httpx2_mock.add_response(url=f"{deployment}/external/v2/auth/config", json=config)
-    questions: list[Confirmation] = []
+@pytest.mark.usefixtures("authorization_server")
+def test_browser_login_switches_to_a_code_when_no_browser_reaches_the_listener(
+    base_url, httpx2_mock, monkeypatch, store, opened, switch
+):
+    monkeypatch.setattr(
+        "whitson_pvt_sdk.login.time.monotonic", itertools.count(1000.0, 1000.0).__next__
+    )
+    monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
+    httpx2_mock.add_response(method="POST", url=DEVICE_ENDPOINT, json=DEVICE_AUTHORIZATION)
+    httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
+    starts: list[str] = []
+    messages: list[Notice] = []
 
-    def confirm(question: Confirmation) -> bool:
-        questions.append(question)
-        return True
+    def open_browser(url: str) -> BrowserOpened | NoBrowser:
+        starts.append(url)
+        return opened
 
-    with pytest.raises(SDKError, match=re.escape(error)):
-        login(deployment, DeviceLogin(), output=print, verify=_keep, confirm=confirm)
+    login(base_url, BrowserLogin(open_browser=open_browser), output=messages.append, verify=_keep)
 
-    assert questions == []
-    assert len(httpx2_mock.get_requests()) == 1
+    assert len(starts) == 1
+    *_, notice, prompt = messages
+    assert notice == f"{switch}, so logging in with a code instead."
+    assert isinstance(prompt, DeviceCode)
+    assert prompt.user_code == "ABCD-EFGH"
+    assert form(httpx2_mock.get_requests(url=TOKEN_ENDPOINT)[0])["device_code"] == (
+        "secret-device-code"
+    )
+    assert active_login(store, base_url).refresh_token.get_secret_value() == "fresh-refresh"
 
 
 class FakeClock:
@@ -1168,8 +1187,8 @@ def test_device_login_polls_at_the_server_interval(
         assert store.get(base_url) is None
 
     assert clock.sleeps == sleeps
-    assert ACTIVATE in messages[0]
-    assert "ABCD-EFGH" in messages[0]
+    assert ACTIVATE in messages[0].message
+    assert "ABCD-EFGH" in messages[0].message
     assert {request.content for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)} == {
         b"grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code"
         b"&device_code=secret-device-code&client_id=cli-client"
@@ -1226,9 +1245,9 @@ def test_browser_login_listens_on_the_first_free_registered_port(base_url, busy)
         occupied.append(listener)
     ports = []
 
-    def open_browser(url: str) -> bool:
+    def open_browser(url: str) -> BrowserOpened:
         ports.append(urlsplit(url).port)
-        return True
+        return BrowserOpened()
 
     try:
         with pytest.raises(LoginError) as failure:
