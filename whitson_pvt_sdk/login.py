@@ -6,7 +6,7 @@ import socket
 import socketserver
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Literal, TypeVar
 from urllib.parse import parse_qs, urlsplit
@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from whitson_pvt_sdk._login_page import CONTENT_SECURITY_POLICY, Outcome, login_page
+from whitson_pvt_sdk._login_page import CONTENT_SECURITY_POLICY, Outcome, ScopeForm, login_page
 from whitson_pvt_sdk._oauth import (
     AuthConfig,
     DeviceAuthorization,
@@ -57,6 +57,7 @@ __all__ = [
     "IssuerChanged",
     "LoggedOut",
     "LoginMethod",
+    "PickScopes",
     "ScopeChoice",
     "login",
     "logout",
@@ -97,7 +98,13 @@ class ChosenScopes(BaseModel):
     names: frozenset[str] = Field(min_length=1)
 
 
-ScopeChoice = AllScopes | ChosenScopes
+class PickScopes(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    ask: Callable[[tuple[str, ...]], Collection[str]]
+
+
+ScopeChoice = AllScopes | ChosenScopes | PickScopes
 
 
 Revocation = Literal["revoked", "not_offered", "failed", "skipped"]
@@ -136,8 +143,7 @@ def login(
                 f"Device login is not enabled on {url}. Log in with a browser from a machine "
                 f"that has one, or use an API token in {TOKEN_ENV_VAR}."
             )
-        requested = _requested_scopes(scopes, config, url)
-        scope = " ".join([*requested, "offline_access"])
+        request = _requested_scopes(scopes, config, url)
         match decision:
             case Proceed():
                 pass
@@ -151,9 +157,14 @@ def login(
         provider = discover(http, config.issuer)
         match method:
             case BrowserLogin():
-                token = _browser_flow(http, config, provider, scope, method, output)
+                authorized = _browser_flow(http, config, provider, request, method, output)
             case DeviceLogin():
-                token = _device_flow(http, config, provider, scope, output)
+                requested = _picked_in_terminal(request)
+                authorized = _Authorized(
+                    token=_device_flow(http, config, provider, requested, output),
+                    scopes=requested,
+                )
+    token = authorized.token
     if token.refresh_token is None:
         raise LoginError(
             f"{config.issuer} returned no refresh token; the login cannot be kept. "
@@ -164,7 +175,7 @@ def login(
         issuer=config.issuer,
         client_id=config.client_id,
         audience=config.audience,
-        scopes=requested,
+        scopes=authorized.scopes,
         token_endpoint=provider.token_endpoint,
         access_token=token.access_token,
         refresh_token=token.refresh_token,
@@ -206,43 +217,92 @@ def _without_a_browser(config: AuthConfig) -> str:
     return f"Without a browser on this machine, use an API token in {TOKEN_ENV_VAR} instead."
 
 
-def _requested_scopes(choice: ScopeChoice, config: AuthConfig, url: str) -> tuple[str, ...]:
+class _Picker(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    url: str
+    offered: tuple[str, ...]
+    ask: Callable[[tuple[str, ...]], Collection[str]]
+
+
+def _requested_scopes(
+    choice: ScopeChoice, config: AuthConfig, url: str
+) -> tuple[str, ...] | _Picker:
     match choice:
         case AllScopes():
             return config.scopes
         case ChosenScopes(names=names):
-            offered = (
-                f"Choose from {', '.join(config.scopes)}, or {READ_SCOPES} for every *:read scope."
-            )
-            unknown = sorted(names - {READ_SCOPES, *config.scopes})
-            if unknown:
-                raise ConfigurationError(
-                    f"{url} does not offer the scope {', '.join(unknown)}. {offered}"
-                )
-            requested = tuple(
-                scope
-                for scope in config.scopes
-                if scope in names or (READ_SCOPES in names and scope.endswith(":read"))
-            )
-            if not requested:
-                raise ConfigurationError(f"{url} offers no *:read scope. {offered}")
-            return requested
+            return _chosen_scopes(names, config.scopes, url)
+        case PickScopes(ask=ask):
+            return _Picker(url=url, offered=config.scopes, ask=ask)
+
+
+def _picked_in_terminal(request: tuple[str, ...] | _Picker) -> tuple[str, ...]:
+    match request:
+        case _Picker(url=url, offered=offered, ask=ask):
+            return _chosen_scopes(frozenset(ask(offered)), offered, url)
+        case tuple():
+            return request
+
+
+def _chosen_scopes(names: frozenset[str], offered: tuple[str, ...], url: str) -> tuple[str, ...]:
+    choices = f"Choose from {', '.join(offered)}, or {READ_SCOPES} for every *:read scope."
+    if not names:
+        raise ConfigurationError(f"No scope was chosen for {url}. {choices}")
+    unknown = sorted(names - {READ_SCOPES, *offered})
+    if unknown:
+        raise ConfigurationError(f"{url} does not offer the scope {', '.join(unknown)}. {choices}")
+    requested = tuple(
+        scope
+        for scope in offered
+        if scope in names or (READ_SCOPES in names and scope.endswith(":read"))
+    )
+    if not requested:
+        raise ConfigurationError(f"{url} offers no *:read scope. {choices}")
+    return requested
+
+
+def _scope_parameter(scopes: tuple[str, ...]) -> str:
+    return " ".join([*scopes, "offline_access"])
+
+
+class _Authorized(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    token: TokenResponse
+    scopes: tuple[str, ...]
 
 
 class _AwaitingStart(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    authorize_url: str
+    scopes: tuple[str, ...]
+
+
+class _AwaitingPick(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    picker: _Picker
+
+
+class _Picking(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    picker: _Picker
+    nonce: str
 
 
 class _Started(BaseModel):
     model_config = ConfigDict(frozen=True)
+
+    scopes: tuple[str, ...]
 
 
 class _CodeReceived(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     code: SecretStr
+    scopes: tuple[str, ...]
 
 
 class _AuthorizationRefused(BaseModel):
@@ -264,7 +324,7 @@ class _CallbackTimedOut(BaseModel):
 
 
 _Callback = _CodeReceived | _AuthorizationRefused
-_Listening = _AwaitingStart | _Started
+_Listening = _AwaitingStart | _AwaitingPick | _Picking | _Started
 _Finished = _Callback | _StartedTwice
 
 
@@ -272,20 +332,20 @@ def _browser_flow(
     http: httpx2.Client,
     config: AuthConfig,
     provider: ProviderMetadata,
-    scope: str,
+    request: tuple[str, ...] | _Picker,
     method: BrowserLogin,
     output: Callable[[str], None],
-) -> TokenResponse:
+) -> _Authorized:
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
     state = secrets.token_urlsafe(32)
 
-    def authorize_url(redirect_uri: str) -> str:
+    def authorize_url(redirect_uri: str, scopes: tuple[str, ...]) -> str:
         params = {
             "response_type": "code",
             "client_id": config.client_id,
             "redirect_uri": redirect_uri,
-            "scope": scope,
+            "scope": _scope_parameter(scopes),
             "audience": config.audience,
             "state": state,
             "code_challenge": challenge.decode().rstrip("="),
@@ -295,7 +355,12 @@ def _browser_flow(
             params["connection"] = config.connection
         return str(httpx2.URL(provider.authorization_endpoint).copy_merge_params(params))
 
-    with _callback_server(state, authorize_url) as server:
+    match request:
+        case _Picker():
+            first: _AwaitingStart | _AwaitingPick = _AwaitingPick(picker=request)
+        case tuple():
+            first = _AwaitingStart(scopes=request)
+    with _callback_server(state, authorize_url, first) as server:
         if method.open_browser is not None and method.open_browser(server.start_url):
             output(f"Opened a browser to log in. If it did not open, visit:\n{server.start_url}")
         else:
@@ -305,7 +370,7 @@ def _browser_flow(
             )
         outcome = server.wait(method.timeout)
     match outcome:
-        case _CodeReceived(code=code):
+        case _CodeReceived(code=code, scopes=scopes):
             result = request_token(
                 http,
                 provider.token_endpoint,
@@ -319,7 +384,7 @@ def _browser_flow(
             )
             match result:
                 case TokenGranted(token=token):
-                    return token
+                    return _Authorized(token=token, scopes=scopes)
                 case TokenRefused(error=error):
                     raise LoginError(f"The login was refused: {error.describe()}.")
         case _AuthorizationRefused(error=error):
@@ -335,11 +400,16 @@ def _browser_flow(
             )
 
 
-def _callback_server(state: str, authorize_url: Callable[[str], str]) -> "_CallbackServer":
+_AuthorizeUrl = Callable[[str, tuple[str, ...]], str]
+
+
+def _callback_server(
+    state: str, authorize_url: _AuthorizeUrl, first: "_AwaitingStart | _AwaitingPick"
+) -> "_CallbackServer":
     failure: OSError | None = None
     for port in CALLBACK_PORTS:
         try:
-            return _CallbackServer(port, state, authorize_url)
+            return _CallbackServer(port, state, authorize_url, first)
         except OSError as exc:
             failure = exc
     raise LoginError(
@@ -354,7 +424,13 @@ class _CallbackServer(HTTPServer):
     # SO_REUSEADDR on Windows would let this bind over another program's listener on the port.
     allow_reuse_address = sys.platform != "win32"
 
-    def __init__(self, port: int, state: str, authorize_url: Callable[[str], str]) -> None:
+    def __init__(
+        self,
+        port: int,
+        state: str,
+        authorize_url: _AuthorizeUrl,
+        first: _AwaitingStart | _AwaitingPick,
+    ) -> None:
         super().__init__(("127.0.0.1", port), _CallbackHandler)
         origin = f"http://127.0.0.1:{self.server_address[1]}"
         nonce = secrets.token_urlsafe(32)
@@ -362,9 +438,11 @@ class _CallbackServer(HTTPServer):
         self.expected_nonce = nonce
         self.redirect_uri = f"{origin}/callback"
         self.start_url = f"{origin}/start?n={nonce}"
-        self.phase: _Listening | _Finished = _AwaitingStart(
-            authorize_url=authorize_url(self.redirect_uri)
-        )
+        self._authorize_url = authorize_url
+        self.phase: _Listening | _Finished = first
+
+    def authorize_url(self, scopes: tuple[str, ...]) -> str:
+        return self._authorize_url(self.redirect_uri, scopes)
 
     def server_bind(self) -> None:
         socketserver.TCPServer.server_bind(self)
@@ -375,7 +453,7 @@ class _CallbackServer(HTTPServer):
         deadline = time.monotonic() + timeout
         while True:
             match self.phase:
-                case _AwaitingStart() | _Started():
+                case _AwaitingStart() | _AwaitingPick() | _Picking() | _Started():
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         return _CallbackTimedOut()
@@ -383,6 +461,10 @@ class _CallbackServer(HTTPServer):
                     self.handle_request()
                 case _CodeReceived() | _AuthorizationRefused() | _StartedTwice() as finished:
                     return finished
+
+
+_SCOPES_PATH = "/scopes"
+_MAX_FORM_BYTES = 16384
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
@@ -393,18 +475,55 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         target = urlsplit(self.path)
         query = parse_qs(target.query)
         match (target.path, self.server.phase):
-            case ("/start", _AwaitingStart(authorize_url=authorize_url)) if self._nonce_matches(
-                query
-            ):
-                self.server.phase = _Started()
-                self._redirect(authorize_url)
-            case ("/start", _Started()) if self._nonce_matches(query):
+            case ("/start", _AwaitingStart(scopes=scopes)) if self._nonce_matches(query):
+                self.server.phase = _Started(scopes=scopes)
+                self._redirect(302, self.server.authorize_url(scopes))
+            case ("/start", _AwaitingPick(picker=picker)) if self._nonce_matches(query):
+                picking = _Picking(picker=picker, nonce=secrets.token_urlsafe(32))
+                self.server.phase = picking
+                self._page(_scope_form(picking, refused=False))
+            case ("/start", _Picking() | _Started()) if self._nonce_matches(query):
                 self.server.phase = _StartedTwice()
                 self._page("link_used")
-            case ("/callback", _Started()):
-                self._callback(query)
+            case ("/callback", _Started(scopes=scopes)):
+                self._callback(query, scopes)
             case _:
                 self._page("not_found")
+
+    def do_POST(self) -> None:
+        form = self._form()
+        match (urlsplit(self.path).path, self.server.phase):
+            case (path, _Picking(nonce=nonce) as picking) if (
+                path == _SCOPES_PATH and form is not None and _matches(_single(form, "n"), nonce)
+            ):
+                picker = picking.picker
+                try:
+                    scopes = _chosen_scopes(
+                        frozenset(form.get("scope", [])), picker.offered, picker.url
+                    )
+                except ConfigurationError:
+                    self._page(_scope_form(picking, refused=True))
+                    return
+                self.server.phase = _Started(scopes=scopes)
+                self._redirect(303, self.server.authorize_url(scopes))
+            case (path, _Started()) if path == _SCOPES_PATH:
+                self._page("link_used")
+            case _:
+                self._page("not_found")
+
+    def _form(self) -> dict[str, list[str]] | None:
+        if self.headers.get_content_type() != "application/x-www-form-urlencoded":
+            return None
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return None
+        if not 0 <= length <= _MAX_FORM_BYTES:
+            return None
+        try:
+            return parse_qs(self.rfile.read(length).decode())
+        except UnicodeDecodeError:
+            return None
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -412,8 +531,8 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def _nonce_matches(self, query: dict[str, list[str]]) -> bool:
         return _matches(_single(query, "n"), self.server.expected_nonce)
 
-    def _callback(self, query: dict[str, list[str]]) -> None:
-        match _parse_callback(query, self.server.expected_state):
+    def _callback(self, query: dict[str, list[str]], scopes: tuple[str, ...]) -> None:
+        match _parse_callback(query, self.server.expected_state, scopes):
             case _StateMismatch():
                 self._page("other_login")
             case _CodeReceived() as callback:
@@ -423,26 +542,37 @@ class _CallbackHandler(BaseHTTPRequestHandler):
                 self.server.phase = callback
                 self._page("login_failed")
 
-    def _redirect(self, location: str) -> None:
-        self.send_response(302)
+    def _redirect(self, status: int, location: str) -> None:
+        self.send_response(status)
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
 
-    def _page(self, outcome: Outcome) -> None:
-        page = login_page(outcome)
+    def _page(self, view: Outcome | ScopeForm) -> None:
+        page = login_page(view)
         self.send_response(page.status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(page.body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
+        # No form-action: browsers apply it to every redirect after the POST, and the sign-in
+        # redirects on to the deployment's identity provider.
         self.send_header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         self.end_headers()
         self.wfile.write(page.body)
 
 
-def _parse_callback(query: dict[str, list[str]], expected_state: str) -> _Callback | _StateMismatch:
+def _scope_form(picking: _Picking, *, refused: bool) -> ScopeForm:
+    return ScopeForm(
+        action=_SCOPES_PATH, nonce=picking.nonce, offered=picking.picker.offered, refused=refused
+    )
+
+
+def _parse_callback(
+    query: dict[str, list[str]], expected_state: str, scopes: tuple[str, ...]
+) -> _Callback | _StateMismatch:
     if not _matches(_single(query, "state"), expected_state):
         return _StateMismatch()
     error = _single(query, "error")
@@ -453,7 +583,7 @@ def _parse_callback(query: dict[str, list[str]], expected_state: str) -> _Callba
     code = _single(query, "code")
     if not code:
         return _AuthorizationRefused(error=OAuthError(error="invalid_request"))
-    return _CodeReceived(code=SecretStr(code))
+    return _CodeReceived(code=SecretStr(code), scopes=scopes)
 
 
 def _matches(given: str | None, expected: str) -> bool:
@@ -473,7 +603,7 @@ def _device_flow(
     http: httpx2.Client,
     config: AuthConfig,
     provider: ProviderMetadata,
-    scope: str,
+    scopes: tuple[str, ...],
     output: Callable[[str], None],
 ) -> TokenResponse:
     endpoint = provider.device_authorization_endpoint
@@ -482,7 +612,11 @@ def _device_flow(
     authorization = post_oauth(
         http,
         endpoint,
-        {"client_id": config.client_id, "scope": scope, "audience": config.audience},
+        {
+            "client_id": config.client_id,
+            "scope": _scope_parameter(scopes),
+            "audience": config.audience,
+        },
         DeviceAuthorization,
     )
     if isinstance(authorization, OAuthError):

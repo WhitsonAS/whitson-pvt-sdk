@@ -1,6 +1,7 @@
+from html import escape
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 Outcome = Literal["logged_in", "login_failed", "link_used", "other_login", "not_found"]
 
@@ -12,6 +13,15 @@ class Page(BaseModel):
 
     status: int
     body: bytes
+
+
+class ScopeForm(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    action: str
+    nonce: str
+    offered: tuple[str, ...] = Field(min_length=1)
+    refused: bool
 
 
 class _Text(BaseModel):
@@ -75,22 +85,78 @@ margin-bottom:16px;border:2px solid currentColor;border-radius:50%;font-size:22p
 .ok{color:var(--ok)}
 .bad{color:var(--bad)}
 h1{margin:0 0 8px;font-size:22px;line-height:1.3;color:var(--brand)}
+form{margin-top:20px;text-align:left}
+fieldset{margin:0 0 16px;padding:8px 12px;border:1px solid var(--line);border-radius:8px}
+legend{padding:0 4px;font-weight:600;color:var(--brand)}
+label{display:flex;gap:8px;align-items:center;padding:4px 0;overflow-wrap:anywhere}
+button{width:100%;padding:10px;border:1px solid var(--brand);border-radius:8px;font:inherit;
+font-weight:600;cursor:pointer;background:var(--brand);color:var(--card)}
+button.plain{background:transparent;color:var(--brand)}
+.notice{margin-top:12px;color:var(--bad);font-weight:600}
 """
 
+_GROUPS = (("read", "Read"), ("run", "Calculations and other actions"), ("write", "Write"))
 
-def login_page(outcome: Outcome) -> Page:
-    text = _TEXTS[outcome]
-    mark = (
-        '<div class="mark ok" aria-hidden="true">&#10003;</div>'
-        if text.succeeded
-        else '<div class="mark bad" aria-hidden="true">!</div>'
+
+def login_page(view: Outcome | ScopeForm) -> Page:
+    match view:
+        case ScopeForm():
+            return Page(status=400 if view.refused else 200, body=_scope_form(view))
+        case _:
+            text = _TEXTS[view]
+            mark = (
+                '<div class="mark ok" aria-hidden="true">&#10003;</div>'
+                if text.succeeded
+                else '<div class="mark bad" aria-hidden="true">!</div>'
+            )
+            return Page(
+                status=text.status,
+                body=_document(text.heading, f"{mark}<h1>{text.heading}</h1><p>{text.line}</p>"),
+            )
+
+
+def _scope_form(form: ScopeForm) -> bytes:
+    nonce = f'<input type="hidden" name="n" value="{escape(form.nonce)}">'
+    groups = "".join(
+        f"<fieldset><legend>{legend}</legend>{''.join(_checkbox(scope) for scope in members)}"
+        "</fieldset>"
+        for group, legend in _GROUPS
+        if (members := [scope for scope in form.offered if _group(scope) == group])
     )
-    body = (
+    read = [scope for scope in form.offered if _group(scope) == "read"]
+    read_only = (
+        f'<form method="post" action="{escape(form.action)}">{nonce}'
+        + "".join(f'<input type="hidden" name="scope" value="{escape(scope)}">' for scope in read)
+        + '<button class="plain" type="submit">Read only</button></form>'
+        if read
+        else ""
+    )
+    notice = '<p class="notice">Choose at least one scope.</p>' if form.refused else ""
+    return _document(
+        "Choose access",
+        "<h1>Choose access</h1><p>Sign in with only the scopes you keep checked. Your role can "
+        f"still narrow what is granted.</p>{notice}"
+        f'<form method="post" action="{escape(form.action)}">{nonce}{groups}'
+        '<button type="submit">Continue to sign in</button></form>'
+        f"{read_only}",
+    )
+
+
+def _checkbox(scope: str) -> str:
+    name = escape(scope)
+    return f'<label><input type="checkbox" name="scope" value="{name}" checked>{name}</label>'
+
+
+def _group(scope: str) -> str:
+    action = scope.rpartition(":")[2]
+    return action if action in {"read", "write"} else "run"
+
+
+def _document(title: str, content: str) -> bytes:
+    return (
         '<!doctype html><html lang="en"><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<meta name="color-scheme" content="light dark">'
-        f"<title>{text.heading} - whitsonPVT</title><style>{_STYLE}</style>"
-        f'<main><p class="brand">whitsonPVT</p>{mark}<h1>{text.heading}</h1>'
-        f"<p>{text.line}</p></main></html>"
-    )
-    return Page(status=text.status, body=body.encode())
+        f"<title>{title} - whitsonPVT</title><style>{_STYLE}</style>"
+        f'<main><p class="brand">whitsonPVT</p>{content}</main></html>'
+    ).encode()

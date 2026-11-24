@@ -1,12 +1,14 @@
 import base64
 import hashlib
+import html
 import re
 import socket
 import threading
 import urllib.error
 import urllib.request
 from email.message import Message
-from urllib.parse import parse_qs, urlsplit
+from typing import Literal
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from pydantic import BaseModel, ConfigDict
@@ -23,6 +25,7 @@ from whitson_pvt_sdk.login import (
     DeviceLogin,
     FirstUse,
     IssuerChanged,
+    PickScopes,
     login,
 )
 
@@ -97,8 +100,16 @@ class _Response(BaseModel):
 
 
 def _get(url: str) -> _Response:
+    return _open(url)
+
+
+def _post(url: str, fields: list[tuple[str, str]]) -> _Response:
+    return _open(urllib.request.Request(url, data=urlencode(fields).encode(), method="POST"))
+
+
+def _open(request: str | urllib.request.Request) -> _Response:
     try:
-        with _BROWSER.open(url, timeout=5) as response:
+        with _BROWSER.open(request, timeout=5) as response:
             return _response(response.status, response.headers, response.read())
     except urllib.error.HTTPError as error:
         with error:
@@ -312,6 +323,220 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
         assert isinstance(outcome, LoginError)
         assert failure in outcome.message
         assert store.get(base_url) is None
+
+
+HOSTILE = 'x"><b>bold</b>:read'
+PICKER_SCOPES = ["regions:read", HOSTILE, "calculations:run", "regions:write"]
+
+
+@pytest.fixture
+def picker_server(base_url, httpx2_mock):
+    httpx2_mock.add_response(
+        url=f"{base_url}/external/v2/auth/config",
+        json={**auth_config(), "scopes": PICKER_SCOPES},
+    )
+    httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
+
+
+def _never_asked(_: tuple[str, ...]) -> list[str]:
+    raise AssertionError("the browser login picks on its page")
+
+
+class _Picker(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    nonce: str
+    checkboxes: list[str]
+    read_only: list[str]
+
+
+def _picker(page: _Response) -> _Picker:
+    def values(kind: str, part: str) -> list[str]:
+        found = re.findall(rf'type="{kind}" name="scope" value="([^"]*)"', part)
+        return [html.unescape(value) for value in found]
+
+    forms = page.body.split("</form>")
+    return _Picker(
+        nonce=re.findall(r'name="n" value="([^"]*)"', page.body)[0],
+        checkboxes=values("checkbox", forms[0]),
+        read_only=values("hidden", forms[1]),
+    )
+
+
+class _Submit(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    fields: list[tuple[str, str]]
+    method: Literal["GET", "POST"] = "POST"
+
+    def send(self, url: str) -> _Response:
+        match self.method:
+            case "GET":
+                return _get(f"{url}?{urlencode(self.fields)}")
+            case "POST":
+                return _post(url, self.fields)
+
+
+def _browse_picker(base_url, choose):
+    pages, visits = [], []
+
+    def browse(start_url: str) -> None:
+        picker = _get(start_url)
+        pages.append(picker)
+        scopes_url = start_url.split("/start")[0] + "/scopes"
+        for submit in choose(_picker(picker)):
+            pages.append(submit.send(scopes_url))
+        query = _query(next(page.location for page in pages if page.location))
+        pages.append(_get(f"{query['redirect_uri']}?code=the-code&state={query['state']}"))
+
+    def open_browser(url: str) -> bool:
+        if urlsplit(url).hostname == "127.0.0.1":
+            visits.append(threading.Thread(target=browse, args=(url,)))
+            visits[-1].start()
+        return True
+
+    stored = login(
+        base_url,
+        BrowserLogin(open_browser=open_browser, timeout=10),
+        output=print,
+        verify=_keep,
+        scopes=PickScopes(ask=_never_asked),
+    )
+    for visit in visits:
+        visit.join()
+    return stored, pages
+
+
+@pytest.mark.parametrize(
+    ("submit", "requested"),
+    [
+        (
+            lambda picker: [
+                ("n", picker.nonce),
+                ("scope", "regions:read"),
+                ("scope", "calculations:run"),
+            ],
+            ("regions:read", "calculations:run"),
+        ),
+        (
+            lambda picker: [("n", picker.nonce), *(("scope", name) for name in picker.read_only)],
+            ("regions:read", HOSTILE),
+        ),
+    ],
+    ids=["subset", "read-only"],
+)
+@pytest.mark.usefixtures("picker_server")
+def test_the_browser_picker_signs_in_with_only_the_scopes_kept(
+    base_url, httpx2_mock, store, submit, requested
+):
+    httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
+
+    stored, pages = _browse_picker(base_url, lambda picker: [_Submit(fields=submit(picker))])
+
+    picker_page, chosen, callback = pages
+    assert picker_page.status == 200
+    assert _picker(picker_page).checkboxes == PICKER_SCOPES
+    assert _picker(picker_page).read_only == ["regions:read", HOSTILE]
+    assert HOSTILE not in picker_page.body
+    assert "<b>" not in picker_page.body
+    assert not re.search(r"https?://", picker_page.body)
+    assert (
+        picker_page.headers["Content-Security-Policy"],
+        picker_page.headers["Cache-Control"],
+        picker_page.headers["Referrer-Policy"],
+    ) == ("default-src 'none'; style-src 'unsafe-inline'", "no-store", "no-referrer")
+    assert chosen.status == 303
+    assert (chosen.location or "").startswith(f"{AUTHORIZE}?")
+    assert _query(chosen.location or "")["scope"] == " ".join([*requested, "offline_access"])
+    assert callback.outcome == LOGGED_IN
+    assert stored.scopes == requested
+    assert store.get(base_url) == ActiveLogin(login=stored)
+
+
+CHOOSE_ACCESS = (400, "Choose access")
+
+
+@pytest.mark.parametrize(
+    ("attempt", "refusal"),
+    [
+        (lambda nonce: _Submit(fields=[("n", "x" + nonce), ("scope", "regions:read")]), NOT_FOUND),
+        (lambda nonce: _Submit(fields=[("scope", "regions:read")]), NOT_FOUND),
+        (
+            lambda nonce: _Submit(fields=[("n", nonce), ("n", nonce), ("scope", "regions:read")]),
+            NOT_FOUND,
+        ),
+        (
+            lambda nonce: _Submit(fields=[("n", nonce), ("scope", "regions:read")], method="GET"),
+            NOT_FOUND,
+        ),
+        (lambda nonce: _Submit(fields=[("n", nonce)]), CHOOSE_ACCESS),
+        (lambda nonce: _Submit(fields=[("n", nonce), ("scope", "admin:all")]), CHOOSE_ACCESS),
+    ],
+    ids=["wrong-nonce", "missing-nonce", "two-nonces", "get", "empty", "unknown-scope"],
+)
+@pytest.mark.usefixtures("picker_server")
+def test_the_picker_accepts_one_post_with_this_logins_nonce_and_a_scope(
+    base_url, httpx2_mock, store, attempt, refusal
+):
+    httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
+    nonces = []
+
+    def choose(picker: _Picker) -> list[_Submit]:
+        nonces.append(picker.nonce)
+        valid = _Submit(fields=[("n", picker.nonce), ("scope", "regions:write")])
+        return [attempt(picker.nonce), valid, valid]
+
+    stored, pages = _browse_picker(base_url, choose)
+
+    _, refused, chosen, reused, callback = pages
+    assert refused.outcome == refusal
+    if refusal == CHOOSE_ACCESS:
+        assert "Choose at least one scope." in refused.body
+        assert _picker(refused).nonce == nonces[0]
+    assert chosen.status == 303
+    assert _query(chosen.location or "")["scope"] == "regions:write offline_access"
+    assert reused.outcome == (400, "Link already used")
+    assert callback.outcome == LOGGED_IN
+    assert stored.scopes == ("regions:write",)
+    assert store.get(base_url) == ActiveLogin(login=stored)
+
+
+@pytest.mark.parametrize(
+    ("answer", "requested"),
+    [
+        (["regions:write", "calculations:run"], "calculations:run regions:write offline_access"),
+        (["read"], f"regions:read {HOSTILE} offline_access"),
+        ([], None),
+    ],
+    ids=["names", "read-shorthand", "nothing"],
+)
+@pytest.mark.usefixtures("picker_server")
+def test_device_login_asks_for_the_scopes_before_requesting_the_code(
+    base_url, httpx2_mock, monkeypatch, store, answer, requested
+):
+    monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
+    asked = []
+
+    def ask(offered: tuple[str, ...]) -> list[str]:
+        asked.append(offered)
+        return answer
+
+    def attempt() -> StoredLogin:
+        return login(
+            base_url, DeviceLogin(), output=print, verify=_keep, scopes=PickScopes(ask=ask)
+        )
+
+    if requested is None:
+        with pytest.raises(ConfigurationError, match="No scope was chosen"):
+            attempt()
+        assert httpx2_mock.get_requests(url=DEVICE_ENDPOINT) == []
+    else:
+        httpx2_mock.add_response(method="POST", url=DEVICE_ENDPOINT, json=DEVICE_AUTHORIZATION)
+        httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
+        stored = attempt()
+        assert form(httpx2_mock.get_requests(url=DEVICE_ENDPOINT)[0])["scope"] == requested
+        assert " ".join(stored.scopes) == requested.removesuffix(" offline_access")
+    assert asked == [tuple(PICKER_SCOPES)]
 
 
 @pytest.mark.parametrize(

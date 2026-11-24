@@ -304,7 +304,7 @@ $ wpvt auth logout
 Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
 ```
 
-- `wpvt auth login [--url URL] [--device] [--scope SCOPE]... [--trust-host] [--yes]` logs in with the
+- `wpvt auth login [--url URL] [--device] [--scope SCOPE... | --choose] [--trust-host] [--yes]` logs in with the
   authorization code flow and PKCE through a one-off listener on `127.0.0.1`, on the first free
   port of 52817, 54631, 57493 and 61287 (the redirect URI must match exactly, so these are the
   ports registered on the login server; the login fails with a message naming them when all are
@@ -329,6 +329,15 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   browser opens, with the list of valid ones. Your role can still narrow the grant (write scopes
   need an editor role); the login then names the scopes not granted (`not_granted` with
   `--json`). Renewing the login keeps its scopes; to change them, log in again.
+  `--choose` lets you pick the scopes instead of naming them (not together with `--scope`): the
+  one-time link first shows a page on the listener with a checkbox for each offered scope,
+  grouped into read, calculations and other actions, and write, all checked, plus a "Read only"
+  button. The page posts back to the listener with a one-time value only that page carries (a
+  wrong, missing or reused one is refused, as is a choice with no scope or a scope the
+  deployment does not offer), and the listener then sends the browser to the login server with
+  the scopes chosen; the usual timeout covers the page. With `--device` the scopes are fixed
+  before the code is requested, so `--choose` lists them at the terminal (numbers or names,
+  Enter for all) and needs one; without a terminal use `--scope`.
 - `wpvt auth status [--url URL]` shows the deployment, the credential in use and where it
   came from (`WHITSON_PVT_TOKEN` or the stored login), and the identity, role and scopes the
   API reports: the API token's name for an API token, and "legacy client <subject>, full
@@ -533,9 +542,12 @@ confirmed at a terminal. In Python, pass `confirm=`, a function that receives a 
 whenever `foreign_audience` is set. Without it, such a login raises `ConfigurationError`. A login
 that needs no question needs no `confirm=`.
 
-`login()` takes `scopes=`, `AllScopes()` (the default) or `ChosenScopes(names={...})` from
-`whitson_pvt_sdk.login`, where the name `READ_SCOPES` (`"read"`) stands for every `*:read`
-scope; an unknown name raises `ConfigurationError` before any sign-in starts.
+`login()` takes `scopes=`, `AllScopes()` (the default), `ChosenScopes(names={...})` or
+`PickScopes(ask=...)` from `whitson_pvt_sdk.login`, where the name `READ_SCOPES` (`"read"`)
+stands for every `*:read` scope; an unknown name raises `ConfigurationError` before any sign-in
+starts. With `PickScopes`, a `BrowserLogin` shows the scope page described above, and a
+`DeviceLogin` calls `ask` with the offered scopes before requesting the code; it returns the
+names to request (an empty answer raises `ConfigurationError`).
 
 `login()` also takes `verify=`, a function called with the new login before it is stored;
 `login()` returns its result. If it raises, nothing is stored and the previous default stays.

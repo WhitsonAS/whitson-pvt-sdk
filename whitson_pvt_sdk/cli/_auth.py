@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import webbrowser
 from typing import Annotated, Literal
@@ -29,6 +30,8 @@ from whitson_pvt_sdk.login import (
     Confirmation,
     DeviceLogin,
     LoggedOut,
+    PickScopes,
+    ScopeChoice,
     login,
     logout,
     logout_all,
@@ -113,6 +116,14 @@ def login_command(
             "always requested. Your role can still narrow what is granted.",
         ),
     ] = None,
+    choose: Annotated[
+        bool,
+        typer.Option(
+            "--choose",
+            help="Choose the scopes yourself: on a page in the browser, or at the terminal with "
+            "--device. Use --scope instead in scripts.",
+        ),
+    ] = False,
     json_output: JsonOption = False,
 ) -> None:
     """Log in through the browser (or --device) and make this login the default."""
@@ -153,7 +164,7 @@ def login_command(
             method,
             output=note,
             verify=_login_report,
-            scopes=ChosenScopes(names=frozenset(scope)) if scope else AllScopes(),
+            scopes=_scope_choice(scope or [], choose=choose, interactive=interactive),
             confirm=confirm,
             trust_host=trust_host,
         )
@@ -250,6 +261,43 @@ def _open_browser(url: str) -> bool:
             os.dup2(copy, descriptor)
             os.close(copy)
         os.close(devnull)
+
+
+def _scope_choice(scope: list[str], *, choose: bool, interactive: bool) -> ScopeChoice:
+    match scope, choose:
+        case [_, *_], True:
+            raise ConfigurationError("Pass either --scope or --choose, not both.")
+        case [_, *_], False:
+            return ChosenScopes(names=frozenset(scope))
+        case [], True:
+            return PickScopes(ask=_ask_at_terminal if interactive else _no_terminal)
+        case _:
+            return AllScopes()
+
+
+def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:
+    note("\n".join(f"{number:>3}. {name}" for number, name in enumerate(offered, start=1)))
+    answer: str = typer.prompt(
+        f'Scopes to request: numbers or names, "{READ_SCOPES}" for every *:read scope; '
+        "Enter for all",
+        default="",
+        show_default=False,
+        err=True,
+    )
+    words = [word for word in re.split(r"[\s,]+", answer) if word]
+    if not words:
+        return list(offered)
+    return [
+        offered[int(word) - 1] if word.isdecimal() and 1 <= int(word) <= len(offered) else word
+        for word in words
+    ]
+
+
+def _no_terminal(_: tuple[str, ...]) -> list[str]:
+    raise ConfigurationError(
+        "Choosing scopes with --device needs a terminal. Name them with --scope instead, "
+        f"for example --scope {READ_SCOPES}."
+    )
 
 
 def _login_report(stored: StoredLogin) -> LoginReport:

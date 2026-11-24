@@ -427,6 +427,42 @@ def test_login_reports_scopes_the_role_did_not_grant(
         assert "Not granted: regions:write. Your role on" in result.stdout
 
 
+@pytest.mark.parametrize(
+    ("options", "message", "requested"),
+    [
+        (
+            ["--device", "--choose"],
+            "needs a terminal. Name them with --scope",
+            ["config", "discovery"],
+        ),
+        (["--choose", "--scope", "read"], "Pass either --scope or --choose, not both.", []),
+    ],
+    ids=["device-without-terminal", "with-scope"],
+)
+def test_choose_needs_a_terminal_for_device_login_and_excludes_scope(
+    base_url, httpx2_mock, store, options, message, requested
+):
+    urls = {"config": f"{base_url}/external/v2/auth/config", "discovery": DISCOVERY}
+    httpx2_mock.add_response(url=urls["config"], json=auth_config(), is_optional=True)
+    httpx2_mock.add_response(
+        url=DISCOVERY,
+        json={
+            "issuer": ISSUER,
+            "authorization_endpoint": f"{ISSUER}authorize",
+            "token_endpoint": TOKEN_ENDPOINT,
+            "device_authorization_endpoint": DEVICE_AUTHORIZATION,
+        },
+        is_optional=True,
+    )
+
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--json", *options])
+
+    assert result.exit_code == 2
+    assert message in json.loads(result.stderr.splitlines()[-1])["message"]
+    assert [str(r.url) for r in httpx2_mock.get_requests()] == [urls[name] for name in requested]
+    assert store.get(base_url) is None
+
+
 TERMINAL_TITLE = "\x1b]0;x\x07"
 
 
