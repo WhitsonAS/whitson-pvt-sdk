@@ -75,5 +75,12 @@ class StoredLogin(BaseModel):
     def expiring(self) -> bool:
         return self.expires_at - REFRESH_MARGIN <= datetime.now(UTC)
 
+    def same_client(self, other: "StoredLogin") -> bool:
+        return (self.issuer, self.client_id, self.audience) == (
+            other.issuer,
+            other.client_id,
+            other.audience,
+        )
+
 
 Credential = ApiToken | StoredLogin

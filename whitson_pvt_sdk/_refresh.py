@@ -40,6 +40,13 @@ def replace_access_token(login: StoredLogin, store: CredentialStore) -> RefreshO
         match transaction.get(login.base_url):
             case None:
                 return NoLongerValid(base_url=login.base_url, reason="it was logged out")
+            case ActiveLogin(login=stored) | InvalidLogin(login=stored) if not stored.same_client(
+                login
+            ):
+                return NoLongerValid(
+                    base_url=login.base_url,
+                    reason="a login with another issuer or client replaced it",
+                )
             case InvalidLogin(reason=reason):
                 return NoLongerValid(base_url=login.base_url, reason=reason)
             case ActiveLogin(login=stored) if (

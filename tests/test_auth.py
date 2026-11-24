@@ -136,6 +136,28 @@ def test_login_renewed_by_another_process_is_used_without_a_token_request(
     assert _bearers(httpx2_mock, regions) == ["Bearer renewed-elsewhere"]
 
 
+@pytest.mark.parametrize("replaced_by", ["active", "invalid"])
+def test_login_replaced_by_another_client_is_neither_renewed_nor_used(
+    base_url, httpx2_mock, store, store_login, replaced_by
+):
+    store_login(base_url, access="old-access", refresh="old-refresh")
+    client = WhitsonPVTClient(base_url=base_url)
+    store_login(base_url, access="other-access", refresh="other-refresh", client_id="other-client")
+    if replaced_by == "invalid":
+        with store.transaction() as transaction:
+            transaction.mark_invalid(base_url, "the authorization server refused to renew it")
+    before = store.get(base_url)
+    regions = f"{base_url}/external/v2/regions"
+    httpx2_mock.add_response(url=regions, status_code=401, json={"message": "Token revoked"})
+
+    with pytest.raises(LoginError, match="a login with another issuer or client replaced it"):
+        client.regions.list()
+
+    assert _bearers(httpx2_mock, regions) == ["Bearer old-access"]
+    assert _token_requests(httpx2_mock) == []
+    assert store.get(base_url) == before
+
+
 @pytest.mark.parametrize(
     "other_url",
     [

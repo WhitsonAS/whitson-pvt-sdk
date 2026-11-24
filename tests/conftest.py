@@ -30,6 +30,7 @@ class LoginFields(TypedDict, total=False):
     expires_in: timedelta
     audience: str
     token_endpoint: str
+    client_id: str
 
 
 def form(request: httpx2.Request) -> dict[str, str]:
@@ -101,11 +102,12 @@ def make_login(
     expires_in: timedelta = timedelta(hours=1),
     audience: str = "https://dev.pvt.whitson.com/mcp",
     token_endpoint: str = TOKEN_ENDPOINT,
+    client_id: str = "cli-client",
 ) -> StoredLogin:
     return StoredLogin(
         base_url=base_url,
         issuer=ISSUER,
-        client_id="cli-client",
+        client_id=client_id,
         audience=audience,
         scopes=("read:data",),
         token_endpoint=token_endpoint,

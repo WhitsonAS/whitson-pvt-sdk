@@ -41,7 +41,7 @@ from whitson_pvt_sdk._trust import (
     login_decision,
 )
 from whitson_pvt_sdk.auth import TOKEN_ENV_VAR
-from whitson_pvt_sdk.credentials import StoredLogin, host_name, same_origin
+from whitson_pvt_sdk.credentials import ApiToken, StoredLogin, host_name, same_origin
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError, SDKError
 
 __all__ = [
@@ -117,7 +117,9 @@ Revocation = Literal["revoked", "not_offered", "failed", "skipped"]
 class NewLogin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    stored: StoredLogin
+    url: str
+    credential: ApiToken
+    scopes: tuple[str, ...]
     granted: tuple[str, ...]
 
 
@@ -188,7 +190,14 @@ def login(
         refresh_token=token.refresh_token,
         expires_at=token.expires_at(),
     )
-    verified = verify(NewLogin(stored=stored, granted=token.granted(authorized.scopes)))
+    verified = verify(
+        NewLogin(
+            url=url,
+            credential=ApiToken(token=token.access_token),
+            scopes=authorized.scopes,
+            granted=token.granted(authorized.scopes),
+        )
+    )
     with CredentialStore.from_environment().transaction() as transaction:
         transaction.put(stored)
         transaction.set_default(stored.base_url)

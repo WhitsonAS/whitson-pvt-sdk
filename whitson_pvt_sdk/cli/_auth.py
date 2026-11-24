@@ -309,18 +309,24 @@ def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:
 
 
 def _login_report(new: NewLogin) -> LoginReport:
-    stored = new.stored
-    identity = _identity(stored, stored.base_url)
+    try:
+        identity = _identity(new.credential, new.url)
+    except AuthError as exc:
+        raise AuthError(
+            f"{new.url} rejected the new login: {exc.message.rstrip('.')}.",
+            exc.status_code,
+            request_id=exc.request_id,
+        ) from exc
     match identity:
         case ApiTokenIdentity() | UserTokenIdentity():
             by_role = [scope for scope in new.granted if scope not in identity.scopes]
         case LegacyClientIdentity():
             by_role = []
     return LoginReport(
-        url=stored.base_url,
+        url=new.url,
         identity=identity,
         not_granted=NotGranted(
-            by_server=[scope for scope in stored.scopes if scope not in new.granted],
+            by_server=[scope for scope in new.scopes if scope not in new.granted],
             by_role=by_role,
         ),
     )

@@ -14,7 +14,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form, make_login
-from whitson_pvt_sdk._store import ActiveLogin
+from whitson_pvt_sdk._store import ActiveLogin, CredentialStore
 from whitson_pvt_sdk.credentials import StoredLogin
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, SDKError
 from whitson_pvt_sdk.login import (
@@ -74,8 +74,14 @@ def _accept(_: Confirmation) -> bool:
     return True
 
 
-def _keep(new: NewLogin) -> StoredLogin:
-    return new.stored
+def _keep(new: NewLogin) -> NewLogin:
+    return new
+
+
+def _stored(store: CredentialStore, url: str) -> StoredLogin:
+    entry = store.get(url)
+    assert isinstance(entry, ActiveLogin)
+    return entry.login
 
 
 class _NoRedirects(urllib.request.HTTPRedirectHandler):
@@ -160,7 +166,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         visits.append(_browser_later(url, responses, sign_in))
         return True
 
-    stored = login(
+    new = login(
         base_url,
         BrowserLogin(open_browser=open_browser, timeout=10),
         output=messages.append,
@@ -205,9 +211,10 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         assert page.headers["Content-Type"] == "text/html; charset=utf-8"
         assert not re.search(r"https?://", page.body)
     assert not any(verifier in message or "the-code" in message for message in messages)
+    stored = _stored(store, base_url)
+    assert new.credential.token == stored.access_token
     assert stored.access_token.get_secret_value() == "fresh-access"
     assert stored.audience == "https://dev.pvt.whitson.com/mcp"
-    assert store.get(base_url) == ActiveLogin(login=stored)
     assert store.default_url() == base_url
 
 
@@ -235,8 +242,7 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
         )
 
     if then_valid:
-        stored = attempt()
-        assert store.get(base_url) == ActiveLogin(login=stored)
+        assert attempt().credential.token == _stored(store, base_url).access_token
     else:
         with pytest.raises(LoginError, match="Timed out"):
             attempt()
@@ -291,7 +297,7 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
         return True
 
     try:
-        outcome: StoredLogin | LoginError = login(
+        outcome: NewLogin | LoginError = login(
             base_url,
             BrowserLogin(open_browser=open_browser, timeout=5),
             output=messages.append,
@@ -318,8 +324,8 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
         ["the-code"] if failure is None else []
     )
     if failure is None:
-        assert isinstance(outcome, StoredLogin)
-        assert store.get(base_url) == ActiveLogin(login=outcome)
+        assert isinstance(outcome, NewLogin)
+        assert outcome.credential.token == _stored(store, base_url).access_token
     else:
         assert isinstance(outcome, LoginError)
         assert failure in outcome.message
@@ -396,7 +402,7 @@ def _browse_picker(base_url, choose):
             visits[-1].start()
         return True
 
-    stored = login(
+    new = login(
         base_url,
         BrowserLogin(open_browser=open_browser, timeout=10),
         output=print,
@@ -405,7 +411,7 @@ def _browse_picker(base_url, choose):
     )
     for visit in visits:
         visit.join()
-    return stored, pages
+    return new, pages
 
 
 @pytest.mark.parametrize(
@@ -432,7 +438,7 @@ def test_the_browser_picker_signs_in_with_only_the_scopes_kept(
 ):
     httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
 
-    stored, pages = _browse_picker(base_url, lambda picker: [_Submit(fields=submit(picker))])
+    new, pages = _browse_picker(base_url, lambda picker: [_Submit(fields=submit(picker))])
 
     picker_page, chosen, callback = pages
     assert picker_page.status == 200
@@ -450,8 +456,7 @@ def test_the_browser_picker_signs_in_with_only_the_scopes_kept(
     assert (chosen.location or "").startswith(f"{AUTHORIZE}?")
     assert _query(chosen.location or "")["scope"] == " ".join([*requested, "offline_access"])
     assert callback.outcome == LOGGED_IN
-    assert stored.scopes == requested
-    assert store.get(base_url) == ActiveLogin(login=stored)
+    assert new.scopes == _stored(store, base_url).scopes == requested
 
 
 CHOOSE_ACCESS = (400, "Choose access")
@@ -487,7 +492,7 @@ def test_the_picker_accepts_one_post_with_this_logins_nonce_and_a_scope(
         valid = _Submit(fields=[("n", picker.nonce), ("scope", "regions:write")])
         return [attempt(picker.nonce), valid, valid]
 
-    stored, pages = _browse_picker(base_url, choose)
+    new, pages = _browse_picker(base_url, choose)
 
     _, refused, chosen, reused, callback = pages
     assert refused.outcome == refusal
@@ -498,8 +503,7 @@ def test_the_picker_accepts_one_post_with_this_logins_nonce_and_a_scope(
     assert _query(chosen.location or "")["scope"] == "regions:write offline_access"
     assert reused.outcome == (400, "Link already used")
     assert callback.outcome == LOGGED_IN
-    assert stored.scopes == ("regions:write",)
-    assert store.get(base_url) == ActiveLogin(login=stored)
+    assert new.scopes == _stored(store, base_url).scopes == ("regions:write",)
 
 
 @pytest.mark.parametrize(
@@ -522,7 +526,7 @@ def test_device_login_asks_for_the_scopes_before_requesting_the_code(
         asked.append(offered)
         return answer
 
-    def attempt() -> StoredLogin:
+    def attempt() -> NewLogin:
         return login(
             base_url, DeviceLogin(), output=print, verify=_keep, scopes=PickScopes(ask=ask)
         )
@@ -534,9 +538,11 @@ def test_device_login_asks_for_the_scopes_before_requesting_the_code(
     else:
         httpx2_mock.add_response(method="POST", url=DEVICE_ENDPOINT, json=DEVICE_AUTHORIZATION)
         httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
-        stored = attempt()
+        attempt()
         assert form(httpx2_mock.get_requests(url=DEVICE_ENDPOINT)[0])["scope"] == requested
-        assert " ".join(stored.scopes) == requested.removesuffix(" offline_access")
+        assert " ".join(_stored(store, base_url).scopes) == requested.removesuffix(
+            " offline_access"
+        )
     assert asked == [tuple(PICKER_SCOPES)]
 
 
@@ -1166,8 +1172,8 @@ def test_device_login_polls_at_the_server_interval(
     messages = []
 
     if error is None:
-        stored = login(base_url, DeviceLogin(), output=messages.append, verify=_keep)
-        assert stored.refresh_token.get_secret_value() == "fresh-refresh"
+        login(base_url, DeviceLogin(), output=messages.append, verify=_keep)
+        assert _stored(store, base_url).refresh_token.get_secret_value() == "fresh-refresh"
         assert store.default_url() == base_url
     else:
         with pytest.raises(LoginError, match=error):

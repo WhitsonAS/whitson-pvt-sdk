@@ -357,6 +357,36 @@ def test_login_whose_identity_check_fails_keeps_the_previous_default(
     _no_secrets(result)
 
 
+def test_login_rejected_by_the_deployment_reports_its_reason_and_leaves_the_old_login(
+    base_url, httpx2_mock, monkeypatch, store, store_login
+):
+    store_login(base_url, access="old-access", refresh="old-refresh", client_id="old-client")
+    with store.transaction() as transaction:
+        transaction.mark_invalid(base_url, "the authorization server refused to renew it")
+    before = store.get(base_url)
+    _device_login_server(base_url, httpx2_mock, monkeypatch)
+    me = f"{base_url}/external/v2/me"
+    httpx2_mock.add_response(
+        url=me, status_code=401, json={"message": "This account has no whitsonPVT user here."}
+    )
+
+    result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
+
+    assert result.exit_code == 3
+    assert json.loads(result.stderr.splitlines()[-1])["message"] == (
+        f"{base_url} rejected the new login: This account has no whitsonPVT user here."
+    )
+    assert [request.headers["Authorization"] for request in httpx2_mock.get_requests(url=me)] == [
+        "Bearer stored-access"
+    ]
+    assert all(
+        form(request)["grant_type"] != "refresh_token"
+        for request in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)
+    )
+    assert store.get(base_url) == before
+    _no_secrets(result)
+
+
 @pytest.mark.parametrize(
     ("options", "requested"),
     [
