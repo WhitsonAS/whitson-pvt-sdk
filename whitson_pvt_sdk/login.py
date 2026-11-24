@@ -57,6 +57,7 @@ __all__ = [
     "IssuerChanged",
     "LoggedOut",
     "LoginMethod",
+    "NewLogin",
     "PickScopes",
     "ScopeChoice",
     "login",
@@ -113,6 +114,13 @@ ScopeChoice = AllScopes | ChosenScopes | PickScopes
 Revocation = Literal["revoked", "not_offered", "failed", "skipped"]
 
 
+class NewLogin(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    stored: StoredLogin
+    granted: tuple[str, ...]
+
+
 class LoggedOut(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -126,7 +134,7 @@ def login(
     method: LoginMethod,
     *,
     output: Callable[[str], None],
-    verify: Callable[[StoredLogin], _Verified],
+    verify: Callable[[NewLogin], _Verified],
     scopes: ScopeChoice = AllScopes(),
     confirm: Callable[[Confirmation], bool] | None = None,
     trust_host: bool = False,
@@ -180,7 +188,7 @@ def login(
         refresh_token=token.refresh_token,
         expires_at=token.expires_at(),
     )
-    verified = verify(stored)
+    verified = verify(NewLogin(stored=stored, granted=token.granted(authorized.scopes)))
     with CredentialStore.from_environment().transaction() as transaction:
         transaction.put(stored)
         transaction.set_default(stored.base_url)

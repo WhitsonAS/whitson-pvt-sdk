@@ -259,7 +259,9 @@ DEVICE_AUTHORIZATION = f"{ISSUER}oauth/device/code"
 OFFERED_SCOPES = ["regions:read", "regions:write", "samples:read", "calculations:run"]
 
 
-def _device_login_server(base_url, httpx2_mock, monkeypatch, scopes=("read:data",)) -> None:
+def _device_login_server(
+    base_url, httpx2_mock, monkeypatch, scopes=("read:data",), issued: str | None = None
+) -> None:
     monkeypatch.setattr("whitson_pvt_sdk.login.time.sleep", lambda _: None)
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config", json=auth_config(scopes=scopes)
@@ -291,6 +293,7 @@ def _device_login_server(base_url, httpx2_mock, monkeypatch, scopes=("read:data"
             "refresh_token": "stored-refresh",
             "token_type": "Bearer",
             "expires_in": 3600,
+            **({} if issued is None else {"scope": issued}),
         },
     )
 
@@ -309,7 +312,11 @@ def test_device_login_makes_the_login_the_default_and_prints_who(
     result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", "--json"])
 
     assert result.exit_code == 0, result.stderr
-    assert json.loads(result.stdout) == {"url": base_url, "identity": IDENTITY, "not_granted": []}
+    assert json.loads(result.stdout) == {
+        "url": base_url,
+        "identity": IDENTITY,
+        "not_granted": {"by_server": [], "by_role": []},
+    }
     assert "WXYZ-1234" in result.stderr
     assert [
         r.headers["Authorization"]
@@ -409,13 +416,30 @@ def test_login_refuses_scopes_the_deployment_does_not_offer_before_signing_in(
     assert store.get(base_url) is None
 
 
+BY_SERVER = "Not granted by the login server: "
+BY_ROLE = "Not granted: "
+
+
 @pytest.mark.parametrize("json_output", [False, True], ids=["text", "json"])
-def test_login_reports_scopes_the_role_did_not_grant(
-    base_url, httpx2_mock, monkeypatch, json_output
+@pytest.mark.parametrize(
+    ("issued", "allowed", "by_server", "by_role"),
+    [
+        (None, ["regions:read", "samples:read"], [], ["regions:write"]),
+        ("offline_access", [], ["regions:read", "regions:write", "samples:read"], []),
+        (
+            "regions:read regions:write offline_access",
+            ["regions:read"],
+            ["samples:read"],
+            ["regions:write"],
+        ),
+    ],
+    ids=["role-without-scope-field", "server-dropped-all", "server-and-role"],
+)
+def test_login_reports_whether_the_server_or_the_role_did_not_grant_a_scope(
+    base_url, httpx2_mock, monkeypatch, json_output, issued, allowed, by_server, by_role
 ):
-    _device_login_server(base_url, httpx2_mock, monkeypatch, OFFERED_SCOPES)
-    granted = ["regions:read", "samples:read"]
-    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json={**ME, "scopes": granted})
+    _device_login_server(base_url, httpx2_mock, monkeypatch, OFFERED_SCOPES, issued)
+    httpx2_mock.add_response(url=f"{base_url}/external/v2/me", json={**ME, "scopes": allowed})
 
     scopes = ["--scope", "read", "--scope", "regions:write"]
     output = ["--json"] if json_output else []
@@ -423,9 +447,22 @@ def test_login_reports_scopes_the_role_did_not_grant(
 
     assert result.exit_code == 0, result.stderr
     if json_output:
-        assert json.loads(result.stdout)["not_granted"] == ["regions:write"]
-    else:
-        assert "Not granted: regions:write. Your role on" in result.stdout
+        assert json.loads(result.stdout)["not_granted"] == {
+            "by_server": by_server,
+            "by_role": by_role,
+        }
+        return
+    expected = [
+        *(
+            [f"{BY_SERVER}{', '.join(by_server)}. It left them out of the token"]
+            if by_server
+            else []
+        ),
+        *([f"{BY_ROLE}{', '.join(by_role)}. Your role on {base_url} does not"] if by_role else []),
+    ]
+    reported = [line for line in result.stdout.splitlines() if line.startswith("Not granted")]
+    for line, start in zip(reported, expected, strict=True):
+        assert line.startswith(start)
 
 
 @pytest.mark.parametrize(

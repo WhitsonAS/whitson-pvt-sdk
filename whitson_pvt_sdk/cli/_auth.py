@@ -19,7 +19,7 @@ from whitson_pvt_sdk.auth import (
     resolve_credential,
 )
 from whitson_pvt_sdk.cli._output import JsonOption, emit, note, reporting
-from whitson_pvt_sdk.credentials import Credential, StoredLogin
+from whitson_pvt_sdk.credentials import Credential
 from whitson_pvt_sdk.errors import AuthError, ConfigurationError
 from whitson_pvt_sdk.http import HTTPTransport
 from whitson_pvt_sdk.login import (
@@ -30,6 +30,7 @@ from whitson_pvt_sdk.login import (
     Confirmation,
     DeviceLogin,
     LoggedOut,
+    NewLogin,
     PickScopes,
     ScopeChoice,
     login,
@@ -59,10 +60,15 @@ UrlOption = Annotated[
 ]
 
 
+class NotGranted(BaseModel):
+    by_server: list[str]
+    by_role: list[str]
+
+
 class LoginReport(BaseModel):
     url: str
     identity: Identity
-    not_granted: list[str]
+    not_granted: NotGranted
 
 
 class CredentialReport(BaseModel):
@@ -302,23 +308,39 @@ def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:
     ]
 
 
-def _login_report(stored: StoredLogin) -> LoginReport:
+def _login_report(new: NewLogin) -> LoginReport:
+    stored = new.stored
     identity = _identity(stored, stored.base_url)
     match identity:
         case ApiTokenIdentity() | UserTokenIdentity():
-            not_granted = [scope for scope in stored.scopes if scope not in identity.scopes]
+            by_role = [scope for scope in new.granted if scope not in identity.scopes]
         case LegacyClientIdentity():
-            not_granted = []
-    return LoginReport(url=stored.base_url, identity=identity, not_granted=not_granted)
+            by_role = []
+    return LoginReport(
+        url=stored.base_url,
+        identity=identity,
+        not_granted=NotGranted(
+            by_server=[scope for scope in stored.scopes if scope not in new.granted],
+            by_role=by_role,
+        ),
+    )
 
 
 def _narrower(report: LoginReport) -> str:
-    if not report.not_granted:
-        return ""
-    return (
-        f"\nNot granted: {', '.join(report.not_granted)}. Your role on {report.url} does not "
-        "allow them, so logging in again does not add them."
-    )
+    missing = report.not_granted
+    lines = []
+    if missing.by_server:
+        lines.append(
+            f"Not granted by the login server: {', '.join(missing.by_server)}. It left them out "
+            "of the token, so logging in again does not add them; ask the administrator of "
+            f"{report.url} about them."
+        )
+    if missing.by_role:
+        lines.append(
+            f"Not granted: {', '.join(missing.by_role)}. Your role on {report.url} does not "
+            "allow them, so logging in again does not add them."
+        )
+    return "".join(f"\n{line}" for line in lines)
 
 
 def _identity(credential: Credential, base_url: str) -> Identity:

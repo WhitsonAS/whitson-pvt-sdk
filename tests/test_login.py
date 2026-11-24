@@ -25,6 +25,7 @@ from whitson_pvt_sdk.login import (
     DeviceLogin,
     FirstUse,
     IssuerChanged,
+    NewLogin,
     PickScopes,
     login,
 )
@@ -73,8 +74,8 @@ def _accept(_: Confirmation) -> bool:
     return True
 
 
-def _keep(stored: StoredLogin) -> StoredLogin:
-    return stored
+def _keep(new: NewLogin) -> StoredLogin:
+    return new.stored
 
 
 class _NoRedirects(urllib.request.HTTPRedirectHandler):

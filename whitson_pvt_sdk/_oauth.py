@@ -44,6 +44,7 @@ class TokenResponse(BaseModel):
     access_token: SecretStr
     refresh_token: SecretStr | None = None
     expires_in: int = Field(gt=0)
+    scope: str | None = None
 
     @field_validator("token_type")
     @classmethod
@@ -54,6 +55,12 @@ class TokenResponse(BaseModel):
 
     def expires_at(self) -> datetime:
         return datetime.now(UTC) + timedelta(seconds=self.expires_in)
+
+    def granted(self, requested: tuple[str, ...]) -> tuple[str, ...]:
+        if self.scope is None:
+            return requested
+        issued = self.scope.split()
+        return tuple(scope for scope in requested if scope in issued)
 
 
 class OAuthError(BaseModel):

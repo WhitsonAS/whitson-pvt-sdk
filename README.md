@@ -326,9 +326,11 @@ Logged out of https://example.pvt.whitson.com; the refresh token was revoked.
   `offline_access` for the refresh token. `--scope` (repeatable) requests only the scopes named,
   and `--scope read` every `*:read` scope, for example a read-only login for `wpvt mcp`:
   `wpvt auth login --scope read`. A scope the deployment does not offer is refused before the
-  browser opens, with the list of valid ones. Your role can still narrow the grant (write scopes
-  need an editor role); the login then names the scopes not granted (`not_granted` with
-  `--json`). Renewing the login keeps its scopes; to change them, log in again.
+  browser opens, with the list of valid ones. The login server can leave scopes out of the
+  token, and your role can still narrow what the token holds (write scopes need an editor role);
+  the login then names the scopes not granted, each group under its cause (`not_granted.by_server`
+  and `not_granted.by_role` with `--json`). Renewing the login keeps its scopes; to change them,
+  log in again.
   `--choose` lets you pick the scopes instead of naming them (not together with `--scope`): the
   one-time link first shows a page on the listener with a checkbox for each offered scope,
   grouped into read, calculations and other actions, and write, all checked, plus a "Read only"
