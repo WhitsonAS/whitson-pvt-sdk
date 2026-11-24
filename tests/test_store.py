@@ -8,9 +8,8 @@ from keyring.backend import KeyringBackend
 from keyring.backends import fail
 from keyring.errors import KeyringLocked, PasswordDeleteError
 
-from tests.conftest import EMPTY_PAGE, make_login
+from tests.conftest import EMPTY_PAGE, active_login, make_login
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk._store import ActiveLogin
 from whitson_pvt_sdk.errors import ConfigurationError, CredentialStoreBusyError
 from whitson_pvt_sdk.login import logout
 
@@ -149,9 +148,7 @@ def test_replacing_the_credentials_file_is_retried_while_it_is_open(
         save()
         expected = "second"
 
-    entry = store.get(base_url)
-    assert isinstance(entry, ActiveLogin)
-    assert entry.login.access_token.get_secret_value() == expected
+    assert active_login(store, base_url).access_token.get_secret_value() == expected
     assert [path.name for path in store.path.parent.iterdir() if path.suffix == ".tmp"] == []
 
 

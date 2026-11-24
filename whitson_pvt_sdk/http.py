@@ -17,6 +17,7 @@ from whitson_pvt_sdk.errors import (
     NotFoundError,
     RateLimitError,
     RequestRefusedError,
+    ResponseError,
     ValidationError,
 )
 from whitson_pvt_sdk.shared.models import ApiResponse, HTTPMethod, RetryConfig
@@ -179,56 +180,32 @@ def raise_for_status(response: httpx2.Response) -> None:
     logger.warning(
         "API request failed: status=%s request_id=%s message=%s", status, request_id, message
     )
-    match status:
+    if status == 429:
+        raise RateLimitError(
+            message,
+            status,
+            response_body=body,
+            request_id=request_id,
+            server_message=server_message,
+            retry_after_seconds=retry_after(response),
+        )
+    raise _error_type(response)(
+        message, status, response_body=body, request_id=request_id, server_message=server_message
+    )
+
+
+def _error_type(response: httpx2.Response) -> type[ResponseError]:
+    match response.status_code:
         case 401 | 403:
-            raise AuthError(
-                message,
-                status,
-                response_body=body,
-                request_id=request_id,
-                server_message=server_message,
-            )
+            return AuthError
         case 404:
-            raise NotFoundError(
-                message,
-                status,
-                response_body=body,
-                request_id=request_id,
-                server_message=server_message,
-            )
+            return NotFoundError
         case 400 | 422:
-            raise ValidationError(
-                message,
-                status,
-                response_body=body,
-                request_id=request_id,
-                server_message=server_message,
-            )
-        case 429:
-            raise RateLimitError(
-                message,
-                status,
-                response_body=body,
-                request_id=request_id,
-                server_message=server_message,
-                retry_after_seconds=retry_after(response),
-            )
-        case _ if response.is_client_error and status != 408:
-            raise RequestRefusedError(
-                message,
-                status,
-                response_body=body,
-                request_id=request_id,
-                server_message=server_message,
-            )
+            return ValidationError
+        case status if response.is_client_error and status != 408:
+            return RequestRefusedError
         case _:
-            raise APIError(
-                message,
-                status,
-                response_body=body,
-                request_id=request_id,
-                server_message=server_message,
-            )
+            return APIError
 
 
 def _server_message(body: object) -> str | None:

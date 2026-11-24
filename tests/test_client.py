@@ -20,7 +20,7 @@ def test_passes_timeout_config(base_url, httpx2_mock):
     client = WhitsonPVTClient(token="t", base_url=base_url, timeout=12.5, file_timeout=19.5)
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/regions",
-        json={"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}},
+        json=EMPTY_PAGE,
     )
     httpx2_mock.add_response(url=f"{base_url}/external/v2/reports/1/export", content=b"zip")
     client.regions.list()

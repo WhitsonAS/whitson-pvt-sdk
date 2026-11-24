@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from whitson_pvt_sdk._trust import InsecureUrlError, SecureUrl
-from whitson_pvt_sdk.credentials import StoredLogin, host_name, same_origin
+from whitson_pvt_sdk.credentials import StoredLogin, host_name, same_issuer, same_origin
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, NoResponseError
 
 HTTP_TIMEOUT_SECONDS = 30.0
@@ -86,21 +86,6 @@ class DeviceAuthorization(BaseModel):
     interval: int = Field(default=5, gt=0)
 
 
-class TokenGranted(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    token: TokenResponse
-
-
-class TokenRefused(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    error: OAuthError
-
-
-TokenResult = TokenGranted | TokenRefused
-
-
 def oauth_client() -> httpx2.Client:
     return httpx2.Client(timeout=HTTP_TIMEOUT_SECONDS)
 
@@ -116,7 +101,7 @@ def fetch_auth_config(http: httpx2.Client, base_url: str) -> AuthConfig:
 def discover(http: httpx2.Client, issuer: str) -> ProviderMetadata:
     url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
     metadata = _parse_response(ProviderMetadata, _send(http, "GET", url), url)
-    if metadata.issuer.rstrip("/") != issuer.rstrip("/"):
+    if not same_issuer(metadata.issuer, issuer):
         raise LoginError(f"{url} describes the issuer {metadata.issuer}, not {issuer}.")
     if not same_origin(metadata.authorization_endpoint, issuer):
         raise LoginError(
@@ -135,14 +120,6 @@ def post_oauth(
     return _parse_response(model, response, url)
 
 
-def request_token(http: httpx2.Client, token_endpoint: str, form: dict[str, str]) -> TokenResult:
-    match post_oauth(http, token_endpoint, form, TokenResponse):
-        case OAuthError() as error:
-            return TokenRefused(error=error)
-        case TokenResponse() as token:
-            return TokenGranted(token=token)
-
-
 def _parse_oauth_error(response: httpx2.Response, url: str) -> OAuthError:
     try:
         return OAuthError.model_validate_json(response.content)
@@ -151,16 +128,6 @@ def _parse_oauth_error(response: httpx2.Response, url: str) -> OAuthError:
             f"{url} answered HTTP {response.status_code} without an OAuth error",
             response.status_code,
         ) from None
-
-
-def refreshed_login(login: StoredLogin, token: TokenResponse) -> StoredLogin:
-    return login.model_copy(
-        update={
-            "access_token": token.access_token,
-            "refresh_token": token.refresh_token or login.refresh_token,
-            "expires_at": token.expires_at(),
-        }
-    )
 
 
 def revoke_refresh_token(http: httpx2.Client, endpoint: str, login: StoredLogin) -> bool:

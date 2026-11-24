@@ -5,7 +5,13 @@ from typing import Annotated
 import httpx2
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from whitson_pvt_sdk.credentials import host_name, normalise_url, origin, same_origin
+from whitson_pvt_sdk.credentials import (
+    host_name,
+    normalise_url,
+    origin,
+    same_issuer,
+    same_origin,
+)
 from whitson_pvt_sdk.errors import ConfigurationError, LoginError
 
 
@@ -247,7 +253,7 @@ def login_decision(
                         issuer_host=host_name(issuer),
                         foreign_audience=foreign_audience,
                     )
-                case Remembered(issuer=previous) if previous.rstrip("/") != issuer.rstrip("/"):
+                case Remembered(issuer=previous) if not same_issuer(previous, issuer):
                     return IssuerChanged(
                         deployment_host=deployment_host,
                         issuer_host=host_name(issuer),

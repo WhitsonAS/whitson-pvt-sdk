@@ -7,8 +7,17 @@ import httpx2
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form
-from whitson_pvt_sdk._store import ActiveLogin
+from tests.conftest import (
+    DEVICE_ENDPOINT,
+    DISCOVERY,
+    ISSUER,
+    PROVIDER,
+    ROLE_NOT_CONFIRMED,
+    TOKEN_ENDPOINT,
+    active_login,
+    auth_config,
+    form,
+)
 from whitson_pvt_sdk.cli._app import app
 from whitson_pvt_sdk.cli._auth import _open_browser
 
@@ -82,12 +91,6 @@ def test_status_reports_the_credential_and_identity(
     _no_secrets(text)
 
 
-ROLE_NOT_CONFIRMED = (
-    "Your whitsonPVT role has not been confirmed in the last 30 days; sign in to the whitsonPVT "
-    "web app, then try again"
-)
-
-
 @pytest.mark.parametrize(
     ("setup", "exit_code", "kind", "message", "absent"),
     [
@@ -151,12 +154,7 @@ def test_logout_removes_the_login_and_revokes_its_refresh_token(
     store_login(base_url, access="stored-access", refresh="stored-refresh")
     httpx2_mock.add_response(
         url=DISCOVERY,
-        json={
-            "issuer": ISSUER,
-            "authorization_endpoint": f"{ISSUER}authorize",
-            "token_endpoint": TOKEN_ENDPOINT,
-            "revocation_endpoint": REVOKE,
-        },
+        json={**PROVIDER, "revocation_endpoint": REVOKE},
     )
     httpx2_mock.add_response(method="POST", url=REVOKE)
 
@@ -183,11 +181,7 @@ def test_logout_all_without_revocation_removes_every_login(httpx2_mock, store, s
         store_login(url)
     httpx2_mock.add_response(
         url=DISCOVERY,
-        json={
-            "issuer": ISSUER,
-            "authorization_endpoint": f"{ISSUER}authorize",
-            "token_endpoint": TOKEN_ENDPOINT,
-        },
+        json=PROVIDER,
         is_reusable=True,
     )
 
@@ -255,7 +249,6 @@ def test_trust_host_does_not_apply_to_a_url_from_the_environment(httpx2_mock, mo
     assert httpx2_mock.get_requests() == []
 
 
-DEVICE_AUTHORIZATION = f"{ISSUER}oauth/device/code"
 OFFERED_SCOPES = ["regions:read", "regions:write", "samples:read", "calculations:run"]
 
 
@@ -266,18 +259,10 @@ def _device_login_server(
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config", json=auth_config(scopes=scopes)
     )
-    httpx2_mock.add_response(
-        url=DISCOVERY,
-        json={
-            "issuer": ISSUER,
-            "authorization_endpoint": f"{ISSUER}authorize",
-            "token_endpoint": TOKEN_ENDPOINT,
-            "device_authorization_endpoint": DEVICE_AUTHORIZATION,
-        },
-    )
+    httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
     httpx2_mock.add_response(
         method="POST",
-        url=DEVICE_AUTHORIZATION,
+        url=DEVICE_ENDPOINT,
         json={
             "device_code": "device-secret",
             "user_code": "WXYZ-1234",
@@ -409,11 +394,9 @@ def test_login_requests_the_chosen_scopes_and_offline_access(
     result = runner.invoke(app, ["auth", "login", "--url", base_url, "--device", *options])
 
     assert result.exit_code == 0, result.stderr
-    assert form(httpx2_mock.get_requests(url=DEVICE_AUTHORIZATION)[0])["scope"] == requested
+    assert form(httpx2_mock.get_requests(url=DEVICE_ENDPOINT)[0])["scope"] == requested
     assert "Not granted" not in result.stdout
-    entry = store.get(base_url)
-    assert isinstance(entry, ActiveLogin)
-    assert list(entry.login.scopes) == granted
+    assert list(active_login(store, base_url).scopes) == granted
 
 
 @pytest.mark.parametrize(

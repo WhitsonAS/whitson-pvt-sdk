@@ -53,6 +53,10 @@ def same_origin(a: str | httpx2.URL, b: str | httpx2.URL) -> bool:
     )
 
 
+def same_issuer(a: str, b: str) -> bool:
+    return a.rstrip("/") == b.rstrip("/")
+
+
 class ApiToken(BaseModel):
     model_config = ConfigDict(frozen=True)
 

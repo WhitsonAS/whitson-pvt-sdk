@@ -2,10 +2,12 @@ import os
 import re
 import sys
 import webbrowser
+from collections.abc import Callable
+from functools import partial
 from typing import Annotated, Literal
 
 import typer
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from whitson_pvt_sdk._store import KEYRING_SERVICE, keyring_names
 from whitson_pvt_sdk.auth import (
@@ -72,8 +74,16 @@ class LoginReport(BaseModel):
 
 
 class CredentialReport(BaseModel):
-    kind: Literal["api_token", "stored_login"]
     source: Literal["argument", "environment", "store"]
+
+    @computed_field
+    @property
+    def kind(self) -> Literal["api_token", "stored_login"]:
+        match self.source:
+            case "store":
+                return "stored_login"
+            case "argument" | "environment":
+                return "api_token"
 
 
 class StatusReport(BaseModel):
@@ -196,19 +206,13 @@ def status_command(url: UrlOption = None, json_output: JsonOption = False) -> No
     with reporting(json_output=json_output):
         resolved = resolve_credential(url, token=None)
         target = resolved.url
-        match resolved:
-            case FromStore():
-                credential = CredentialReport(kind="stored_login", source=resolved.source)
-            case FromEnvironment() | FromArgument():
-                credential = CredentialReport(kind="api_token", source=resolved.source)
-        try:
-            identity = _identity(resolved.credential, target)
-        except AuthError as exc:
-            raise AuthError(
-                f"{target} rejected the credential: {exc.message}.{_next_step(resolved, exc)}",
-                exc.status_code,
-                request_id=exc.request_id,
-            ) from exc
+        credential = CredentialReport(source=resolved.source)
+        identity = _identity(
+            resolved.credential,
+            target,
+            rejected="the credential",
+            next_step=partial(_next_step, resolved),
+        )
         emit(
             StatusReport(url=target, credential=credential, identity=identity),
             "\n".join(
@@ -309,14 +313,7 @@ def _ask_at_terminal(offered: tuple[str, ...]) -> list[str]:
 
 
 def _login_report(new: NewLogin) -> LoginReport:
-    try:
-        identity = _identity(new.credential, new.url)
-    except AuthError as exc:
-        raise AuthError(
-            f"{new.url} rejected the new login: {exc.message.rstrip('.')}.",
-            exc.status_code,
-            request_id=exc.request_id,
-        ) from exc
+    identity = _identity(new.credential, new.url, rejected="the new login")
     match identity:
         case ApiTokenIdentity() | UserTokenIdentity():
             by_role = [scope for scope in new.granted if scope not in identity.scopes]
@@ -349,10 +346,22 @@ def _narrower(report: LoginReport) -> str:
     return "".join(f"\n{line}" for line in lines)
 
 
-def _identity(credential: Credential, base_url: str) -> Identity:
+def _identity(
+    credential: Credential,
+    base_url: str,
+    *,
+    rejected: str,
+    next_step: Callable[[AuthError], str] = lambda _: "",
+) -> Identity:
     transport = HTTPTransport(credential, base_url)
     try:
         return Me(transport).get()
+    except AuthError as exc:
+        raise AuthError(
+            f"{base_url} rejected {rejected}: {exc.message.rstrip('.')}.{next_step(exc)}",
+            exc.status_code,
+            request_id=exc.request_id,
+        ) from exc
     finally:
         transport.close()
 

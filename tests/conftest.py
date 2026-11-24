@@ -11,13 +11,29 @@ from keyring.backends import fail
 from pydantic import SecretStr
 
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk._store import CredentialStore
+from whitson_pvt_sdk._store import ActiveLogin, CredentialStore
 from whitson_pvt_sdk.credentials import ApiToken, StoredLogin
 from whitson_pvt_sdk.http import HTTPTransport
 
 ISSUER = "https://whitson.eu.auth0.com/"
 TOKEN_ENDPOINT = "https://whitson.eu.auth0.com/oauth/token"
 DISCOVERY = f"{ISSUER}.well-known/openid-configuration"
+AUTHORIZE = f"{ISSUER}authorize"
+DEVICE_ENDPOINT = f"{ISSUER}oauth/device/code"
+PROVIDER = {
+    "issuer": ISSUER,
+    "authorization_endpoint": AUTHORIZE,
+    "token_endpoint": TOKEN_ENDPOINT,
+    "device_authorization_endpoint": DEVICE_ENDPOINT,
+}
+ROLE_NOT_CONFIRMED = (
+    "Your whitsonPVT role has not been confirmed in the last 30 days; sign in to the whitsonPVT "
+    "web app, then try again"
+)
+NAMELESS_WELL = {
+    f"{name}_name": None
+    for name in ("basin", "field", "field_segment", "formation", "formation_zone", "sub_basin")
+}
 
 EMPTY_PAGE = {"regions": [], "pagination": {"next_cursor": None, "prev_cursor": None}}
 
@@ -42,13 +58,16 @@ def auth_config(
     device_login: bool | None = True,
     audience: str = "https://dev.pvt.whitson.com/mcp",
     scopes: Sequence[str] = ("read:data",),
+    connection: str | None = None,
 ) -> dict[str, Any]:
-    config = {
+    config: dict[str, Any] = {
         "issuer": issuer,
         "client_id": "cli-client",
         "audience": audience,
         "scopes": list(scopes),
     }
+    if connection is not None:
+        config["connection"] = connection
     return config if device_login is None else {**config, "device_login": device_login}
 
 
@@ -115,6 +134,12 @@ def make_login(
         refresh_token=SecretStr(refresh),
         expires_at=datetime.now(UTC) + expires_in,
     )
+
+
+def active_login(store: CredentialStore, base_url: str) -> StoredLogin:
+    entry = store.get(base_url)
+    assert isinstance(entry, ActiveLogin)
+    return entry.login
 
 
 @pytest.fixture

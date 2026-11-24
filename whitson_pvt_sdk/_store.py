@@ -107,6 +107,13 @@ class _Document(BaseModel):
     default: DeploymentUrl | None = None
     profiles: dict[DeploymentUrl, _Profile] = Field(default_factory=dict)
 
+    def profile(self, base_url: str) -> _Profile | None:
+        return self.profiles.get(normalise_url(base_url))
+
+    def entry(self, base_url: str) -> StoreEntry | None:
+        profile = self.profile(base_url)
+        return None if profile is None else _load_entry(profile)
+
 
 def config_directory() -> Path:
     if sys.platform == "win32":
@@ -121,11 +128,11 @@ def config_directory() -> Path:
 class StoreTransaction:
     def __init__(self, document: _Document) -> None:
         self._document = document
+        self._unchanged = document.model_dump_json()
         self._written: set[str] = set()
 
     def get(self, base_url: str) -> StoreEntry | None:
-        profile = self._document.profiles.get(normalise_url(base_url))
-        return None if profile is None else _load_entry(profile)
+        return self._document.entry(base_url)
 
     def urls(self) -> list[str]:
         return list(self._document.profiles)
@@ -167,6 +174,16 @@ class StoreTransaction:
             keyring=_delete_secrets(profile),
         )
 
+    def document_to_write(self) -> _Document | None:
+        if not self._written and self._document.model_dump_json() == self._unchanged:
+            return None
+        backend = _keyring()
+        for key in self._written:
+            profile = self._document.profiles[key]
+            if isinstance(profile.secrets, _FileSecrets):
+                profile.secrets = _secrets(backend, key, profile.secrets)
+        return self._document
+
 
 class CredentialStore:
     def __init__(self, directory: Path) -> None:
@@ -179,11 +196,10 @@ class CredentialStore:
         return cls(config_directory())
 
     def get(self, base_url: str) -> StoreEntry | None:
-        profile = self._read().profiles.get(normalise_url(base_url))
-        return None if profile is None else _load_entry(profile)
+        return self._read().entry(base_url)
 
     def remembered(self, base_url: str) -> Remembered | None:
-        profile = self._read().profiles.get(normalise_url(base_url))
+        profile = self._read().profile(base_url)
         if profile is None:
             return None
         return Remembered(issuer=profile.issuer, audience=profile.audience)
@@ -194,12 +210,11 @@ class CredentialStore:
     @contextmanager
     def transaction(self) -> Iterator[StoreTransaction]:
         with self._locked():
-            document = self._read()
-            unchanged = document.model_dump_json()
-            transaction = StoreTransaction(document)
+            transaction = StoreTransaction(self._read())
             yield transaction
-            if transaction._written or document.model_dump_json() != unchanged:
-                self._commit(transaction)
+            document = transaction.document_to_write()
+            if document is not None:
+                self._write(document)
 
     def _read(self) -> _Document:
         try:
@@ -216,15 +231,6 @@ class CredentialStore:
                 f"{self.path} is not a valid whitson PVT credentials file. "
                 "Remove it and run `wpvt auth login`."
             ) from None
-
-    def _commit(self, transaction: StoreTransaction) -> None:
-        document = transaction._document
-        backend = _keyring()
-        for key in transaction._written:
-            profile = document.profiles[key]
-            if isinstance(profile.secrets, _FileSecrets):
-                profile.secrets = _secrets(backend, key, profile.secrets)
-        self._write(document)
 
     def _write(self, document: _Document) -> None:
         self._directory.mkdir(mode=0o700, parents=True, exist_ok=True)

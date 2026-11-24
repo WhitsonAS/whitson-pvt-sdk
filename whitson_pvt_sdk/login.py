@@ -7,6 +7,7 @@ import socketserver
 import sys
 import time
 from collections.abc import Callable, Collection
+from functools import cache
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Literal, TypeVar
 from urllib.parse import parse_qs, urlsplit
@@ -14,20 +15,24 @@ from urllib.parse import parse_qs, urlsplit
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from whitson_pvt_sdk._login_page import CONTENT_SECURITY_POLICY, Outcome, ScopeForm, login_page
+from whitson_pvt_sdk import _login_page
+from whitson_pvt_sdk._login_page import (
+    CONTENT_SECURITY_POLICY,
+    READ_SCOPES,
+    Outcome,
+    ScopeForm,
+    login_page,
+)
 from whitson_pvt_sdk._oauth import (
     AuthConfig,
     DeviceAuthorization,
     OAuthError,
     ProviderMetadata,
-    TokenGranted,
-    TokenRefused,
     TokenResponse,
     discover,
     fetch_auth_config,
     oauth_client,
     post_oauth,
-    request_token,
     revoke_refresh_token,
 )
 from whitson_pvt_sdk._store import CredentialStore, KeyringCleanup, RemovedLogin
@@ -85,8 +90,6 @@ class DeviceLogin(BaseModel):
 
 
 LoginMethod = BrowserLogin | DeviceLogin
-
-READ_SCOPES = "read"
 
 
 class AllScopes(BaseModel):
@@ -207,13 +210,13 @@ def login(
 def logout(base_url: str) -> LoggedOut | None:
     with CredentialStore.from_environment().transaction() as transaction:
         removed = transaction.remove(base_url)
-    return None if removed is None else _revoke(removed)
+    return None if removed is None else _revoke([removed])[0]
 
 
 def logout_all() -> list[LoggedOut]:
     with CredentialStore.from_environment().transaction() as transaction:
         removed = [transaction.remove(url) for url in transaction.urls()]
-    return [_revoke(entry) for entry in removed if entry is not None]
+    return _revoke([entry for entry in removed if entry is not None])
 
 
 def _addresses(host: str) -> list[str]:
@@ -239,6 +242,9 @@ class _Picker(BaseModel):
     url: str
     offered: tuple[str, ...]
     ask: _Ask
+
+    def choose(self, names: Collection[str]) -> tuple[str, ...]:
+        return _chosen_scopes(frozenset(names), self.offered, self.url)
 
 
 class _AwaitingStart(BaseModel):
@@ -346,24 +352,13 @@ def _browser_flow(
 ) -> _Authorized:
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
-    state = secrets.token_urlsafe(32)
-
-    def authorize_url(redirect_uri: str, scopes: tuple[str, ...]) -> str:
-        params = {
-            "response_type": "code",
-            "client_id": config.client_id,
-            "redirect_uri": redirect_uri,
-            "scope": _scope_parameter(scopes),
-            "audience": config.audience,
-            "state": state,
-            "code_challenge": challenge.decode().rstrip("="),
-            "code_challenge_method": "S256",
-        }
-        if config.connection is not None:
-            params["connection"] = config.connection
-        return str(httpx2.URL(provider.authorization_endpoint).copy_merge_params(params))
-
-    with _callback_server(state, authorize_url, first) as server:
+    authorize = _Authorize(
+        config=config,
+        endpoint=provider.authorization_endpoint,
+        state=secrets.token_urlsafe(32),
+        challenge=challenge.decode().rstrip("="),
+    )
+    with _callback_server(authorize, first) as server:
         if method.open_browser is not None and method.open_browser(server.start_url):
             output(f"Opened a browser to log in. If it did not open, visit:\n{server.start_url}")
         else:
@@ -374,7 +369,7 @@ def _browser_flow(
         outcome = server.wait(method.timeout)
     match outcome:
         case _CodeReceived(code=code, scopes=scopes):
-            result = request_token(
+            exchanged = post_oauth(
                 http,
                 provider.token_endpoint,
                 {
@@ -384,14 +379,15 @@ def _browser_flow(
                     "code_verifier": verifier,
                     "redirect_uri": server.redirect_uri,
                 },
+                TokenResponse,
             )
-            match result:
-                case TokenGranted(token=token):
+            match exchanged:
+                case TokenResponse() as token:
                     return _Authorized(token=token, scopes=scopes)
-                case TokenRefused(error=error):
-                    raise LoginError(f"The login was refused: {error.describe()}.")
+                case OAuthError() as error:
+                    raise _refused(error)
         case _AuthorizationRefused(error=error):
-            raise LoginError(f"The login was refused: {error.describe()}.")
+            raise _refused(error)
         case _StartedTwice():
             raise LoginError(
                 "The login link was opened more than once, so another program on this machine "
@@ -403,16 +399,39 @@ def _browser_flow(
             )
 
 
-_AuthorizeUrl = Callable[[str, tuple[str, ...]], str]
+def _refused(error: OAuthError) -> LoginError:
+    return LoginError(f"The login was refused: {error.describe()}.")
 
 
-def _callback_server(
-    state: str, authorize_url: _AuthorizeUrl, first: _Unstarted
-) -> "_CallbackServer":
+class _Authorize(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    config: AuthConfig
+    endpoint: str
+    state: str
+    challenge: str
+
+    def url(self, redirect_uri: str, scopes: tuple[str, ...]) -> str:
+        params = {
+            "response_type": "code",
+            "client_id": self.config.client_id,
+            "redirect_uri": redirect_uri,
+            "scope": _scope_parameter(scopes),
+            "audience": self.config.audience,
+            "state": self.state,
+            "code_challenge": self.challenge,
+            "code_challenge_method": "S256",
+        }
+        if self.config.connection is not None:
+            params["connection"] = self.config.connection
+        return str(httpx2.URL(self.endpoint).copy_merge_params(params))
+
+
+def _callback_server(authorize: _Authorize, first: _Unstarted) -> "_CallbackServer":
     failure: OSError | None = None
     for port in CALLBACK_PORTS:
         try:
-            return _CallbackServer(port, state, authorize_url, first)
+            return _CallbackServer(port, authorize, first)
         except OSError as exc:
             failure = exc
     raise LoginError(
@@ -427,25 +446,19 @@ class _CallbackServer(HTTPServer):
     # SO_REUSEADDR on Windows would let this bind over another program's listener on the port.
     allow_reuse_address = sys.platform != "win32"
 
-    def __init__(
-        self,
-        port: int,
-        state: str,
-        authorize_url: _AuthorizeUrl,
-        first: _Unstarted,
-    ) -> None:
+    def __init__(self, port: int, authorize: _Authorize, first: _Unstarted) -> None:
         super().__init__(("127.0.0.1", port), _CallbackHandler)
         origin = f"http://127.0.0.1:{self.server_address[1]}"
         nonce = secrets.token_urlsafe(32)
-        self.expected_state = state
+        self.expected_state = authorize.state
         self.expected_nonce = nonce
         self.redirect_uri = f"{origin}/callback"
         self.start_url = f"{origin}/start?n={nonce}"
-        self._authorize_url = authorize_url
+        self._authorize = authorize
         self.phase: _Listening | _Finished = first
 
     def authorize_url(self, scopes: tuple[str, ...]) -> str:
-        return self._authorize_url(self.redirect_uri, scopes)
+        return self._authorize.url(self.redirect_uri, scopes)
 
     def server_bind(self) -> None:
         socketserver.TCPServer.server_bind(self)
@@ -466,7 +479,6 @@ class _CallbackServer(HTTPServer):
                     return finished
 
 
-_SCOPES_PATH = "/scopes"
 _MAX_FORM_BYTES = 16384
 
 
@@ -482,9 +494,9 @@ class _CallbackHandler(BaseHTTPRequestHandler):
                 self.server.phase = _Started(scopes=scopes)
                 self._redirect(302, self.server.authorize_url(scopes))
             case ("/start", _AwaitingPick(picker=picker)) if self._nonce_matches(query):
-                picking = _Picking(picker=picker, nonce=secrets.token_urlsafe(32))
-                self.server.phase = picking
-                self._page(_scope_form(picking, refused=False))
+                nonce = secrets.token_urlsafe(32)
+                self.server.phase = _Picking(picker=picker, nonce=nonce)
+                self._page(ScopeForm(nonce=nonce, offered=picker.offered, refused=False))
             case ("/start", _Picking() | _Started()) if self._nonce_matches(query):
                 self.server.phase = _StartedTwice()
                 self._page("link_used")
@@ -496,20 +508,17 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         form = self._form()
         match (urlsplit(self.path).path, self.server.phase):
-            case (path, _Picking(nonce=nonce) as picking) if (
-                path == _SCOPES_PATH and form is not None and _matches(_single(form, "n"), nonce)
+            case (_login_page.SCOPES_PATH, _Picking(picker=picker, nonce=nonce)) if (
+                form is not None and _matches(_single(form, "n"), nonce)
             ):
-                picker = picking.picker
                 try:
-                    scopes = _chosen_scopes(
-                        frozenset(form.get("scope", [])), picker.offered, picker.url
-                    )
+                    scopes = picker.choose(form.get("scope", []))
                 except ConfigurationError:
-                    self._page(_scope_form(picking, refused=True))
+                    self._page(ScopeForm(nonce=nonce, offered=picker.offered, refused=True))
                     return
                 self.server.phase = _Started(scopes=scopes)
                 self._redirect(303, self.server.authorize_url(scopes))
-            case (path, _Started()) if path == _SCOPES_PATH:
+            case (_login_page.SCOPES_PATH, _Started()):
                 self._page("link_used")
             case _:
                 self._page("not_found")
@@ -567,12 +576,6 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
 
 
-def _scope_form(picking: _Picking, *, refused: bool) -> ScopeForm:
-    return ScopeForm(
-        action=_SCOPES_PATH, nonce=picking.nonce, offered=picking.picker.offered, refused=refused
-    )
-
-
 def _parse_callback(
     query: dict[str, list[str]], expected_state: str
 ) -> SecretStr | OAuthError | _StateMismatch:
@@ -613,8 +616,8 @@ def _device_flow(
     match first:
         case _AwaitingStart(scopes=scopes):
             pass
-        case _AwaitingPick(picker=_Picker(url=url, offered=offered, ask=ask)):
-            scopes = _chosen_scopes(frozenset(ask(offered)), offered, url)
+        case _AwaitingPick(picker=picker):
+            scopes = picker.choose(picker.ask(picker.offered))
     authorization = post_oauth(
         http,
         endpoint,
@@ -651,22 +654,22 @@ def _device_flow(
     }
     while True:
         time.sleep(interval)
-        match request_token(http, provider.token_endpoint, form):
-            case TokenGranted(token=token):
+        match post_oauth(http, provider.token_endpoint, form, TokenResponse):
+            case TokenResponse() as token:
                 return _Authorized(token=token, scopes=scopes)
-            case TokenRefused(error=OAuthError(error="authorization_pending" | "slow_down")) if (
+            case OAuthError(error="authorization_pending" | "slow_down") if (
                 time.monotonic() >= deadline
             ):
                 raise _device_expired()
-            case TokenRefused(error=OAuthError(error="authorization_pending")):
+            case OAuthError(error="authorization_pending"):
                 continue
-            case TokenRefused(error=OAuthError(error="slow_down")):
+            case OAuthError(error="slow_down"):
                 interval += _SLOW_DOWN_SECONDS
-            case TokenRefused(error=OAuthError(error="access_denied")):
+            case OAuthError(error="access_denied"):
                 raise LoginError("The login was denied in the browser.")
-            case TokenRefused(error=OAuthError(error="expired_token")):
+            case OAuthError(error="expired_token"):
                 raise _device_expired()
-            case TokenRefused(error=error):
+            case OAuthError() as error:
                 raise LoginError(f"The device login failed: {error.describe()}.")
 
 
@@ -674,20 +677,31 @@ def _device_expired() -> LoginError:
     return LoginError("The device code expired before the login was confirmed. Log in again.")
 
 
-def _revoke(removed: RemovedLogin) -> LoggedOut:
-    return LoggedOut(url=removed.base_url, revocation=_revocation(removed), keyring=removed.keyring)
+def _revoke(removed: list[RemovedLogin]) -> list[LoggedOut]:
+    with oauth_client() as http:
+        provider = cache(lambda issuer: discover(http, issuer))
+        return [
+            LoggedOut(
+                url=entry.base_url,
+                revocation=_revocation(http, provider, entry.login),
+                keyring=entry.keyring,
+            )
+            for entry in removed
+        ]
 
 
-def _revocation(removed: RemovedLogin) -> Revocation:
-    stored = removed.login
+def _revocation(
+    http: httpx2.Client,
+    provider: Callable[[str], ProviderMetadata],
+    stored: StoredLogin | None,
+) -> Revocation:
     if stored is None:
         return "skipped"
     try:
-        with oauth_client() as http:
-            endpoint = discover(http, stored.issuer).revocation_endpoint
-            if endpoint is None:
-                return "not_offered"
-            revoked = revoke_refresh_token(http, endpoint, stored)
+        endpoint = provider(stored.issuer).revocation_endpoint
+        if endpoint is None:
+            return "not_offered"
+        revoked = revoke_refresh_token(http, endpoint, stored)
     except SDKError:
         return "failed"
     return "revoked" if revoked else "failed"

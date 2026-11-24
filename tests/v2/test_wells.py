@@ -1,12 +1,9 @@
 import json
 
+from tests.conftest import NAMELESS_WELL
 from whitson_pvt_sdk.v2.models import CreateWellModel, CreateWellSampleModel
 from whitson_pvt_sdk.v2.resources import Wells
 
-NAMELESS_WELL = {
-    f"{name}_name": None
-    for name in ("basin", "field", "field_segment", "formation", "formation_zone", "sub_basin")
-}
 SAMPLE = {"name": "S1", "type": "SEP", "fluid_type": "Oil"}
 
 

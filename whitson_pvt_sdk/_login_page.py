@@ -7,6 +7,10 @@ Outcome = Literal["logged_in", "login_failed", "link_used", "other_login", "not_
 
 CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'"
 
+READ_SCOPES = "read"
+
+SCOPES_PATH = "/scopes"
+
 
 class Page(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -18,7 +22,6 @@ class Page(BaseModel):
 class ScopeForm(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    action: str
     nonce: str
     offered: tuple[str, ...] = Field(min_length=1)
     refused: bool
@@ -28,7 +31,6 @@ class _Text(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     status: int
-    succeeded: bool
     heading: str
     line: str
 
@@ -36,32 +38,27 @@ class _Text(BaseModel):
 _TEXTS: dict[Outcome, _Text] = {
     "logged_in": _Text(
         status=200,
-        succeeded=True,
         heading="Logged in",
         line="You are logged in to whitsonPVT. You can close this window and return to the "
         "terminal.",
     ),
     "login_failed": _Text(
         status=400,
-        succeeded=False,
         heading="Login failed",
         line="The whitsonPVT login did not complete. Return to the terminal for details.",
     ),
     "link_used": _Text(
         status=400,
-        succeeded=False,
         heading="Link already used",
         line="This login link was already used. Return to the terminal.",
     ),
     "other_login": _Text(
         status=400,
-        succeeded=False,
         heading="Unexpected login",
         line="This is not the login this terminal is waiting for.",
     ),
     "not_found": _Text(
         status=404,
-        succeeded=False,
         heading="Not found",
         line="There is nothing at this address.",
     ),
@@ -106,7 +103,7 @@ def login_page(view: Outcome | ScopeForm) -> Page:
             text = _TEXTS[view]
             mark = (
                 '<div class="mark ok" aria-hidden="true">&#10003;</div>'
-                if text.succeeded
+                if text.status == 200
                 else '<div class="mark bad" aria-hidden="true">!</div>'
             )
             return Page(
@@ -124,12 +121,11 @@ def _scope_form(form: ScopeForm) -> bytes:
         for group, legend in _GROUPS
         if members[group]
     )
-    read = members["read"]
     read_only = (
-        f'<form method="post" action="{escape(form.action)}">{nonce}'
-        + "".join(f'<input type="hidden" name="scope" value="{escape(scope)}">' for scope in read)
-        + '<button class="plain" type="submit">Read only</button></form>'
-        if read
+        f'<form method="post" action="{SCOPES_PATH}">{nonce}'
+        f'<input type="hidden" name="scope" value="{READ_SCOPES}">'
+        '<button class="plain" type="submit">Read only</button></form>'
+        if members["read"]
         else ""
     )
     notice = '<p class="notice">Choose at least one scope.</p>' if form.refused else ""
@@ -137,7 +133,7 @@ def _scope_form(form: ScopeForm) -> bytes:
         "Choose access",
         "<h1>Choose access</h1><p>Sign in with only the scopes you keep checked. Your role can "
         f"still narrow what is granted.</p>{notice}"
-        f'<form method="post" action="{escape(form.action)}">{nonce}{groups}'
+        f'<form method="post" action="{SCOPES_PATH}">{nonce}{groups}'
         '<button type="submit">Continue to sign in</button></form>'
         f"{read_only}",
     )

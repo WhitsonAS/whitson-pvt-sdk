@@ -3,16 +3,13 @@ import json
 import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import NAMELESS_WELL
 from tests.v2.test_calculations import make_fluid_model_json
 from whitson_pvt_sdk.cli._app import app
 
 BASE = "https://dev.pvt.whitson.com"
 API = f"{BASE}/external/v2"
 TOKEN = "env-token"
-NAMELESS_WELL = {
-    f"{name}_name": None
-    for name in ("basin", "field", "field_segment", "formation", "formation_zone", "sub_basin")
-}
 TABLE_UNITS = {"reservoir_pressure_unit": "bara", "reservoir_temperature_unit": "C"}
 
 runner = CliRunner()

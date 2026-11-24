@@ -4,9 +4,9 @@ from datetime import timedelta
 import httpx2
 import pytest
 
-from tests.conftest import EMPTY_PAGE, TOKEN_ENDPOINT, form
+from tests.conftest import EMPTY_PAGE, TOKEN_ENDPOINT, active_login, form
 from whitson_pvt_sdk import WhitsonPVTClient
-from whitson_pvt_sdk._store import ActiveLogin, InvalidLogin
+from whitson_pvt_sdk._store import InvalidLogin
 from whitson_pvt_sdk.errors import AuthError, ConfigurationError, LoginError
 from whitson_pvt_sdk.http import HTTPTransport
 
@@ -27,12 +27,6 @@ def _token_requests(httpx2_mock):
     return [form(r) for r in httpx2_mock.get_requests(url=TOKEN_ENDPOINT)]
 
 
-def _active(store, base_url):
-    entry = store.get(base_url)
-    assert isinstance(entry, ActiveLogin)
-    return entry.login
-
-
 def test_expiring_login_is_renewed_before_the_request(base_url, httpx2_mock, store, store_login):
     store_login(base_url, access="old-access", refresh="old-refresh", expires_in=SOON)
     httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=RENEWED)
@@ -49,7 +43,7 @@ def test_expiring_login_is_renewed_before_the_request(base_url, httpx2_mock, sto
         }
     ]
     assert _bearers(httpx2_mock, regions) == ["Bearer new-access"]
-    stored = _active(store, base_url)
+    stored = active_login(store, base_url)
     assert stored.refresh_token.get_secret_value() == "new-refresh"
     assert stored.access_token.get_secret_value() == "new-access"
     assert stored.audience == "https://dev.pvt.whitson.com/mcp"
@@ -79,7 +73,7 @@ def test_rejected_login_is_renewed_once_and_the_request_retried(
 
     assert sent == ["Bearer old-access", "Bearer new-access"]
     assert len(_token_requests(httpx2_mock)) == 1
-    assert _active(store, base_url).refresh_token.get_secret_value() == "new-refresh"
+    assert active_login(store, base_url).refresh_token.get_secret_value() == "new-refresh"
 
 
 def test_second_rejection_raises_auth_error(base_url, httpx2_mock, store_login):

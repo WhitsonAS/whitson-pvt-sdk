@@ -13,12 +13,22 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from tests.conftest import DISCOVERY, ISSUER, TOKEN_ENDPOINT, auth_config, form, make_login
-from whitson_pvt_sdk._store import ActiveLogin, CredentialStore
-from whitson_pvt_sdk.credentials import StoredLogin
+from tests.conftest import (
+    AUTHORIZE,
+    DEVICE_ENDPOINT,
+    DISCOVERY,
+    ISSUER,
+    PROVIDER,
+    TOKEN_ENDPOINT,
+    active_login,
+    auth_config,
+    form,
+    make_login,
+)
 from whitson_pvt_sdk.errors import APIError, ConfigurationError, LoginError, SDKError
 from whitson_pvt_sdk.login import (
     CALLBACK_PORTS,
+    READ_SCOPES,
     AudienceChanged,
     BrowserLogin,
     Confirmation,
@@ -30,8 +40,6 @@ from whitson_pvt_sdk.login import (
     login,
 )
 
-DEVICE_ENDPOINT = f"{ISSUER}oauth/device/code"
-AUTHORIZE = f"{ISSUER}authorize"
 ACTIVATE = f"{ISSUER}activate"
 OTHER_ISSUER = "https://login.example.com/"
 TOKENS = {
@@ -46,26 +54,11 @@ LOGGED_IN = (200, "Logged in")
 NOT_FOUND = (404, "Not found")
 
 
-PROVIDER = {
-    "issuer": ISSUER,
-    "authorization_endpoint": AUTHORIZE,
-    "token_endpoint": TOKEN_ENDPOINT,
-    "device_authorization_endpoint": DEVICE_ENDPOINT,
-}
-
-
 @pytest.fixture
 def authorization_server(base_url, httpx2_mock):
     httpx2_mock.add_response(
         url=f"{base_url}/external/v2/auth/config",
-        json={
-            "issuer": ISSUER,
-            "client_id": "cli-client",
-            "audience": "https://dev.pvt.whitson.com/mcp",
-            "scopes": ["read:data", "write:data"],
-            "connection": "acme-sso",
-            "device_login": True,
-        },
+        json=auth_config(scopes=("read:data", "write:data"), connection="acme-sso"),
     )
     httpx2_mock.add_response(url=DISCOVERY, json=PROVIDER)
 
@@ -76,12 +69,6 @@ def _accept(_: Confirmation) -> bool:
 
 def _keep(new: NewLogin) -> NewLogin:
     return new
-
-
-def _stored(store: CredentialStore, url: str) -> StoredLogin:
-    entry = store.get(url)
-    assert isinstance(entry, ActiveLogin)
-    return entry.login
 
 
 class _NoRedirects(urllib.request.HTTPRedirectHandler):
@@ -211,7 +198,7 @@ def test_browser_login_completes_through_the_loopback_callback(base_url, httpx2_
         assert page.headers["Content-Type"] == "text/html; charset=utf-8"
         assert not re.search(r"https?://", page.body)
     assert not any(verifier in message or "the-code" in message for message in messages)
-    stored = _stored(store, base_url)
+    stored = active_login(store, base_url)
     assert new.credential.token == stored.access_token
     assert stored.access_token.get_secret_value() == "fresh-access"
     assert stored.audience == "https://dev.pvt.whitson.com/mcp"
@@ -242,7 +229,7 @@ def test_browser_callback_with_another_state_is_rejected(base_url, httpx2_mock, 
         )
 
     if then_valid:
-        assert attempt().credential.token == _stored(store, base_url).access_token
+        assert attempt().credential.token == active_login(store, base_url).access_token
     else:
         with pytest.raises(LoginError, match="Timed out"):
             attempt()
@@ -325,7 +312,7 @@ def test_the_browser_gets_a_one_time_start_link_instead_of_the_login_page(
     )
     if failure is None:
         assert isinstance(outcome, NewLogin)
-        assert outcome.credential.token == _stored(store, base_url).access_token
+        assert outcome.credential.token == active_login(store, base_url).access_token
     else:
         assert isinstance(outcome, LoginError)
         assert failure in outcome.message
@@ -443,7 +430,7 @@ def test_the_browser_picker_signs_in_with_only_the_scopes_kept(
     picker_page, chosen, callback = pages
     assert picker_page.status == 200
     assert _picker(picker_page).checkboxes == PICKER_SCOPES
-    assert _picker(picker_page).read_only == ["regions:read", HOSTILE]
+    assert _picker(picker_page).read_only == [READ_SCOPES]
     assert HOSTILE not in picker_page.body
     assert "<b>" not in picker_page.body
     assert not re.search(r"https?://", picker_page.body)
@@ -456,7 +443,7 @@ def test_the_browser_picker_signs_in_with_only_the_scopes_kept(
     assert (chosen.location or "").startswith(f"{AUTHORIZE}?")
     assert _query(chosen.location or "")["scope"] == " ".join([*requested, "offline_access"])
     assert callback.outcome == LOGGED_IN
-    assert new.scopes == _stored(store, base_url).scopes == requested
+    assert new.scopes == active_login(store, base_url).scopes == requested
 
 
 CHOOSE_ACCESS = (400, "Choose access")
@@ -503,7 +490,7 @@ def test_the_picker_accepts_one_post_with_this_logins_nonce_and_a_scope(
     assert _query(chosen.location or "")["scope"] == "regions:write offline_access"
     assert reused.outcome == (400, "Link already used")
     assert callback.outcome == LOGGED_IN
-    assert new.scopes == _stored(store, base_url).scopes == ("regions:write",)
+    assert new.scopes == active_login(store, base_url).scopes == ("regions:write",)
 
 
 @pytest.mark.parametrize(
@@ -540,7 +527,7 @@ def test_device_login_asks_for_the_scopes_before_requesting_the_code(
         httpx2_mock.add_response(method="POST", url=TOKEN_ENDPOINT, json=TOKENS)
         attempt()
         assert form(httpx2_mock.get_requests(url=DEVICE_ENDPOINT)[0])["scope"] == requested
-        assert " ".join(_stored(store, base_url).scopes) == requested.removesuffix(
+        assert " ".join(active_login(store, base_url).scopes) == requested.removesuffix(
             " offline_access"
         )
     assert asked == [tuple(PICKER_SCOPES)]
@@ -1173,7 +1160,7 @@ def test_device_login_polls_at_the_server_interval(
 
     if error is None:
         login(base_url, DeviceLogin(), output=messages.append, verify=_keep)
-        assert _stored(store, base_url).refresh_token.get_secret_value() == "fresh-refresh"
+        assert active_login(store, base_url).refresh_token.get_secret_value() == "fresh-refresh"
         assert store.default_url() == base_url
     else:
         with pytest.raises(LoginError, match=error):

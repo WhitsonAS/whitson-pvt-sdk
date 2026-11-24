@@ -21,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from typer.testing import CliRunner
 
-from tests.conftest import StoreLogin
+from tests.conftest import ROLE_NOT_CONFIRMED, StoreLogin
 from whitson_pvt_sdk import __version__
 from whitson_pvt_sdk._store import ActiveLogin, InvalidLogin
 from whitson_pvt_sdk.cli._app import app
@@ -255,12 +255,6 @@ def test_mcp_renews_an_expiring_login_before_serving_and_keeps_the_rotated_token
         case other:
             pytest.fail(f"expected the rotated login, found {other}")
     assert f"refused the stored login. Run `wpvt auth login --url {backend.url}`" in result.stderr
-
-
-ROLE_NOT_CONFIRMED = (
-    "Your whitsonPVT role has not been confirmed in the last 30 days; sign in to the whitsonPVT "
-    "web app, then try again"
-)
 
 
 @pytest.mark.parametrize(
