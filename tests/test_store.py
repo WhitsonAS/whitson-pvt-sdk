@@ -120,6 +120,17 @@ def test_logout_without_a_keyring_says_its_entries_were_not_deleted(base_url, st
     assert store.get(base_url) is None
 
 
+def test_reading_a_keyring_login_without_a_keyring_service_names_the_session_bus(
+    base_url, store, store_login
+):
+    keyring.set_keyring(MemoryKeyring())
+    store_login(base_url)
+    keyring.set_keyring(fail.Keyring())
+
+    with pytest.raises(ConfigurationError, match="DBUS_SESSION_BUS_ADDRESS"):
+        store.get(base_url)
+
+
 @pytest.mark.parametrize("failures", [2, None], ids=["transient", "persistent"])
 def test_replacing_the_credentials_file_is_retried_while_it_is_open(
     base_url, monkeypatch, store, store_login, failures

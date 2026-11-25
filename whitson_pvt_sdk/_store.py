@@ -1,3 +1,4 @@
+import importlib.util
 import logging
 import os
 import secrets
@@ -331,10 +332,15 @@ def keyring_names(base_url: str) -> tuple[str, str]:
 def _read_keyring(base_url: str) -> tuple[SecretStr, SecretStr]:
     backend = _keyring()
     if backend is None:
+        remedy = (
+            "No keyring service is reachable from this process; on Linux it needs "
+            "DBUS_SESSION_BUS_ADDRESS, which apps such as Claude Desktop may not pass on"
+            if importlib.util.find_spec("keyring")
+            else 'Install the keyring package (pip install "whitson-pvt-sdk[cli]")'
+        )
         raise ConfigurationError(
             f"The login for {base_url} is stored in the OS keyring, which is not available here. "
-            f'Install the keyring package (pip install "whitson-pvt-sdk[cli]") or run '
-            f"`wpvt auth login --url {base_url}` again."
+            f"{remedy}, or run `wpvt auth login --url {base_url}` again."
         )
     access_name, refresh_name = keyring_names(base_url)
     try:
