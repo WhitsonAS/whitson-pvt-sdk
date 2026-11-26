@@ -28,7 +28,7 @@ def test_parse_commit(subject, expected):
 
 def test_should_include_commit_skips_generated_commit_subjects():
     assert not should_include_commit("Merge pull request #1 (abc123)")
-    assert not should_include_commit("Revert \"feat: add publishing workflow\" (abc123)")
+    assert not should_include_commit('Revert "feat: add publishing workflow" (abc123)')
     assert not should_include_commit("fixup! feat: add publishing workflow (abc123)")
     assert not should_include_commit("squash! feat: add publishing workflow (abc123)")
     assert should_include_commit("feat: add publishing workflow (abc123)")
@@ -45,7 +45,9 @@ def test_render_release_notes_groups_sections_in_order():
         version="0.1.1",
     )
 
-    assert notes == """Changes since `v0.1.0`.
+    assert (
+        notes
+        == """Changes since `v0.1.0`.
 
 ## Features
 
@@ -59,12 +61,16 @@ def test_render_release_notes_groups_sections_in_order():
 
 - add env setup (111111)
 """
+    )
 
 
 def test_render_release_notes_handles_empty_release():
     notes = render_release_notes([], previous="v0.1.0", version="0.1.1")
 
-    assert notes == """Changes since `v0.1.0`.
+    assert (
+        notes
+        == """Changes since `v0.1.0`.
 
 No user-facing changes.
 """
+    )
