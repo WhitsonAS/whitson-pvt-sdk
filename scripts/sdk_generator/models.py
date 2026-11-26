@@ -6,7 +6,7 @@ Version = Literal["v2"]
 HTTPMethod = Literal["get", "post", "put", "patch", "delete"]
 ParamLocation = Literal["path", "query"]
 BodyKind = Literal["none", "model", "root_list", "multipart"]
-ReturnKind = Literal["model", "tuple_bytes_filename", "none"]
+ReturnKind = Literal["model", "alias", "tuple_bytes_filename", "none"]
 
 
 class EndpointParam(BaseModel):

@@ -30,6 +30,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 - The repo-specific generator lives in `scripts/sdk_generator/`. It runs `ruff check --fix --select I,F401` and `ruff format` on rendered endpoint/resource files, so generated files should not require a second formatting pass.
 - Put hand-maintained shared models in `whitson_pvt_sdk/shared/models.py`; avoid hand-editing generated files unless intentionally patching generated output when the API spec is unavailable.
 - Authentication is excluded from generated resources via `EXCLUDED_RESOURCES`; keep auth as transport infrastructure, not as `client.authentication`.
+- In an undiscriminated union of objects (`anyOf` without a `discriminator`), the generator forbids extra fields on a branch whose properties are a proper subset of another's (`close_narrower_union_branches`), so a wider payload that fails its own branch is a `ValidationError` rather than the narrower shape: a full well missing a field never becomes `WellIdModel`.
 
 ## Working in a whitsonPVT workspace
 
@@ -76,7 +77,7 @@ For new endpoint wrappers or generator behavior:
 1. Prefer changing `scripts/sdk_generator/` and regenerating over hand-editing generated endpoint/resource files.
 2. Call `HTTPTransport.get`, `post`, `put`, `patch`, `delete`, `get_bytes`, or `post_multipart`.
 3. Serialize Pydantic inputs with `model_dump(exclude_unset=True)`.
-4. Validate structured responses with the generated model's `model_validate`.
+4. Validate structured responses with the generated model's `model_validate`, or with `TypeAdapter` when the response is not a model class (a union alias such as `UpdatedWellModel`); the generator decides from the classes in the freshly generated models module.
 5. Add or update the matching generated resource facade method through generator inference or `OVERRIDES` when the endpoint exists in OpenAPI.
 
 For SDK-only conveniences or compatibility shims that are not OpenAPI-derived, add them to `whitson_pvt_sdk/v2/resources.py`, not `_generated/**`.

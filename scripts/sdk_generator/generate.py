@@ -5,17 +5,20 @@ import re
 import sys
 import tempfile
 from collections import defaultdict
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from datamodel_code_generator import GenerateConfig, InputFileType, PythonVersion, generate
 from datamodel_code_generator.enums import DataModelType
 from datamodel_code_generator.format import Formatter
 from datamodel_code_generator.parser import LiteralType
+from pydantic import BaseModel
 
 from sdk_generator.config import GENERATED_DIR, LATEST_VERSION, SUPPORTED_VERSIONS
 from sdk_generator.models import Endpoint
-from sdk_generator.openapi import load_openapi, parse_endpoints
+from sdk_generator.openapi import close_narrower_union_branches, load_openapi, parse_endpoints
 from sdk_generator.render import format_python, render_resources
 
 LIST_TYPE_ALIAS_RE = re.compile(
@@ -27,16 +30,19 @@ LIST_TYPE_ALIAS_RE = re.compile(
 def main() -> None:
     args = parse_args()
     spec = load_openapi(args.version, args.openapi, args.base_url)
-    if not args.endpoints_only:
-        generate_models(
+    model_classes = (
+        model_class_names(GENERATED_DIR / args.version / "models.py")
+        if args.endpoints_only
+        else generate_models(
             args.version,
             spec,
             check=args.check,
             reuse_model=args.reuse_model,
             collapse_reuse_models=args.collapse_reuse_models,
         )
+    )
     if not args.models_only:
-        generate_endpoints(args.version, spec, check=args.check)
+        generate_endpoints(args.version, spec, model_classes, check=args.check)
 
 
 def parse_args() -> argparse.Namespace:
@@ -72,7 +78,7 @@ def generate_models(
     check: bool,
     reuse_model: bool,
     collapse_reuse_models: bool,
-) -> None:
+) -> set[str]:
     output = GENERATED_DIR / version / "models.py"
     if check:
         with tempfile.TemporaryDirectory(dir=output.parent) as tmp:
@@ -85,14 +91,35 @@ def generate_models(
                 collapse_reuse_models=collapse_reuse_models,
             )
             assert_same(output, target.read_text())
-    else:
-        generate_model_file(
-            version,
-            spec,
-            output,
-            reuse_model=reuse_model,
-            collapse_reuse_models=collapse_reuse_models,
-        )
+            return model_class_names(target)
+    generate_model_file(
+        version,
+        spec,
+        output,
+        reuse_model=reuse_model,
+        collapse_reuse_models=collapse_reuse_models,
+    )
+    return model_class_names(output)
+
+
+def model_class_names(models_file: Path) -> set[str]:
+    module_name = f"generated_models_{uuid4().hex}"
+    module_spec = spec_from_file_location(module_name, models_file)
+    if module_spec is None or module_spec.loader is None:
+        raise SystemExit(f"Cannot import generated models from {models_file}")
+    module = module_from_spec(module_spec)
+    sys.modules[module_name] = module
+    try:
+        module_spec.loader.exec_module(module)
+    finally:
+        del sys.modules[module_name]
+    return {
+        name
+        for name, value in vars(module).items()
+        if isinstance(value, type)
+        and issubclass(value, BaseModel)
+        and value.__module__ == module_name
+    }
 
 
 def generate_model_file(
@@ -129,7 +156,7 @@ def generate_model_file(
         disable_timestamp=True,
     )
     array_root_model_names = find_array_root_model_names(spec)
-    generate(json.dumps(strip_schema_titles(spec)), config=config)
+    generate(json.dumps(strip_schema_titles(close_narrower_union_branches(spec))), config=config)
     restore_list_root_models(target, array_root_model_names)
 
 
@@ -204,9 +231,17 @@ def strip_schema_titles(value: object) -> object:
     return value
 
 
-def generate_endpoints(version: str, spec: dict[str, Any], *, check: bool) -> None:
+def generate_endpoints(
+    version: str, spec: dict[str, Any], model_classes: set[str], *, check: bool
+) -> None:
     endpoints = sorted(
-        parse_endpoints(version, spec), key=lambda e: (e.resource, e.path, e.http_method)
+        (
+            endpoint.model_copy(update={"return_kind": "alias"})
+            if endpoint.return_kind == "model" and endpoint.response_model not in model_classes
+            else endpoint
+            for endpoint in parse_endpoints(version, spec)
+        ),
+        key=lambda e: (e.resource, e.path, e.http_method),
     )
     detect_collisions(endpoints)
 

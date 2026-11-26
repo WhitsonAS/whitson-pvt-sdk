@@ -68,6 +68,12 @@ def render_body_expr(endpoint: Endpoint) -> str:
     return "data.model_dump(exclude_unset=True)"
 
 
+def render_validation(endpoint: Endpoint) -> str:
+    if endpoint.return_kind == "alias":
+        return f"TypeAdapter({endpoint.response_model}).validate_python(body)"
+    return f"{endpoint.response_model}.model_validate(body)"
+
+
 def render_meta_data_helper() -> str:
     return (
         "def _meta_data(options: BaseModel) -> dict | None:\n"
@@ -124,12 +130,11 @@ def render_resources(version: str, by_resource: dict[str, list[Endpoint]]) -> st
         lines.append("    from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n")
     lines.append("\n")
 
-    if has_multipart:
-        lines.append("from pydantic import BaseModel\n\n")
-        if "ImportArchiveOptions" in model_imports:
-            lines.append("from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n\n")
+    lines.append("from pydantic import BaseModel, TypeAdapter\n\n")
+    if has_multipart and "ImportArchiveOptions" in model_imports:
+        lines.append("from whitson_pvt_sdk.shared.models import ImportArchiveOptions\n\n")
 
-    # Runtime model imports -- needed by inline model_validate() calls
+    # Runtime model imports -- needed by the inline validation calls
     generated_models = [model for model in model_imports if model != "ImportArchiveOptions"]
     if generated_models:
         lines.append(f"from whitson_pvt_sdk.{version}.models import (\n")
@@ -220,7 +225,7 @@ def _render_multipart_resource_method(endpoint: Endpoint) -> str:
         '            files={"file": ("archive.zip", BytesIO(archive_data), "application/zip")},\n'
         "            data=_meta_data(options),\n"
         "        )\n"
-        f"        return {return_model}.model_validate(body)\n\n"
+        f"        return {render_validation(endpoint)}\n\n"
     )
 
 
@@ -248,10 +253,7 @@ def _render_inline_resource_method(endpoint: Endpoint) -> str:
     body = (
         f"        {transport_call}\n\n"
         if endpoint.return_kind == "none"
-        else (
-            f"        body = {transport_call}\n"
-            f"        return {endpoint.response_model}.model_validate(body)\n\n"
-        )
+        else f"        body = {transport_call}\n        return {render_validation(endpoint)}\n\n"
     )
     return (
         f"    def {endpoint.public_method_name}(self"

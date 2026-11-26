@@ -91,6 +91,40 @@ def rename_schema_ref(ref: str, renames: dict[str, str]) -> str:
     return f"{SCHEMA_REF_PREFIX}{name}"
 
 
+def close_narrower_union_branches(spec: JsonObject) -> JsonObject:
+    # Pydantic picks any valid branch of an undiscriminated union, and an open model
+    # accepts a wider payload, so a wider object that fails its own branch would
+    # silently validate as the narrower one; forbidding extra fields there makes it fail.
+    closed = deepcopy(spec)
+    schemas: dict[str, Any] = closed.get("components", {}).get("schemas", {})
+
+    def close_narrower(left: str, right: str) -> None:
+        left_properties = schemas.get(left, {}).get("properties", {})
+        right_properties = schemas.get(right, {}).get("properties", {})
+        if left_properties.keys() < right_properties.keys():
+            schemas[left]["additionalProperties"] = False
+        elif left_properties.keys() == right_properties.keys():
+            for name, schema in left_properties.items():
+                left_ref = schema_ref_name(schema)
+                right_ref = schema_ref_name(right_properties[name])
+                if left_ref and right_ref and left_ref != right_ref:
+                    close_narrower(left_ref, right_ref)
+
+    for schema in schemas.values():
+        if "discriminator" in schema:
+            continue
+        branches = [
+            name
+            for branch in schema.get("anyOf", schema.get("oneOf", []))
+            if (name := schema_ref_name(branch))
+        ]
+        for left in branches:
+            for right in branches:
+                if left != right:
+                    close_narrower(left, right)
+    return closed
+
+
 def parse_endpoints(version: str, spec: dict[str, Any]) -> list[Endpoint]:
     endpoints: list[Endpoint] = []
     for raw_path, path_item in spec.get("paths", {}).items():
@@ -130,7 +164,7 @@ def infer_endpoint(
     spec: dict[str, Any] | None = None,
 ) -> Endpoint:
     request_model = schema_ref_name(request_schema(operation))
-    response_model = schema_ref_name(response_schema(operation))
+    response_model = (response_schema(operation) or {}).get("$ref", "").rsplit("/", 1)[-1] or None
     body_kind: BodyKind = "none"
     if has_multipart_body(operation):
         body_kind = "multipart"

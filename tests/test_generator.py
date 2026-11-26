@@ -5,8 +5,8 @@ from types import ModuleType
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-from sdk_generator.generate import detect_collisions, generate_model_file
+from pydantic import TypeAdapter, ValidationError
+from sdk_generator.generate import detect_collisions, generate_model_file, model_class_names
 from sdk_generator.models import Endpoint, HTTPMethod
 from sdk_generator.naming import singular, to_snake
 from sdk_generator.openapi import (
@@ -261,6 +261,67 @@ def test_generated_array_root_model_accepts_root_and_exposes_root(tmp_path):
     data = module.CreateSampleListModel(root=[sample])
     assert data.root == [sample]
     assert data.model_dump() == [{"name": "S1"}]
+
+
+UPDATED_ITEMS_SCHEMAS = {
+    "ItemModel": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {"id": {"type": "integer"}, "name": {"type": "string"}},
+    },
+    "ItemIdModel": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {"id": {"type": "integer"}},
+    },
+    "ItemsListModel": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+            "items": {"type": "array", "items": {"$ref": "#/components/schemas/ItemModel"}}
+        },
+    },
+    "ItemIdListModel": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+            "items": {"type": "array", "items": {"$ref": "#/components/schemas/ItemIdModel"}}
+        },
+    },
+    "UpdatedItemsListModel": {
+        "anyOf": [
+            {"$ref": "#/components/schemas/ItemsListModel"},
+            {"$ref": "#/components/schemas/ItemIdListModel"},
+        ],
+        "title": "UpdatedItemsListModel",
+    },
+}
+
+
+def test_generated_union_keeps_a_wider_item_that_fails_its_branch_from_the_narrower_one(tmp_path):
+    module = import_generated_models(tmp_path, UPDATED_ITEMS_SCHEMAS)
+    updated = TypeAdapter(module.UpdatedItemsListModel)
+
+    full = updated.validate_python({"items": [{"id": 1, "name": "A"}]})
+    ids = updated.validate_python({"items": [{"id": 1}]})
+
+    assert type(full) is module.ItemsListModel
+    assert type(ids) is module.ItemIdListModel
+    with pytest.raises(ValidationError):
+        updated.validate_python({"items": [{"id": 1, "name": "A"}, {"id": 2, "unknown": "B"}]})
+
+
+def test_model_class_names_leaves_out_the_aliases_resources_cannot_call_model_validate_on(
+    tmp_path,
+):
+    import_generated_models(tmp_path, UPDATED_ITEMS_SCHEMAS)
+
+    assert model_class_names(tmp_path / "models.py") == {
+        "ItemModel",
+        "ItemIdModel",
+        "ItemsListModel",
+        "ItemIdListModel",
+    }
 
 
 # ── inference ──
