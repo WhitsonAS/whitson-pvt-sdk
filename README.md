@@ -107,6 +107,15 @@ and talks only to external API v2.
   `AuthError`. See `docs/api-v2-update.md`.
 - `calculations.get_sample_feed_composition(s)` raise `MissingDataError` instead of
   `ValueError` when the fluid model has no adjusted composition for a requested sample.
+- `wells.update` returns `UpdatedWellModel` (`GetWellModel | WellIdModel`) and `wells.update_bulk`
+  returns `UpdatedWellsListModel` (`WellsListModel | WellIdListModel`): only the ids when the
+  credential may not read wells.
+- `GetFluidModelModel.adjusted_compositions` and `GetBlackOilTableModel.feed_composition` and
+  `.injection_composition` are `None` when the credential may not read samples, and
+  `calculations.get_sample_feed_composition(s)` with `source="adjusted_compositions"` then raises
+  `AuthError`.
+- `ImportDiagnosticModel` is now `DiagnosticModel` (`code` is the `DiagnosticCode` literal) and
+  `ImportEntityType` is now `DiagnosticEntityType`.
 - The HTTP library is now [httpx2](https://github.com/pydantic/httpx2), Pydantic's fork of
   httpx, instead of httpx. The SDK's public interface takes and returns no httpx types, but
   code that reached into its internals (`HTTPTransport._http`, `whitson_pvt_sdk.auth.CredentialAuth`),

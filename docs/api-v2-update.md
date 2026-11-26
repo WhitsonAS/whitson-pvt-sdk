@@ -107,6 +107,15 @@ omits the well's `samples`; without `fluid-models:read` or `samples:read`,
 are none. `client.samples.list(well_id)` raises `AuthError` when the well comes back
 without its samples, instead of returning an empty list.
 
+The same holds for a fluid model's `adjusted_compositions` and a black-oil table's
+`feed_composition` and `injection_composition`, omitted without `samples:read`;
+`client.calculations.get_sample_feed_composition(s)` with
+`source="adjusted_compositions"` then raises `AuthError`.
+
+Without `wells:read`, `client.wells.update` returns `WellIdModel` and
+`client.wells.update_bulk` returns `WellIdListModel`, only the ids, instead of
+`GetWellModel` and `WellsListModel`; tell them apart with `isinstance`.
+
 ## Verification before release
 
 Run `just test`, `just lint`, `just ty`, `just generate-check`, and `just build`.

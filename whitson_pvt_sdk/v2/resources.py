@@ -169,6 +169,12 @@ class Calculations(generated_resources.Calculations):
         self, fluid_model_id: int, sample_ids: list[int]
     ) -> dict[int, FeedComposition]:
         fluid_model = generated_resources.FluidModels(self._transport).get(fluid_model_id)
+        if fluid_model.adjusted_compositions is None:
+            raise AuthError(
+                f"Fluid model {fluid_model_id} was returned without its adjusted compositions: "
+                "this credential may not read samples (it needs the samples:read scope).",
+                403,
+            )
         compositions_by_sample_id = {
             composition.sample_id: composition
             for composition in fluid_model.adjusted_compositions

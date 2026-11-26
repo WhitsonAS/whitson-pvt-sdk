@@ -9,7 +9,7 @@ from whitson_pvt_sdk.shared.models import PaginationParams
 if TYPE_CHECKING:
     from whitson_pvt_sdk.http import HTTPTransport
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from whitson_pvt_sdk.shared.models import ImportArchiveOptions
 from whitson_pvt_sdk.shared.pagination import Paginator
@@ -20,6 +20,8 @@ from whitson_pvt_sdk.v2.models import (
     CreateWellModel,
     FlashCalculationRequestModel,
     FlashCalculationResponseModel,
+    GasLiftMixingCalculationRequestModel,
+    GasLiftMixingCalculationResponseModel,
     GetBlackOilTableModel,
     GetFluidModelModel,
     GetProjectModel,
@@ -57,6 +59,8 @@ from whitson_pvt_sdk.v2.models import (
     SeparatorProcessCalculationResponseModel,
     SingleRecordImportRequestModel,
     SingleRecordImportResponseModel,
+    UpdatedWellModel,
+    UpdatedWellsListModel,
     UpdateRegionModel,
     UpdateSampleListModel,
     UpdateSampleModel,
@@ -64,7 +68,6 @@ from whitson_pvt_sdk.v2.models import (
     UpdateWellsListModel,
     VolumetricToCompositionConversionCalculationRequestModel,
     VolumetricToCompositionConversionCalculationResponseModel,
-    WellsListModel,
 )
 
 ListType = list
@@ -163,19 +166,19 @@ class Wells:
         )
         return GetWellModel.model_validate(body)
 
-    def update_bulk(self, data: UpdateWellsListModel) -> WellsListModel:
+    def update_bulk(self, data: UpdateWellsListModel) -> UpdatedWellsListModel:
         body = self._transport.put(
             "/wells/bulk", body=[model.model_dump(exclude_unset=True) for model in data.root]
         )
-        return WellsListModel.model_validate(body)
+        return TypeAdapter(UpdatedWellsListModel).validate_python(body)
 
     def get(self, well_id: int) -> GetWellModel:
         body = self._transport.get(f"/wells/{well_id}")
         return GetWellModel.model_validate(body)
 
-    def update(self, well_id: int, data: UpdateWellModel) -> GetWellModel:
+    def update(self, well_id: int, data: UpdateWellModel) -> UpdatedWellModel:
         body = self._transport.put(f"/wells/{well_id}", body=data.model_dump(exclude_unset=True))
-        return GetWellModel.model_validate(body)
+        return TypeAdapter(UpdatedWellModel).validate_python(body)
 
 
 class Samples:
@@ -432,6 +435,14 @@ class Calculations:
     def calculate_flash(self, data: FlashCalculationRequestModel) -> FlashCalculationResponseModel:
         body = self._transport.post("/calculations/flash", body=data.model_dump(exclude_unset=True))
         return FlashCalculationResponseModel.model_validate(body)
+
+    def calculate_gas_lift_mixing(
+        self, data: GasLiftMixingCalculationRequestModel
+    ) -> GasLiftMixingCalculationResponseModel:
+        body = self._transport.post(
+            "/calculations/gas-lift-mixing", body=data.model_dump(exclude_unset=True)
+        )
+        return GasLiftMixingCalculationResponseModel.model_validate(body)
 
     def calculate_gor_recombination(
         self, data: GorRecombinationCalculationRequestModel

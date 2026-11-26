@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from whitson_pvt_sdk.errors import APIError, CalculationError, MissingDataError
+from whitson_pvt_sdk.errors import APIError, AuthError, CalculationError, MissingDataError
 from whitson_pvt_sdk.v2.models import (
     CalculationCompositionEntryModel,
     SurfaceProcessInputModel,
@@ -171,6 +171,23 @@ def test_get_sample_feed_compositions_raises_on_missing_adjusted_composition(
     )
 
     with pytest.raises(MissingDataError, match="Missing adjusted compositions for sample ids: 456"):
+        Calculations(transport).get_sample_feed_compositions(
+            fluid_model_id=123,
+            sample_ids=[456],
+            source="adjusted_compositions",
+        )
+
+
+def test_get_sample_feed_compositions_refuses_a_fluid_model_returned_without_its_compositions(
+    transport, httpx2_mock
+):
+    fluid_model = make_fluid_model_json([])
+    del fluid_model["adjusted_compositions"]
+    httpx2_mock.add_response(
+        url="https://dev.pvt.whitson.com/external/v2/fluid-models/123", json=fluid_model
+    )
+
+    with pytest.raises(AuthError, match="samples:read"):
         Calculations(transport).get_sample_feed_compositions(
             fluid_model_id=123,
             sample_ids=[456],

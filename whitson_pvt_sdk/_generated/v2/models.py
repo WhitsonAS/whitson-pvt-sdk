@@ -84,15 +84,11 @@ class AuthConfig(BaseModel):
     """
     client_id: str
     """
-    Public client id of the whitsonPVT command-line application, a native application without a secret. Log in with the authorization code flow with PKCE, or with the device authorization flow where `device_login` is true.
+    Public client id of the whitsonPVT command-line application, a native application without a secret. Log in with the authorization code flow with PKCE or with the device authorization flow.
     """
     connection: str | None
     """
     Auth0 connection to send as the `connection` parameter, for deployments that log in through a database connection. Null means the client sends none.
-    """
-    device_login: bool
-    """
-    Whether this deployment allows the device authorization flow. When false, the client must not start a device authorization flow and should offer browser login or an API token instead.
     """
     issuer: str
     """
@@ -589,6 +585,43 @@ class DLEStageModel(BaseModel):
 DensityUnit = TypeAliasType("DensityUnit", Literal["g/cm3", "kg/m3", "lbm/bbl", "lbm/ft3"])
 
 
+DiagnosticCode = TypeAliasType(
+    "DiagnosticCode",
+    Literal[
+        "session_warning",
+        "session_error",
+        "record_warning",
+        "record_error",
+        "partial_acquisition_condition",
+        "rafs_unsupported_type",
+        "rafs_unavailable",
+        "native_payload_invalid",
+        "osdu_record_invalid",
+        "nonstandard_component_codes",
+        "liberated_gas_unaligned",
+        "compositional_analysis_not_imported",
+    ],
+)
+
+
+DiagnosticEntityType = TypeAliasType(
+    "DiagnosticEntityType", Literal["report", "well", "sample", "experiment", "composition", "file"]
+)
+
+
+class DiagnosticModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    code: DiagnosticCode
+    consequence: str | None = None
+    detail: str | None = None
+    entity_type: DiagnosticEntityType | None = None
+    message: str
+    record_id: int | None = None
+    severity: Literal["warning", "error"]
+
+
 class DuplicateImportSessionConflictResponseModel(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -667,6 +700,21 @@ ExternalCalculationResultModelExternalFlashCalculationResultModel = TypeAliasTyp
     "ExternalCalculationResultModelExternalFlashCalculationResultModel",
     Annotated[
         CalculationSuccessResultModel | CalculationErrorResultModel, Field(discriminator="status")
+    ],
+)
+
+
+class ExternalCalculationSuccessResultModelExternalGasLiftMixingCalculationResultModel(BaseModel):
+    result: GasLiftMixingCalculationResultModel
+    status: Literal["success"]
+
+
+ExternalCalculationResultModelExternalGasLiftMixingCalculationResultModel = TypeAliasType(
+    "ExternalCalculationResultModelExternalGasLiftMixingCalculationResultModel",
+    Annotated[
+        ExternalCalculationSuccessResultModelExternalGasLiftMixingCalculationResultModel
+        | CalculationErrorResultModel,
+        Field(discriminator="status"),
     ],
 )
 
@@ -849,17 +897,81 @@ GasExpansionFactorUnit = TypeAliasType("GasExpansionFactorUnit", Literal["Sm3/m3
 GasFvfUnit = TypeAliasType("GasFvfUnit", Literal["m3/Sm3", "bbl/scf"])
 
 
+class GasLiftMixingCalculationInputModel(BaseModel):
+    gas_lift_composition: Annotated[list[CalculationCompositionEntryModel], Field(min_length=1)]
+    gas_lift_rate: Annotated[float, Field(ge=0.0)]
+    """
+    Gas lift injection rate at standard conditions, on the same time basis as oil_rate.
+    """
+    oil_rate: Annotated[float, Field(gt=0.0)]
+    """
+    Oil rate at the last stage of surface_process, on the same time basis as gas_lift_rate.
+    """
+    producing_gor: Annotated[float, Field(gt=0.0)]
+    """
+    GOR measured downstream of the gas lift injection point, including gas lift gas, on the recombination_type basis.
+    """
+    reference_composition: Annotated[list[CalculationCompositionEntryModel], Field(min_length=1)]
+    """
+    Composition GOR-recombined to the wellstream GOR.
+    """
+
+
+class GasLiftMixingCalculationRequestModel(BaseModel):
+    fluid_model_id: int
+    gas_lift_rate_unit: VolumeUnit
+    gor_unit: GorUnit
+    inputs: Annotated[
+        list[GasLiftMixingCalculationInputModel], Field(max_length=1000, min_length=1)
+    ]
+    """
+    Rows succeed or fail independently.
+    """
+    oil_rate_unit: VolumeUnit
+    recombination_type: RecombinationType
+    remove_mud_components: bool | None = False
+    surface_process: SurfaceProcessInputModel
+
+
+class GasLiftMixingCalculationResponseModel(BaseModel):
+    results: list[ExternalCalculationResultModelExternalGasLiftMixingCalculationResultModel]
+
+
+class GasLiftMixingCalculationResultModel(BaseModel):
+    component_names: list[str]
+    gas_lift_mole_fraction: float
+    """
+    Moles of gas lift gas per mole of mixed wellstream.
+    """
+    mixed_composition: list[CalculationCompositionEntryModel]
+    mixed_mass_fractions: list[float]
+    mixed_mole_fractions: list[float]
+    """
+    Wellstream mixed with gas lift gas, as produced to surface.
+    """
+    wellstream_composition: list[CalculationCompositionEntryModel]
+    wellstream_gor: float
+    """
+    Wellstream GOR in gor_unit, on the recombination_type basis.
+    """
+    wellstream_mass_fractions: list[float]
+    wellstream_mole_fractions: list[float]
+    """
+    Wellstream entering the well, without gas lift gas.
+    """
+
+
 class GetBlackOilTableModel(BaseModel):
     black_oil_table_input_id: int | None = None
     extrapolation_type: str | None = None
-    feed_composition: MolarCompositionModel
+    feed_composition: MolarCompositionModel | None = None
     feed_composition_id: int | None = None
     fluid_model_id: int | None = None
     gas_expansion_factor_unit: GasExpansionFactorUnit
     gas_formation_volume_factor_unit: FvfUnit
     gas_viscosity_unit: ViscosityUnit
     id: int
-    injection_composition: MolarCompositionModel | None
+    injection_composition: MolarCompositionModel | None = None
     injection_composition_id: int | None = None
     is_dry_gas: bool | None = None
     name: str | None = None
@@ -881,7 +993,7 @@ class GetBlackOilTableModel(BaseModel):
 
 
 class GetFluidModelModel(BaseModel):
-    adjusted_compositions: list[MolarCompositionModel]
+    adjusted_compositions: list[MolarCompositionModel] | None = None
     creator: str | None = None
     date_updated: AwareDatetime | None = None
     eos_model: EOSModelModel
@@ -1179,7 +1291,7 @@ class ImportCommitRecordResultModel(BaseModel):
     )
     action: ImportRecordAction
     committed_entity_id: int | None = None
-    entity_type: ImportEntityType
+    entity_type: DiagnosticEntityType
     errors: list[str] | None = []
     import_record_id: int
     status: ImportRecordStatus
@@ -1212,23 +1324,6 @@ ImportContextResolution = TypeAliasType(
         "natural_key",
         "unresolved",
     ],
-)
-
-
-class ImportDiagnosticModel(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    code: str
-    detail: str | None = None
-    entity_type: ImportEntityType | None = None
-    message: str
-    record_id: int | None = None
-    severity: Literal["warning", "error"]
-
-
-ImportEntityType = TypeAliasType(
-    "ImportEntityType", Literal["report", "well", "sample", "experiment", "composition", "file"]
 )
 
 
@@ -1290,7 +1385,7 @@ class ImportRecordModel(BaseModel):
     Native target context: supplied hints and importer-resolved IDs.
     """
     depends_on_record_ids: list[int] | None = []
-    entity_type: ImportEntityType
+    entity_type: DiagnosticEntityType
     errors: list[str] | None = []
     id: int | None = None
     import_session_id: int | None = None
@@ -1441,7 +1536,7 @@ class ImportSessionSummaryModel(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    diagnostics: Annotated[list[ImportDiagnosticModel] | None, Field(validate_default=True)] = []
+    diagnostics: Annotated[list[DiagnosticModel] | None, Field(validate_default=True)] = []
     records_by_entity_type: dict[str, int] | None = {}
     records_by_status: dict[str, int] | None = {}
     total_records: int | None = 0
@@ -2964,6 +3059,20 @@ class VolumetricToCompositionConversionInputModel(BaseModel):
     pressure: float
 
 
+class WellIdListModel(BaseModel):
+    wells: list[WellIdModel]
+
+
+class WellIdModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+
+
+UpdatedWellModel = TypeAliasType("UpdatedWellModel", GetWellModel | WellIdModel)
+
+
 class WellImportPayloadModel(BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -2988,6 +3097,9 @@ ImportPayloadModel = TypeAliasType(
 
 class WellsListModel(BaseModel):
     wells: list[GetWellSimpleModel]
+
+
+UpdatedWellsListModel = TypeAliasType("UpdatedWellsListModel", WellsListModel | WellIdListModel)
 
 
 ZipArchiveResponse = TypeAliasType("ZipArchiveResponse", bytes)
