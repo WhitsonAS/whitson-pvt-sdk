@@ -38,7 +38,7 @@ def main() -> None:
             region_id=created.id,
             data=UpdateRegionModel(name="Renamed Example Region"),
         )
-        print(f"Updated region: {updated.name}")
+        print(f"Updated region: id={updated.id}")
 
 
 if __name__ == "__main__":

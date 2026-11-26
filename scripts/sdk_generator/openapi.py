@@ -91,38 +91,51 @@ def rename_schema_ref(ref: str, renames: dict[str, str]) -> str:
     return f"{SCHEMA_REF_PREFIX}{name}"
 
 
-def close_narrower_union_branches(spec: JsonObject) -> JsonObject:
-    # Pydantic picks any valid branch of an undiscriminated union, and an open model
-    # accepts a wider payload, so a wider object that fails its own branch would
-    # silently validate as the narrower one; forbidding extra fields there makes it fail.
-    closed = deepcopy(spec)
-    schemas: dict[str, Any] = closed.get("components", {}).get("schemas", {})
-
-    def close_narrower(left: str, right: str) -> None:
-        left_properties = schemas.get(left, {}).get("properties", {})
-        right_properties = schemas.get(right, {}).get("properties", {})
-        if left_properties.keys() < right_properties.keys():
-            schemas[left]["additionalProperties"] = False
-        elif left_properties.keys() == right_properties.keys():
-            for name, schema in left_properties.items():
-                left_ref = schema_ref_name(schema)
-                right_ref = schema_ref_name(right_properties[name])
-                if left_ref and right_ref and left_ref != right_ref:
-                    close_narrower(left_ref, right_ref)
-
-    for schema in schemas.values():
-        if "discriminator" in schema:
-            continue
+def undiscriminated_unions(spec: JsonObject) -> set[str]:
+    # Validated left to right, an open branch would take a payload meant for a later one
+    # and drop the keys it does not know, so every branch but the last must be closed.
+    schemas: dict[str, Any] = spec.get("components", {}).get("schemas", {})
+    unions: set[str] = set()
+    for union, schema in schemas.items():
         branches = [
             name
             for branch in schema.get("anyOf", schema.get("oneOf", []))
             if (name := schema_ref_name(branch))
         ]
-        for left in branches:
-            for right in branches:
-                if left != right:
-                    close_narrower(left, right)
-    return closed
+        if "discriminator" in schema or len(branches) < 2:
+            continue
+        for branch in branches[:-1]:
+            for name in referenced_schemas(branch, schemas):
+                referenced = schemas[name]
+                is_object = referenced.get("type") == "object" or "properties" in referenced
+                if is_object and referenced.get("additionalProperties") is not False:
+                    raise SystemExit(
+                        f"{union}: {name} must set additionalProperties to false, since "
+                        f"{branch} is tried before a later branch of the union"
+                    )
+        unions.add(union)
+    return unions
+
+
+def referenced_schemas(name: str, schemas: dict[str, Any]) -> set[str]:
+    seen: set[str] = set()
+    pending = [name]
+    while pending:
+        current = pending.pop()
+        if current not in seen:
+            seen.add(current)
+            pending.extend(schema_refs(schemas[current]))
+    return seen
+
+
+def schema_refs(value: JsonValue) -> list[str]:
+    if isinstance(value, dict):
+        ref = value.get("$ref")
+        own = [ref.removeprefix(SCHEMA_REF_PREFIX)] if isinstance(ref, str) else []
+        return own + [name for child in value.values() for name in schema_refs(child)]
+    if isinstance(value, list):
+        return [name for child in value for name in schema_refs(child)]
+    return []
 
 
 def parse_endpoints(version: str, spec: dict[str, Any]) -> list[Endpoint]:

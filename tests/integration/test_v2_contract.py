@@ -3,6 +3,7 @@ from collections.abc import Callable
 from whitson_pvt_sdk import WhitsonPVTClient
 from whitson_pvt_sdk.v2.models import (
     CreateSampleListModel,
+    GetRegionModel,
     UpdateRegionModel,
     UpdateSampleItemModel,
     UpdateSampleListModel,
@@ -27,6 +28,7 @@ def test_region_update(client_v2: WhitsonPVTClient, created_region):
     result = client_v2.regions.update(
         created_region.id, UpdateRegionModel(note="Updated by integration test.")
     )
+    assert isinstance(result, GetRegionModel)
     assert result.id == created_region.id
     assert result.note == "Updated by integration test."
 

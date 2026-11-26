@@ -112,9 +112,18 @@ The same holds for a fluid model's `adjusted_compositions` and a black-oil table
 `client.calculations.get_sample_feed_composition(s)` with
 `source="adjusted_compositions"` then raises `AuthError`.
 
-Without `wells:read`, `client.wells.update` returns `WellIdModel` and
-`client.wells.update_bulk` returns `WellIdListModel`, only the ids, instead of
-`GetWellModel` and `WellsListModel`; tell them apart with `isinstance`.
+An update answers with only the ids when the credential may not read what it
+updated: without `wells:read`, `client.wells.update` returns `WellIdModel` and
+`client.wells.update_bulk` `WellIdListModel` instead of `GetWellModel` and
+`WellsListModel`; without `regions:read`, `client.regions.update` returns
+`RegionIdModel` instead of `GetRegionModel`; without `samples:read`,
+`client.samples.update` returns `SampleIdModel` and `client.samples.update_bulk`
+`SampleIdListModel` instead of `GetSampleModel` and `GetSampleListModel`. Tell
+them apart with `isinstance`. The SDK validates each answer against the ids-only
+model first, as the API does: `GetRegionModel` and `GetSampleModel` require only
+`id`, so `{"id": 1}` is always the ids-only answer, while a full answer, which
+carries every field, fails the closed ids-only model and is validated as the full
+one.
 
 ## Verification before release
 

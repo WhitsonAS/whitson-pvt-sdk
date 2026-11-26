@@ -18,11 +18,15 @@ from pydantic import BaseModel
 
 from sdk_generator.config import GENERATED_DIR, LATEST_VERSION, SUPPORTED_VERSIONS
 from sdk_generator.models import Endpoint
-from sdk_generator.openapi import close_narrower_union_branches, load_openapi, parse_endpoints
+from sdk_generator.openapi import load_openapi, parse_endpoints, undiscriminated_unions
 from sdk_generator.render import format_python, render_resources
 
 LIST_TYPE_ALIAS_RE = re.compile(
     r'^([A-Za-z_]\w*) = TypeAliasType\("([A-Za-z_]\w*)", (list\[.+\])\)$',
+    re.MULTILINE,
+)
+UNION_ALIAS_RE = re.compile(
+    r'^(\w+) = TypeAliasType\(\s*"\1",\s*(\w+(?:\s*\|\s*\w+)+),?\s*\)$',
     re.MULTILINE,
 )
 
@@ -156,8 +160,35 @@ def generate_model_file(
         disable_timestamp=True,
     )
     array_root_model_names = find_array_root_model_names(spec)
-    generate(json.dumps(strip_schema_titles(close_narrower_union_branches(spec))), config=config)
+    union_names = undiscriminated_unions(spec)
+    generate(json.dumps(strip_schema_titles(spec)), config=config)
     restore_list_root_models(target, array_root_model_names)
+    validate_unions_left_to_right(target, union_names)
+
+
+def validate_unions_left_to_right(target: Path, union_names: set[str]) -> None:
+    if not union_names:
+        return
+    content = target.read_text()
+    if missing := union_names - {name for name, _ in UNION_ALIAS_RE.findall(content)}:
+        raise SystemExit(f"No generated union alias for {', '.join(sorted(missing))}")
+
+    def left_to_right(match: re.Match[str]) -> str:
+        name, union = match.groups()
+        if name not in union_names:
+            return match.group(0)
+        return (
+            f'{name} = TypeAliasType("{name}", '
+            f'Annotated[{" ".join(union.split())}, Field(union_mode="left_to_right")])'
+        )
+
+    content = UNION_ALIAS_RE.sub(left_to_right, content).replace(
+        "from __future__ import annotations\n",
+        "from __future__ import annotations\n\nfrom typing import Annotated\n\n"
+        "from pydantic import Field\n",
+        1,
+    )
+    target.write_text(str(format_python(content)))
 
 
 def find_array_root_model_names(spec: dict[str, Any]) -> set[str]:

@@ -59,6 +59,9 @@ from whitson_pvt_sdk.v2.models import (
     SeparatorProcessCalculationResponseModel,
     SingleRecordImportRequestModel,
     SingleRecordImportResponseModel,
+    UpdatedRegionModel,
+    UpdatedSampleListModel,
+    UpdatedSampleModel,
     UpdatedWellModel,
     UpdatedWellsListModel,
     UpdateRegionModel,
@@ -109,11 +112,11 @@ class Regions:
         body = self._transport.get(f"/regions/{region_id}")
         return GetRegionModel.model_validate(body)
 
-    def update(self, region_id: int, data: UpdateRegionModel) -> GetRegionModel:
+    def update(self, region_id: int, data: UpdateRegionModel) -> UpdatedRegionModel:
         body = self._transport.put(
             f"/regions/{region_id}", body=data.model_dump(exclude_unset=True)
         )
-        return GetRegionModel.model_validate(body)
+        return TypeAdapter(UpdatedRegionModel).validate_python(body)
 
 
 class Wells:
@@ -197,21 +200,21 @@ class Samples:
         )
         return GetSampleListModel.model_validate(body)
 
-    def update_bulk(self, data: UpdateSampleListModel) -> GetSampleListModel:
+    def update_bulk(self, data: UpdateSampleListModel) -> UpdatedSampleListModel:
         body = self._transport.put(
             "/samples/bulk", body=[model.model_dump(exclude_unset=True) for model in data.root]
         )
-        return GetSampleListModel.model_validate(body)
+        return TypeAdapter(UpdatedSampleListModel).validate_python(body)
 
     def get(self, sample_id: int) -> GetSampleModel:
         body = self._transport.get(f"/samples/{sample_id}")
         return GetSampleModel.model_validate(body)
 
-    def update(self, sample_id: int, data: UpdateSampleModel) -> GetSampleModel:
+    def update(self, sample_id: int, data: UpdateSampleModel) -> UpdatedSampleModel:
         body = self._transport.put(
             f"/samples/{sample_id}", body=data.model_dump(exclude_unset=True)
         )
-        return GetSampleModel.model_validate(body)
+        return TypeAdapter(UpdatedSampleModel).validate_python(body)
 
 
 class Projects:

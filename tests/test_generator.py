@@ -2,6 +2,7 @@ import json
 import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from types import ModuleType
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -263,16 +264,25 @@ def test_generated_array_root_model_accepts_root_and_exposes_root(tmp_path):
     assert data.model_dump() == [{"name": "S1"}]
 
 
-UPDATED_ITEMS_SCHEMAS = {
-    "ItemModel": {
-        "type": "object",
-        "required": ["id", "name"],
-        "properties": {"id": {"type": "integer"}, "name": {"type": "string"}},
-    },
+UPDATED_ITEMS_SCHEMAS: dict[str, dict[str, Any]] = {
     "ItemIdModel": {
         "type": "object",
         "required": ["id"],
         "properties": {"id": {"type": "integer"}},
+        "additionalProperties": False,
+    },
+    "ItemModel": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {"id": {"type": "integer"}, "name": {"type": ["string", "null"]}},
+    },
+    "ItemIdListModel": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+            "items": {"type": "array", "items": {"$ref": "#/components/schemas/ItemIdModel"}}
+        },
+        "additionalProperties": False,
     },
     "ItemsListModel": {
         "type": "object",
@@ -281,34 +291,43 @@ UPDATED_ITEMS_SCHEMAS = {
             "items": {"type": "array", "items": {"$ref": "#/components/schemas/ItemModel"}}
         },
     },
-    "ItemIdListModel": {
-        "type": "object",
-        "required": ["items"],
-        "properties": {
-            "items": {"type": "array", "items": {"$ref": "#/components/schemas/ItemIdModel"}}
-        },
-    },
     "UpdatedItemsListModel": {
         "anyOf": [
-            {"$ref": "#/components/schemas/ItemsListModel"},
             {"$ref": "#/components/schemas/ItemIdListModel"},
+            {"$ref": "#/components/schemas/ItemsListModel"},
         ],
         "title": "UpdatedItemsListModel",
     },
 }
 
 
-def test_generated_union_keeps_a_wider_item_that_fails_its_branch_from_the_narrower_one(tmp_path):
+def test_generated_union_takes_the_first_branch_an_answer_fits(tmp_path):
     module = import_generated_models(tmp_path, UPDATED_ITEMS_SCHEMAS)
     updated = TypeAdapter(module.UpdatedItemsListModel)
 
-    full = updated.validate_python({"items": [{"id": 1, "name": "A"}]})
     ids = updated.validate_python({"items": [{"id": 1}]})
+    full = updated.validate_python({"items": [{"id": 1, "name": None}]})
 
-    assert type(full) is module.ItemsListModel
     assert type(ids) is module.ItemIdListModel
+    assert type(full) is module.ItemsListModel
     with pytest.raises(ValidationError):
-        updated.validate_python({"items": [{"id": 1, "name": "A"}, {"id": 2, "unknown": "B"}]})
+        updated.validate_python({"items": [{"id": 1, "name": "A"}, {"id": 2, "name": 3}]})
+
+
+@pytest.mark.parametrize(
+    "open_schema",
+    ["ItemIdListModel", "ItemIdModel"],
+    ids=["open-branch", "open-item-of-a-closed-branch"],
+)
+def test_generation_refuses_a_union_whose_earlier_branch_takes_unknown_keys(tmp_path, open_schema):
+    closed = UPDATED_ITEMS_SCHEMAS[open_schema]
+    schemas = {
+        **UPDATED_ITEMS_SCHEMAS,
+        open_schema: {key: value for key, value in closed.items() if key != "additionalProperties"},
+    }
+
+    with pytest.raises(SystemExit, match=f"UpdatedItemsListModel: {open_schema} must"):
+        import_generated_models(tmp_path, schemas)
 
 
 def test_model_class_names_leaves_out_the_aliases_resources_cannot_call_model_validate_on(

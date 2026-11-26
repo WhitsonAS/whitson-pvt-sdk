@@ -1879,6 +1879,13 @@ RecombinationType = TypeAliasType(
 )
 
 
+class RegionIdModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+
+
 RegionType = TypeAliasType(
     "RegionType",
     Literal[
@@ -1930,6 +1937,20 @@ ResistivityUnit = TypeAliasType("ResistivityUnit", Literal["ohm-m"])
 
 
 Role = TypeAliasType("Role", Literal["admin", "sample_editor", "project_editor", "reader"])
+
+
+class SampleIdListModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    samples: list[SampleIdModel]
+
+
+class SampleIdModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
 
 
 class SampleImportPayloadModel(BaseModel):
@@ -2574,6 +2595,24 @@ class UpdateWellsListModel(RootModel[list[UpdateWellItemModel]]):
     root: list[UpdateWellItemModel]
 
 
+UpdatedRegionModel = TypeAliasType(
+    "UpdatedRegionModel",
+    Annotated[RegionIdModel | GetRegionModel, Field(union_mode="left_to_right")],
+)
+
+
+UpdatedSampleListModel = TypeAliasType(
+    "UpdatedSampleListModel",
+    Annotated[SampleIdListModel | GetSampleListModel, Field(union_mode="left_to_right")],
+)
+
+
+UpdatedSampleModel = TypeAliasType(
+    "UpdatedSampleModel",
+    Annotated[SampleIdModel | GetSampleModel, Field(union_mode="left_to_right")],
+)
+
+
 class UserTokenCaller(BaseModel):
     client_id: str | None
     """
@@ -3060,6 +3099,9 @@ class VolumetricToCompositionConversionInputModel(BaseModel):
 
 
 class WellIdListModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
     wells: list[WellIdModel]
 
 
@@ -3070,7 +3112,9 @@ class WellIdModel(BaseModel):
     id: int
 
 
-UpdatedWellModel = TypeAliasType("UpdatedWellModel", GetWellModel | WellIdModel)
+UpdatedWellModel = TypeAliasType(
+    "UpdatedWellModel", Annotated[WellIdModel | GetWellModel, Field(union_mode="left_to_right")]
+)
 
 
 class WellImportPayloadModel(BaseModel):
@@ -3099,7 +3143,10 @@ class WellsListModel(BaseModel):
     wells: list[GetWellSimpleModel]
 
 
-UpdatedWellsListModel = TypeAliasType("UpdatedWellsListModel", WellsListModel | WellIdListModel)
+UpdatedWellsListModel = TypeAliasType(
+    "UpdatedWellsListModel",
+    Annotated[WellIdListModel | WellsListModel, Field(union_mode="left_to_right")],
+)
 
 
 ZipArchiveResponse = TypeAliasType("ZipArchiveResponse", bytes)

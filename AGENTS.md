@@ -30,7 +30,7 @@ Start by reading the relevant existing module before changing behavior. Keep edi
 - The repo-specific generator lives in `scripts/sdk_generator/`. It runs `ruff check --fix --select I,F401` and `ruff format` on rendered endpoint/resource files, so generated files should not require a second formatting pass.
 - Put hand-maintained shared models in `whitson_pvt_sdk/shared/models.py`; avoid hand-editing generated files unless intentionally patching generated output when the API spec is unavailable.
 - Authentication is excluded from generated resources via `EXCLUDED_RESOURCES`; keep auth as transport infrastructure, not as `client.authentication`.
-- In an undiscriminated union of objects (`anyOf` without a `discriminator`), the generator forbids extra fields on a branch whose properties are a proper subset of another's (`close_narrower_union_branches`), so a wider payload that fails its own branch is a `ValidationError` rather than the narrower shape: a full well missing a field never becomes `WellIdModel`.
+- An undiscriminated union of objects (`anyOf` without a `discriminator`) is validated left to right in the document's order: the generator (`validate_unions_left_to_right`) emits its alias with `Field(union_mode="left_to_right")`, as the API declares it, rather than leave the choice to Pydantic's smart mode, which may change between minor releases. `openapi.undiscriminated_unions` refuses to generate when a branch before the last, or any object it references, does not set `additionalProperties: false`, since an open earlier branch would take a later branch's payload and drop its keys: the ids-only `WellIdModel` is tried first and a full well that fails `GetWellModel` is a `ValidationError`, never its id.
 
 ## Working in a whitsonPVT workspace
 

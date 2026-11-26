@@ -107,9 +107,15 @@ and talks only to external API v2.
   `AuthError`. See `docs/api-v2-update.md`.
 - `calculations.get_sample_feed_composition(s)` raise `MissingDataError` instead of
   `ValueError` when the fluid model has no adjusted composition for a requested sample.
-- `wells.update` returns `UpdatedWellModel` (`GetWellModel | WellIdModel`) and `wells.update_bulk`
-  returns `UpdatedWellsListModel` (`WellsListModel | WellIdListModel`): only the ids when the
+- `wells.update` returns `UpdatedWellModel` (`WellIdModel | GetWellModel`) and `wells.update_bulk`
+  returns `UpdatedWellsListModel` (`WellIdListModel | WellsListModel`): only the ids when the
   credential may not read wells.
+- `regions.update` returns `UpdatedRegionModel` (`RegionIdModel | GetRegionModel`): only the id
+  when the credential may not read regions.
+- `samples.update` returns `UpdatedSampleModel` (`SampleIdModel | GetSampleModel`): only the id
+  when the credential may not read samples.
+- `samples.update_bulk` returns `UpdatedSampleListModel` (`SampleIdListModel | GetSampleListModel`):
+  only the ids when the credential may not read samples.
 - `GetFluidModelModel.adjusted_compositions` and `GetBlackOilTableModel.feed_composition` and
   `.injection_composition` are `None` when the credential may not read samples, and
   `calculations.get_sample_feed_composition(s)` with `source="adjusted_compositions"` then raises
