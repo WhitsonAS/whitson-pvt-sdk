@@ -1,11 +1,26 @@
 import argparse
+import json
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "whitson_pvt_sdk" / ".agents" / "skills"
 TARGET = ROOT / "plugins" / "wpvt" / "skills"
+MANIFESTS = (
+    ROOT / "plugins" / "wpvt" / "plugin.json",
+    ROOT / "plugins" / "wpvt" / ".claude-plugin" / "plugin.json",
+)
+
+
+def stale_versions() -> list[str]:
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    return [
+        f"{manifest.relative_to(ROOT)} has version {found!r}, pyproject.toml has {version!r}"
+        for manifest in MANIFESTS
+        if (found := json.loads(manifest.read_text()).get("version")) != version
+    ]
 
 
 def tree(root: Path) -> dict[str, bytes]:
@@ -28,6 +43,9 @@ def main() -> int:
     source = tree(SOURCE)
     if not source:
         print(f"No skills found in {SOURCE.relative_to(ROOT)}", file=sys.stderr)
+        return 1
+    if versions := stale_versions():
+        print("; ".join(versions) + ". Set the plugin version to match.", file=sys.stderr)
         return 1
     if args.check:
         target = tree(TARGET)

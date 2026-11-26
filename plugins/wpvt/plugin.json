@@ -1,6 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "wpvt",
+  "version": "2.0.0",
   "description": "whitson PVT for agents: the deployment's MCP tools through `wpvt mcp` and the whitson-pvt skill. Needs the wpvt command installed with the mcp extra and a `wpvt auth login`.",
   "author": {
     "name": "Whitson AS"
@@ -13,9 +14,15 @@
     "com.openai": {
       "interface": {
         "displayName": "whitson PVT",
-        "shortDescription": "whitson PVT MCP tools and skill through the wpvt command",
+        "shortDescription": "PVT data and calculations",
+        "longDescription": "Read whitsonPVT reservoir fluid (PVT) data and run flash, saturation pressure and phase envelope calculations from an agent. The plugin starts the wpvt command as a local MCP server with your stored login, so it shows only what your account and the scopes you chose allow, and adds a skill for scripting larger questions with the wpvt CLI and Python SDK. Install the wpvt command with its mcp extra and run wpvt auth login first.",
         "developerName": "Whitson AS",
         "category": "Productivity",
+        "capabilities": [
+          "Read regions, wells, samples and lab experiments",
+          "Read fluid models and black-oil tables",
+          "Run flash, saturation pressure and phase envelope calculations"
+        ],
         "websiteURL": "https://github.com/WhitsonAS/whitson-pvt-sdk",
         "composerIcon": "./assets/icon.png",
         "logo": "./assets/icon.png"

@@ -1,5 +1,6 @@
 {
   "name": "wpvt",
+  "version": "2.0.0",
   "displayName": "whitson PVT",
   "description": "whitson PVT for agents: the deployment's MCP tools through `wpvt mcp` and the whitson-pvt skill. Needs the wpvt command installed with the mcp extra and a `wpvt auth login`.",
   "author": {
